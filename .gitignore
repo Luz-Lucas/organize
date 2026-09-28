@@ -1,0 +1,5 @@
+app/env.json
+.env
+supabase/.temp/
+supabase/.branches/
+.superpowers/
