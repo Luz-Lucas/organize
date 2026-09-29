@@ -136,13 +136,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     final target = Uri.decodeComponent(href.substring('wiki:'.length));
     final existing = resolveWikiLink(target, notes);
     if (existing != null) {
-      context.go('/nota/${existing.id}');
+      context.push('/nota/${existing.id}');
       return;
     }
     final created = Note(id: newId(), title: target, spaceId: _note?.spaceId);
     try {
       await _repo.upsertNote(created);
-      if (mounted) context.go('/nota/${created.id}');
+      if (mounted) context.push('/nota/${created.id}');
     } on RepositoryException {
       if (mounted) setState(() => _saveError = 'Não foi possível criar a nota “$target”.');
     }
@@ -251,7 +251,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 ListTile(
                   leading: const Icon(Icons.link),
                   title: Text(n.title),
-                  onTap: () => context.go('/nota/${n.id}'),
+                  onTap: () => context.push('/nota/${n.id}'),
                 ),
             ],
           ],

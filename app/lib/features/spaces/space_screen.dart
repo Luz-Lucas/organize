@@ -21,7 +21,7 @@ class SpaceScreen extends ConsumerWidget {
     final note = Note(id: newId(), title: uniqueTitle('Sem título', all), spaceId: spaceId);
     try {
       await ref.read(repositoryProvider).upsertNote(note);
-      if (context.mounted) context.go('/nota/${note.id}');
+      if (context.mounted) context.push('/nota/${note.id}');
     } on RepositoryException {
       if (context.mounted) showError(context, 'Não foi possível criar a nota.');
     }
@@ -113,7 +113,7 @@ class SpaceScreen extends ConsumerWidget {
                     ListTile(
                       leading: const Icon(Icons.description_outlined),
                       title: Text(n.title),
-                      onTap: () => context.go('/nota/${n.id}'),
+                      onTap: () => context.push('/nota/${n.id}'),
                     ),
                   const SectionHeader('Tarefas abertas'),
                   if (openTasks.isEmpty) const EmptyHint('Nenhuma tarefa aberta.'),

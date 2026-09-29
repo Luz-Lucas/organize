@@ -50,7 +50,9 @@ void main() {
     expect(find.text('Já existe uma nota com esse título.'), findsOneWidget);
   });
 
-  testWidgets('link [[...]] inexistente cria a nota, abre e mostra o backlink', (tester) async {
+  testWidgets(
+      'link [[...]] inexistente cria a nota, abre empilhada (dá para voltar) e mostra o backlink',
+      (tester) async {
     final repo = MemoryRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'Ver [[Álgebra]]'));
     await pumpApp(tester, repo, location: '/nota/n1');
@@ -64,6 +66,37 @@ void main() {
     expect(title.controller!.text, 'Álgebra');
     expect(find.text('Mencionada em'), findsOneWidget);
     expect(find.text('Cálculo'), findsOneWidget);
+
+    // context.push: a nota "Cálculo" continua na pilha, dá para voltar.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    final backTitle = tester.widget<TextField>(find.byKey(const Key('note-title')));
+    expect(backTitle.controller!.text, 'Cálculo');
+  });
+
+  testWidgets('link [[...]] para nota existente abre empilhada e o backlink também',
+      (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'Ver [[Álgebra]]'));
+    await repo.upsertNote(const Note(id: 'n2', title: 'Álgebra'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    await tester.tap(find.byKey(const Key('toggle-preview')));
+    await tester.pumpAndSettle();
+    await tester.tapOnText(find.textRange.ofSubstring('Álgebra'));
+    await tester.pumpAndSettle();
+    var title = tester.widget<TextField>(find.byKey(const Key('note-title')));
+    expect(title.controller!.text, 'Álgebra');
+
+    // Abre o backlink "Cálculo" listado em "Mencionada em".
+    await tester.tap(find.text('Cálculo'));
+    await tester.pumpAndSettle();
+    title = tester.widget<TextField>(find.byKey(const Key('note-title')));
+    expect(title.controller!.text, 'Cálculo');
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    title = tester.widget<TextField>(find.byKey(const Key('note-title')));
+    expect(title.controller!.text, 'Álgebra');
   });
 
   testWidgets('sair antes do debounce com falha ao salvar recupera o rascunho ao reabrir',

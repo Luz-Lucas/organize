@@ -25,7 +25,8 @@ void main() {
     expect((await repo.watchSpaces().first).single.kind, SpaceKind.hobby);
   });
 
-  testWidgets('nova nota no espaço abre o editor com título único', (tester) async {
+  testWidgets('nova nota no espaço abre o editor com título único e permite voltar',
+      (tester) async {
     final repo = MemoryRepository();
     await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
     await repo.upsertNote(const Note(id: 'n0', title: 'Sem título'));
@@ -36,6 +37,27 @@ void main() {
     expect(title.controller!.text, 'Sem título 2');
     final created = (await repo.watchNotes().first).firstWhere((n) => n.id != 'n0');
     expect(created.spaceId, 's1');
+
+    // A nota foi empilhada (context.push), não substituiu a tela: dá para
+    // voltar ao espaço em vez de sair do app.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Cálculo I'), findsOneWidget);
+  });
+
+  testWidgets('abrir nota na lista do espaço empilha a tela (dá para voltar)', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
+    await repo.upsertNote(const Note(id: 'n1', title: 'Limites', spaceId: 's1'));
+    await pumpApp(tester, repo, location: '/espacos/s1');
+    await tester.tap(find.text('Limites'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('note-title')), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Cálculo I'), findsOneWidget);
+    expect(find.byKey(const Key('note-title')), findsNothing);
   });
 
   testWidgets('excluir espaço confirma com a contagem e apaga o conteúdo', (tester) async {
