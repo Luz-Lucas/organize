@@ -80,13 +80,12 @@ class SpaceScreen extends ConsumerWidget {
               key: const Key('delete-space'),
               tooltip: 'Excluir espaço',
               icon: const Icon(Icons.delete_outline),
-              onPressed: () => _delete(
-                context,
-                ref,
-                space,
-                notes.value ?? const [],
-                tasks.value ?? const [],
-              ),
+              // Desabilitado até notas e tarefas carregarem: antes disso a
+              // contagem da confirmação (notes.value/tasks.value) seria
+              // incorretamente 0.
+              onPressed: notes.hasValue && tasks.hasValue
+                  ? () => _delete(context, ref, space, notes.value!, tasks.value!)
+                  : null,
             ),
           ],
         ),

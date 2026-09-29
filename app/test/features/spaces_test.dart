@@ -1,5 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:organizacional/app/app.dart';
+import 'package:organizacional/app/providers.dart';
+import 'package:organizacional/app/router.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/note.dart';
 import 'package:organizacional/domain/space.dart';
@@ -60,6 +66,33 @@ void main() {
     expect(find.byKey(const Key('note-title')), findsNothing);
   });
 
+  testWidgets(
+      'botão de excluir espaço fica desabilitado até notas e tarefas carregarem',
+      (tester) async {
+    final repo = _SlowContentRepository();
+    await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        clockProvider.overrideWithValue(() => defaultNow),
+      ],
+      child: OrganizacionalApp(
+        router: buildRouter(initialLocation: '/espacos/s1', isSignedIn: () => true),
+      ),
+    ));
+    // O espaço carrega normalmente, mas notas/tarefas ficam presas no portão
+    // (o spinner delas fica girando, então não dá para usar pumpAndSettle).
+    await tester.pump();
+    await tester.pump();
+    final button = tester.widget<IconButton>(find.byKey(const Key('delete-space')));
+    expect(button.onPressed, isNull);
+
+    repo.release();
+    await tester.pumpAndSettle();
+    final loaded = tester.widget<IconButton>(find.byKey(const Key('delete-space')));
+    expect(loaded.onPressed, isNotNull);
+  });
+
   testWidgets('excluir espaço confirma com a contagem e apaga o conteúdo', (tester) async {
     final repo = MemoryRepository();
     await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
@@ -80,4 +113,25 @@ void main() {
     expect(await repo.watchSpaces().first, isEmpty);
     expect(await repo.watchNotes().first, isEmpty);
   });
+}
+
+/// Repositório de teste cujas notas/tarefas só passam a emitir depois que
+/// [release] é chamado, para simular a janela antes dos dados chegarem.
+class _SlowContentRepository extends MemoryRepository {
+  final _gate = Completer<void>();
+
+  void release() {
+    if (!_gate.isCompleted) _gate.complete();
+  }
+
+  Stream<List<T>> _delayed<T>(Stream<List<T>> source) async* {
+    await _gate.future;
+    yield* source;
+  }
+
+  @override
+  Stream<List<Note>> watchNotes() => _delayed(super.watchNotes());
+
+  @override
+  Stream<List<TaskItem>> watchTasks() => _delayed(super.watchTasks());
 }
