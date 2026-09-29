@@ -27,9 +27,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   final _title = TextEditingController();
   final _body = TextEditingController();
   Note? _note;
+  // Último conteúdo confirmado (salvo no repositório, ou o valor do servidor
+  // no momento em que a tela abriu). Usado para saber se há edições não
+  // salvas (dirty) e para detectar mudanças remotas (I3).
+  Note? _lastSaved;
   Timer? _debounce;
   bool _preview = false;
   String? _saveError;
+  bool _saving = false;
+  bool _saveAgain = false;
+  bool _disposed = false;
 
   @override
   void initState() {
@@ -40,23 +47,30 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   @override
   void dispose() {
-    if (_debounce?.isActive ?? false) {
-      _debounce!.cancel();
-      final pending = _edited();
-      if (pending != null) {
-        unawaited(_repo.upsertNote(pending).catchError((Object _) => _drafts.put(pending)));
-      }
-    }
+    _debounce?.cancel();
+    _disposed = true;
+    if (_dirty) unawaited(_flush());
     _title.dispose();
     _body.dispose();
     super.dispose();
   }
 
-  Note? _edited() {
+  /// Há alterações não refletidas em [_lastSaved]? Um rascunho recuperado
+  /// que ainda não foi salvo também conta como dirty.
+  bool get _dirty {
     final note = _note;
+    if (note == null) return false;
+    return _draftNote(note) != _lastSaved;
+  }
+
+  /// Nota com o texto atual dos campos. Se o título estiver vazio, mantém o
+  /// último título salvo em vez de descartar o corpo editado.
+  Note _draftNote(Note base) {
     final title = _title.text.trim();
-    if (note == null || title.isEmpty) return null;
-    return note.copyWith(title: title, body: _body.text);
+    return base.copyWith(
+      title: title.isEmpty ? (_lastSaved?.title ?? base.title) : title,
+      body: _body.text,
+    );
   }
 
   void _changed() {
@@ -66,21 +80,48 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Future<void> _save() async {
     if (_title.text.trim().isEmpty) {
-      setState(() => _saveError = 'O título não pode ficar vazio.');
+      if (!_disposed) setState(() => _saveError = 'O título não pode ficar vazio.');
       return;
     }
-    final updated = _edited();
-    if (updated == null) return;
+    await _flush();
+  }
+
+  /// Salva o conteúdo atual. Serializa com qualquer salvamento em andamento:
+  /// se o texto mudar enquanto uma gravação está em voo, salva de novo ao
+  /// final (nunca duas gravações em paralelo, então a mais recente sempre
+  /// vence). Se a tela já foi fechada e a gravação falha, guarda o rascunho
+  /// para recuperação na próxima abertura.
+  Future<void> _flush() async {
+    if (_saving) {
+      _saveAgain = true;
+      return;
+    }
+    _saving = true;
     try {
-      await _repo.upsertNote(updated);
-      _note = updated;
-      if (mounted) setState(() => _saveError = null);
-    } on RepositoryException catch (e) {
-      if (mounted) {
-        setState(() => _saveError = e.duplicate
-            ? 'Já existe uma nota com esse título.'
-            : 'Não foi possível salvar. Suas alterações continuam aqui.');
+      while (true) {
+        _saveAgain = false;
+        final note = _note;
+        if (note == null) break;
+        final draft = _draftNote(note);
+        if (draft == _lastSaved) break;
+        try {
+          await _repo.upsertNote(draft);
+          _note = draft;
+          _lastSaved = draft;
+          if (!_disposed) setState(() => _saveError = null);
+        } on RepositoryException catch (e) {
+          if (_disposed) {
+            _drafts.put(draft);
+          } else {
+            setState(() => _saveError = e.duplicate
+                ? 'Já existe uma nota com esse título.'
+                : 'Não foi possível salvar. Suas alterações continuam aqui.');
+          }
+        }
+        if (!_saveAgain) break;
       }
+    } finally {
+      _saving = false;
     }
   }
 
@@ -108,9 +149,11 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       final current = all.where((n) => n.id == widget.noteId).firstOrNull;
       if (_note == null && current != null) {
         final draft = _drafts.take(current.id);
-        _note = draft ?? current;
-        _title.text = _note!.title;
-        _body.text = _note!.body;
+        _note = current;
+        _lastSaved = current;
+        final content = draft ?? current;
+        _title.text = content.title;
+        _body.text = content.body;
         if (draft != null) {
           _saveError = 'Alterações não salvas foram recuperadas. Edite para tentar salvar de novo.';
         }
