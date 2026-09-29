@@ -139,6 +139,38 @@ void main() {
     expect(saved.body, 'corpo sem título');
   });
 
+  testWidgets('atualização remota sem edição local atualiza os campos', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v1'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    expect(find.text('v1'), findsOneWidget);
+
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v2 (remoto)'));
+    await tester.pump();
+
+    expect(find.text('v2 (remoto)'), findsOneWidget);
+    expect(find.text('v1'), findsNothing);
+  });
+
+  testWidgets('atualização remota com edição local mantém o texto e mostra aviso',
+      (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v1'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    await tester.enterText(find.byKey(const Key('note-body')), 'editando localmente');
+
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v2 (remoto)'));
+    await tester.pump();
+
+    expect(find.text('editando localmente'), findsOneWidget);
+    expect(
+      find.text(
+        'Esta nota foi alterada em outro dispositivo; suas alterações vão substituí-la ao salvar.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('queda de conexão no stream não derruba o editor com texto já carregado',
       (tester) async {
     final repo = _FlakyNoteRepository();

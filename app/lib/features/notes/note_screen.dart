@@ -34,6 +34,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Timer? _debounce;
   bool _preview = false;
   String? _saveError;
+  String? _remoteNotice;
   bool _saving = false;
   bool _saveAgain = false;
   bool _disposed = false;
@@ -108,7 +109,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           await _repo.upsertNote(draft);
           _note = draft;
           _lastSaved = draft;
-          if (!_disposed) setState(() => _saveError = null);
+          if (!_disposed) {
+            setState(() {
+              _saveError = null;
+              _remoteNotice = null;
+            });
+          }
         } on RepositoryException catch (e) {
           if (_disposed) {
             _drafts.put(draft);
@@ -147,15 +153,30 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     final notes = ref.watch(notesProvider);
     return asyncView(notes, (all) {
       final current = all.where((n) => n.id == widget.noteId).firstOrNull;
-      if (_note == null && current != null) {
-        final draft = _drafts.take(current.id);
-        _note = current;
-        _lastSaved = current;
-        final content = draft ?? current;
-        _title.text = content.title;
-        _body.text = content.body;
-        if (draft != null) {
-          _saveError = 'Alterações não salvas foram recuperadas. Edite para tentar salvar de novo.';
+      if (current != null) {
+        if (_note == null) {
+          final draft = _drafts.take(current.id);
+          _note = current;
+          _lastSaved = current;
+          final content = draft ?? current;
+          _title.text = content.title;
+          _body.text = content.body;
+          if (draft != null) {
+            _saveError =
+                'Alterações não salvas foram recuperadas. Edite para tentar salvar de novo.';
+          }
+        } else if (current != _lastSaved) {
+          // Uma versão mais nova chegou pelo stream (outro dispositivo/aba).
+          if (_dirty) {
+            _remoteNotice = 'Esta nota foi alterada em outro dispositivo; '
+                'suas alterações vão substituí-la ao salvar.';
+          } else {
+            _note = current;
+            _lastSaved = current;
+            _title.text = current.title;
+            _body.text = current.body;
+            _remoteNotice = null;
+          }
         }
       }
       final note = _note;
@@ -195,6 +216,15 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                   _saveError!,
                   key: const Key('save-error'),
                   style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+            if (_remoteNotice != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _remoteNotice!,
+                  key: const Key('remote-notice'),
+                  style: TextStyle(color: theme.colorScheme.tertiary),
                 ),
               ),
             const SizedBox(height: 16),
