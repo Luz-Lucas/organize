@@ -21,7 +21,7 @@ final notesProvider =
 final tasksProvider =
     StreamProvider<List<TaskItem>>((ref) => ref.watch(repositoryProvider).watchTasks());
 
-final eventsFromProvider = StreamProvider.family<List<CalendarEvent>, DateTime>(
+final eventsFromProvider = StreamProvider.autoDispose.family<List<CalendarEvent>, DateTime>(
   (ref, from) => ref.watch(repositoryProvider).watchEvents(from: from),
 );
 
