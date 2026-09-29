@@ -18,6 +18,22 @@ flutter run -d linux --dart-define-from-file=env.json
 Usuário local: Studio em http://127.0.0.1:54323 → Authentication → Add user.
 No emulador Android, use `http://10.0.2.2:54321` como SUPABASE_URL.
 
+## Nuvem (Supabase)
+Para publicar o schema num projeto Supabase de verdade (não o local do Docker):
+```bash
+npx supabase login
+npx supabase link --project-ref <ref-do-projeto>
+npx supabase db push
+```
+Depois, crie o usuário pelo Dashboard (Authentication → Add user) — o app não
+tem tela de cadastro.
+
+**Importante:** logo após publicar, desabilite o cadastro público em
+Authentication → Sign In / Providers → "Allow new users to sign up". O
+`enable_signup = true` em `supabase/config.toml` vale só para o ambiente local
+(Docker) e não deve ser levado para a nuvem com `supabase config push` — nesse
+projeto o cadastro é sempre feito manualmente pelo Dashboard.
+
 ## Testes de integração (Supabase local)
 ```bash
 eval "$(npx supabase status -o env)"
