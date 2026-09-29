@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/space.dart';
 import 'package:organizacional/domain/task_item.dart';
@@ -61,6 +64,27 @@ void main() {
     expect(find.text('Concluídas'), findsOneWidget);
   });
 
+  testWidgets('sair da tela antes do salvamento terminar não gera erro (guarda mounted)',
+      (tester) async {
+    final repo = _GatedTaskRepository();
+    await pumpApp(tester, repo, location: '/tarefas');
+    await tester.enterText(find.byKey(const Key('quick-add')), 'Tarefa lenta');
+    final gate = repo.addGate();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump(); // _add() começa e fica preso aguardando o portão
+
+    // Sai da tela antes do upsertTask terminar.
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/espacos');
+    await tester.pumpAndSettle();
+
+    // Só agora o salvamento termina, com a tela de tarefas já descartada.
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('filtro por espaço mostra só as tarefas dele', (tester) async {
     final repo = MemoryRepository();
     await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
@@ -73,4 +97,24 @@ void main() {
     expect(find.text('Lista 1'), findsOneWidget);
     expect(find.text('Comprar cordas'), findsNothing);
   });
+}
+
+/// Repositório de teste que atrasa upsertTask até o portão ser liberado, para
+/// simular uma gravação em andamento quando a tela é descartada.
+class _GatedTaskRepository extends MemoryRepository {
+  final _gates = <Completer<void>>[];
+
+  Completer<void> addGate() {
+    final gate = Completer<void>();
+    _gates.add(gate);
+    return gate;
+  }
+
+  @override
+  Future<void> upsertTask(TaskItem task) async {
+    if (_gates.isNotEmpty) {
+      await _gates.removeAt(0).future;
+    }
+    return super.upsertTask(task);
+  }
 }

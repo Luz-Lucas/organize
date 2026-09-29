@@ -35,6 +35,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     final task = TaskItem(id: newId(), title: title, dueAt: _due, spaceId: _spaceFilter);
     try {
       await ref.read(repositoryProvider).upsertTask(task);
+      if (!mounted) return;
       _input.clear();
       setState(() => _due = null);
     } on RepositoryException {
