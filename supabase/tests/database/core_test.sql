@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(8);
+select plan(10);
 
 insert into auth.users (id, email) values
   ('11111111-1111-1111-1111-111111111111', 'a@test.dev'),
@@ -36,9 +36,20 @@ select throws_ok(
   $$ insert into spaces (user_id, name) values ('11111111-1111-1111-1111-111111111111', 'invasão') $$,
   '42501', null,
   'B não cria linhas em nome de A');
+update spaces set name = 'invadido' where id = 'aaaaaaaa-0000-0000-0000-000000000001';
+delete from notes where id = 'aaaaaaaa-0000-0000-0000-000000000002';
+
+-- De volta a A: conferir que B não alterou nem apagou nada
+select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
+select is(
+  (select name from spaces where id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  'Cálculo I',
+  'B não altera o espaço de A');
+select is(
+  (select count(*) from notes where id = 'aaaaaaaa-0000-0000-0000-000000000002')::int, 1,
+  'B não apaga a nota de A');
 
 -- De volta a A: excluir o espaço
-select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
 delete from spaces where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 select is(
   (select count(*) from notes)::int + (select count(*) from tasks)::int, 0,
