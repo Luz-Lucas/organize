@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Mensagem em pt-BR para um erro de login. AuthRetryableFetchException
+/// (queda de rede) estende AuthException, então precisa ser checada antes
+/// dela — senão uma queda de conexão apareceria como "senha incorreta".
+String authErrorMessage(Object error) {
+  if (error is AuthRetryableFetchException) return 'Não foi possível conectar ao servidor.';
+  if (error is AuthException) return 'E-mail ou senha incorretos.';
+  return 'Não foi possível conectar ao servidor.';
+}
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -31,10 +40,8 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _email.text.trim(),
         password: _password.text,
       );
-    } on AuthException {
-      _error = 'E-mail ou senha incorretos.';
-    } catch (_) {
-      _error = 'Não foi possível conectar ao servidor.';
+    } catch (e) {
+      _error = authErrorMessage(e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
