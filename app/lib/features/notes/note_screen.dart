@@ -23,6 +23,7 @@ class NoteScreen extends ConsumerStatefulWidget {
 
 class _NoteScreenState extends ConsumerState<NoteScreen> {
   late final Repository _repo;
+  late final NoteDrafts _drafts;
   final _title = TextEditingController();
   final _body = TextEditingController();
   Note? _note;
@@ -34,6 +35,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   void initState() {
     super.initState();
     _repo = ref.read(repositoryProvider);
+    _drafts = ref.read(noteDraftsProvider);
   }
 
   @override
@@ -41,7 +43,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     if (_debounce?.isActive ?? false) {
       _debounce!.cancel();
       final pending = _edited();
-      if (pending != null) unawaited(_repo.upsertNote(pending).catchError((Object _) {}));
+      if (pending != null) {
+        unawaited(_repo.upsertNote(pending).catchError((Object _) => _drafts.put(pending)));
+      }
     }
     _title.dispose();
     _body.dispose();
@@ -103,9 +107,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     return asyncView(notes, (all) {
       final current = all.where((n) => n.id == widget.noteId).firstOrNull;
       if (_note == null && current != null) {
-        _note = current;
-        _title.text = current.title;
-        _body.text = current.body;
+        final draft = _drafts.take(current.id);
+        _note = draft ?? current;
+        _title.text = _note!.title;
+        _body.text = _note!.body;
+        if (draft != null) {
+          _saveError = 'Alterações não salvas foram recuperadas. Edite para tentar salvar de novo.';
+        }
       }
       final note = _note;
       if (note == null) {

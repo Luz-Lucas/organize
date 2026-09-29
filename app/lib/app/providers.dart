@@ -24,3 +24,15 @@ final tasksProvider =
 final eventsFromProvider = StreamProvider.family<List<CalendarEvent>, DateTime>(
   (ref, from) => ref.watch(repositoryProvider).watchEvents(from: from),
 );
+
+/// Guarda em memória edições de notas que não puderam ser salvas ao sair da
+/// tela (ex.: falha de rede), para que sejam recuperadas na próxima abertura.
+class NoteDrafts {
+  final _drafts = <String, Note>{};
+
+  void put(Note note) => _drafts[note.id] = note;
+
+  Note? take(String id) => _drafts.remove(id);
+}
+
+final noteDraftsProvider = Provider<NoteDrafts>((ref) => NoteDrafts());

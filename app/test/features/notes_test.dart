@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/note.dart';
 
@@ -61,5 +62,32 @@ void main() {
     expect(title.controller!.text, 'Álgebra');
     expect(find.text('Mencionada em'), findsOneWidget);
     expect(find.text('Cálculo'), findsOneWidget);
+  });
+
+  testWidgets('sair antes do debounce com falha ao salvar recupera o rascunho ao reabrir',
+      (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    repo.failWrites = true;
+    await tester.enterText(find.byKey(const Key('note-body')), 'texto perdido');
+    // Navega para fora ANTES do debounce de 800 ms disparar: o dispose()
+    // deve tentar salvar, falhar (failWrites) e guardar o rascunho.
+    final awayContext = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(awayContext).go('/espacos');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('note-body')), findsNothing);
+
+    repo.failWrites = false;
+    final backContext = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(backContext).go('/nota/n1');
+    await tester.pumpAndSettle();
+
+    expect(find.text('texto perdido'), findsOneWidget);
+    expect(find.byKey(const Key('save-error')), findsOneWidget);
+    expect(
+      find.text('Alterações não salvas foram recuperadas. Edite para tentar salvar de novo.'),
+      findsOneWidget,
+    );
   });
 }
