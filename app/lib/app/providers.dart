@@ -12,6 +12,12 @@ final repositoryProvider = Provider<Repository>(
 
 final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
+/// Callback injetável para sair da conta. O padrão (sem-op) evita que os
+/// testes precisem de um cliente Supabase de verdade; main.dart sobrescreve
+/// com Supabase.instance.client.auth.signOut. O redirecionamento para
+/// /login já acontece via o refreshListenable do router (mudança de sessão).
+final signOutProvider = Provider<Future<void> Function()>((ref) => () async {});
+
 final spacesProvider =
     StreamProvider<List<Space>>((ref) => ref.watch(repositoryProvider).watchSpaces());
 

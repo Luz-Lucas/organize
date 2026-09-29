@@ -38,7 +38,17 @@ class SpacesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final spaces = ref.watch(spacesProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Espaços')),
+      appBar: AppBar(
+        title: const Text('Espaços'),
+        actions: [
+          IconButton(
+            key: const Key('sign-out'),
+            tooltip: 'Sair',
+            icon: const Icon(Icons.logout),
+            onPressed: () => ref.read(signOutProvider)(),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         key: const Key('new-space'),
         tooltip: 'Novo espaço',

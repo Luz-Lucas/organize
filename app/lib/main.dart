@@ -31,7 +31,10 @@ Future<void> main() async {
     refresh: StreamListenable(client.auth.onAuthStateChange),
   );
   runApp(ProviderScope(
-    overrides: [repositoryProvider.overrideWithValue(SupabaseRepository(client))],
+    overrides: [
+      repositoryProvider.overrideWithValue(SupabaseRepository(client)),
+      signOutProvider.overrideWithValue(() => client.auth.signOut()),
+    ],
     child: OrganizacionalApp(router: router),
   ));
 }

@@ -66,6 +66,27 @@ void main() {
     expect(find.byKey(const Key('note-title')), findsNothing);
   });
 
+  testWidgets('botão Sair na AppBar de Espaços chama o callback de logout', (tester) async {
+    var signedOut = false;
+    final repo = MemoryRepository();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        clockProvider.overrideWithValue(() => defaultNow),
+        signOutProvider.overrideWithValue(() async {
+          signedOut = true;
+        }),
+      ],
+      child: OrganizacionalApp(
+        router: buildRouter(initialLocation: '/espacos', isSignedIn: () => true),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sign-out')));
+    await tester.pumpAndSettle();
+    expect(signedOut, isTrue);
+  });
+
   testWidgets(
       'botão de excluir espaço fica desabilitado até notas e tarefas carregarem',
       (tester) async {
