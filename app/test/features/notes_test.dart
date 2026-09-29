@@ -139,6 +139,22 @@ void main() {
     expect(saved.body, 'corpo sem título');
   });
 
+  testWidgets('queda de conexão no stream não derruba o editor com texto já carregado',
+      (tester) async {
+    final repo = _FlakyNoteRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'conteúdo'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    expect(find.byKey(const Key('note-body')), findsOneWidget);
+
+    repo.failNotesStream(Exception('RealtimeSubscribeException: network blip'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('note-body')), findsOneWidget);
+    expect(find.text('conteúdo'), findsOneWidget);
+    expect(find.text('Sem conexão com o servidor. Tentando de novo…'), findsOneWidget);
+  });
+
   testWidgets(
       'salvamentos concorrentes são serializados: o conteúdo final é sempre o mais recente',
       (tester) async {
@@ -184,5 +200,32 @@ class _GatedNoteRepository extends MemoryRepository {
       await _gates.removeAt(0).future;
     }
     return super.upsertNote(note);
+  }
+}
+
+/// Repositório de teste cujo watchNotes() pode ser forçado a emitir um erro
+/// (simulando uma queda de rede), sem fechar o stream.
+class _FlakyNoteRepository extends MemoryRepository {
+  final _errors = StreamController<Object>.broadcast();
+
+  void failNotesStream(Object error) => _errors.add(error);
+
+  @override
+  Stream<List<Note>> watchNotes() {
+    final base = super.watchNotes();
+    late StreamController<List<Note>> controller;
+    StreamSubscription<List<Note>>? dataSub;
+    StreamSubscription<Object>? errSub;
+    controller = StreamController<List<Note>>(
+      onListen: () {
+        dataSub = base.listen(controller.add, onError: controller.addError);
+        errSub = _errors.stream.listen(controller.addError);
+      },
+      onCancel: () {
+        dataSub?.cancel();
+        errSub?.cancel();
+      },
+    );
+    return controller.stream;
   }
 }
