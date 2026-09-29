@@ -27,7 +27,10 @@ class MemoryRepository implements Repository {
         controller.add(snapshot());
         sub = _changes.stream.listen((_) => controller.add(snapshot()));
       },
-      onCancel: () => sub?.cancel(),
+      onCancel: () {
+        sub?.cancel();
+        controller.close();
+      },
     );
     return controller.stream;
   }
