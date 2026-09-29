@@ -19,7 +19,11 @@ void main() {
 
   setUpAll(() async {
     if (skip != null) return;
-    final client = SupabaseClient(url!, key!);
+    final client = SupabaseClient(
+      url!,
+      key!,
+      authOptions: const AuthClientOptions(authFlowType: AuthFlowType.implicit),
+    );
     await client.auth.signUp(
       email: 'teste-${DateTime.now().microsecondsSinceEpoch}@local.test',
       password: 'senha-de-teste-123',
