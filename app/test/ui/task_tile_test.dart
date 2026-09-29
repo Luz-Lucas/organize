@@ -39,4 +39,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Não foi possível atualizar a tarefa.'), findsOneWidget);
   });
+
+  testWidgets('botão de excluir remove a tarefa', (tester) async {
+    final repo = await pump(tester);
+    await tester.tap(find.byKey(const ValueKey('delete-task-t1')));
+    await tester.pumpAndSettle();
+    expect(await repo.watchTasks().first, isEmpty);
+  });
+
+  testWidgets('falha ao excluir mostra aviso em pt-BR', (tester) async {
+    final repo = await pump(tester);
+    repo.failWrites = true;
+    await tester.tap(find.byKey(const ValueKey('delete-task-t1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Não foi possível excluir a tarefa.'), findsOneWidget);
+    expect(await repo.watchTasks().first, hasLength(1));
+  });
 }

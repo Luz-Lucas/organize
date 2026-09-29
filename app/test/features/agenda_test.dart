@@ -46,4 +46,29 @@ void main() {
     expect(saved.startsAt, DateTime(2026, 9, 28, 8));
     expect(saved.endsAt, DateTime(2026, 9, 28, 9, 40));
   });
+
+  testWidgets('excluir evento pede confirmação antes de apagar', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertEvent(CalendarEvent(
+      id: 'e1',
+      title: 'Física',
+      startsAt: DateTime(2026, 9, 30, 10),
+      endsAt: DateTime(2026, 9, 30, 11, 40),
+    ));
+    await pumpApp(tester, repo, location: '/agenda');
+    await tester.tap(find.byKey(const ValueKey('delete-event-e1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Excluir “Física”?'), findsOneWidget);
+
+    // Cancelar não apaga.
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(await repo.watchEvents(from: DateTime(2026, 9, 1)).first, hasLength(1));
+
+    await tester.tap(find.byKey(const ValueKey('delete-event-e1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir'));
+    await tester.pumpAndSettle();
+    expect(await repo.watchEvents(from: DateTime(2026, 9, 1)).first, isEmpty);
+  });
 }

@@ -22,6 +22,14 @@ class TaskTile extends ConsumerWidget {
     }
   }
 
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(repositoryProvider).deleteTask(task.id);
+    } on RepositoryException {
+      if (context.mounted) showError(context, 'Não foi possível excluir a tarefa.');
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -46,6 +54,12 @@ class TaskTile extends ConsumerWidget {
             : null,
       ),
       subtitle: subtitle.isEmpty ? null : Text(subtitle),
+      trailing: IconButton(
+        key: ValueKey('delete-task-${task.id}'),
+        tooltip: 'Excluir',
+        icon: const Icon(Icons.delete_outline),
+        onPressed: () => _delete(context, ref),
+      ),
     );
   }
 }

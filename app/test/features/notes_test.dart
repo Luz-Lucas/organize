@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/note.dart';
+import 'package:organizacional/domain/space.dart';
 
 import '../helpers.dart';
 
@@ -202,6 +203,47 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('excluir nota pede confirmação e volta para a tela anterior', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
+    await repo.upsertNote(const Note(id: 'n1', title: 'Limites', spaceId: 's1'));
+    await pumpApp(tester, repo, location: '/espacos/s1');
+    await tester.tap(find.text('Limites'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('delete-note')));
+    await tester.pumpAndSettle();
+    expect(find.text('Excluir “Limites”?'), findsOneWidget);
+
+    // Cancelar não apaga nem sai da tela.
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('note-title')), findsOneWidget);
+    expect(await repo.watchNotes().first, hasLength(1));
+
+    await tester.tap(find.byKey(const Key('delete-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir'));
+    await tester.pumpAndSettle();
+
+    expect(await repo.watchNotes().first, isEmpty);
+    expect(find.widgetWithText(AppBar, 'Cálculo I'), findsOneWidget);
+    expect(find.byKey(const Key('note-title')), findsNothing);
+  });
+
+  testWidgets('falha ao excluir nota mostra aviso em pt-BR', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Limites'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    repo.failWrites = true;
+    await tester.tap(find.byKey(const Key('delete-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Não foi possível excluir a nota.'), findsOneWidget);
+    expect(find.byKey(const Key('note-title')), findsOneWidget);
   });
 
   testWidgets('queda de conexão no stream não derruba o editor com texto já carregado',

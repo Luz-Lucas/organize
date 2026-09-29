@@ -131,6 +131,29 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
+  Future<void> _delete(BuildContext context) async {
+    final note = _note;
+    if (note == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Excluir “${note.title}”?'),
+        content: const Text('Essa ação não pode ser desfeita.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Excluir')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _repo.deleteNote(note.id);
+      if (context.mounted) context.pop();
+    } on RepositoryException {
+      if (context.mounted) showError(context, 'Não foi possível excluir a nota.');
+    }
+  }
+
   Future<void> _openLink(String? href, List<Note> notes) async {
     if (href == null || !href.startsWith('wiki:')) return;
     final target = Uri.decodeComponent(href.substring('wiki:'.length));
@@ -196,6 +219,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               tooltip: _preview ? 'Editar' : 'Visualizar',
               icon: Icon(_preview ? Icons.edit_outlined : Icons.visibility_outlined),
               onPressed: () => setState(() => _preview = !_preview),
+            ),
+            IconButton(
+              key: const Key('delete-note'),
+              tooltip: 'Excluir nota',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => _delete(context),
             ),
           ],
         ),
