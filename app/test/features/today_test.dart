@@ -1,4 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:organizacional/app/app.dart';
+import 'package:organizacional/app/providers.dart';
+import 'package:organizacional/app/router.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/calendar_event.dart';
 import 'package:organizacional/domain/task_item.dart';
@@ -40,5 +44,27 @@ void main() {
     await pumpApp(tester, MemoryRepository());
     expect(find.text('Nada na agenda hoje.'), findsOneWidget);
     expect(find.text('Nenhuma tarefa para hoje.'), findsOneWidget);
+  });
+
+  testWidgets('a data em Hoje vira sozinha na meia-noite, sem precisar de outro evento',
+      (tester) async {
+    var current = DateTime(2026, 9, 28, 23, 59, 58);
+    final repo = MemoryRepository();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        clockProvider.overrideWithValue(() => current),
+      ],
+      child: OrganizacionalApp(
+        router: buildRouter(initialLocation: '/', isSignedIn: () => true),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('segunda-feira, 28 de setembro'), findsOneWidget);
+
+    current = DateTime(2026, 9, 29, 0, 0, 1);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.text('terça-feira, 29 de setembro'), findsOneWidget);
   });
 }
