@@ -1,0 +1,108 @@
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { SupabaseStore } from '../src/supabase-store.js';
+
+const url = process.env.SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
+  let db: SupabaseClient;
+  let store: SupabaseStore;
+  let userId: string;
+
+  beforeAll(async () => {
+    db = createClient(url!, key!, { auth: { persistSession: false } });
+    const { data, error } = await db.auth.admin.createUser({
+      email: `ponte-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true,
+    });
+    if (error) throw error;
+    userId = data.user.id;
+    store = new SupabaseStore(db, userId, () => {});
+  });
+
+  const newPlan = async () => {
+    const { data, error } = await db.from('wake_plans')
+      .insert({ user_id: userId, label: 'Teste', days: [1, 2, 3, 4, 5, 6, 7], time: '07:00', echo_device_id: 'ECHO' })
+      .select().single();
+    if (error) throw error;
+    return data.id as string;
+  };
+
+  it('reivindica o despertar uma única vez', async () => {
+    const planId = await newPlan();
+    const at = new Date('2026-09-28T10:00:00Z');
+    expect(await store.claimRun(planId, '2026-09-28', at)).toBe(true);
+    expect(await store.claimRun(planId, '2026-09-28', at)).toBe(false);
+  });
+
+  it('run armado pode ser reivindicado; concluído não', async () => {
+    const planId = await newPlan();
+    const at = new Date('2026-09-29T10:00:00Z');
+    await store.armRun(planId, '2026-09-29', at, 'reserva');
+    expect((await store.listWakeRuns('2026-09-29')).find((r) => r.planId === planId)?.fallbackHandle).toBe('reserva');
+    expect(await store.claimRun(planId, '2026-09-29', at)).toBe(true);
+    await store.finishRun(planId, '2026-09-29', 'done', '');
+    expect(await store.claimRun(planId, '2026-09-29', at)).toBe(false);
+  });
+
+  it('comando é reivindicado uma vez e sai da fila', async () => {
+    const { data } = await db.from('alexa_commands')
+      .insert({ user_id: userId, kind: 'speak', payload: { text: 'oi' } }).select().single();
+    expect((await store.pendingCommands()).map((c) => c.id)).toContain(data!.id);
+    expect(await store.claimCommand(data!.id)).toBe(true);
+    expect(await store.claimCommand(data!.id)).toBe(false);
+    await store.finishCommand(data!.id, 'done', 'ok');
+    expect((await store.pendingCommands()).map((c) => c.id)).not.toContain(data!.id);
+  });
+
+  it('briefingInput respeita o dia local de São Paulo', async () => {
+    await db.from('events').insert([
+      { user_id: userId, title: 'Manhã', starts_at: '2026-09-28T11:00:00Z', ends_at: '2026-09-28T12:00:00Z' },
+      { user_id: userId, title: 'Noite', starts_at: '2026-09-29T02:30:00Z', ends_at: '2026-09-29T02:50:00Z' },
+      { user_id: userId, title: 'Amanhã', starts_at: '2026-09-29T03:30:00Z', ends_at: '2026-09-29T04:00:00Z' },
+    ]);
+    await db.from('tasks').insert([
+      { user_id: userId, title: 'Atrasada', status: 'todo', due_at: '2026-09-27T20:00:00Z' },
+      { user_id: userId, title: 'Hoje', status: 'todo', due_at: '2026-09-28T20:00:00Z' },
+      { user_id: userId, title: 'Feita', due_at: '2026-09-28T20:00:00Z', status: 'done' },
+    ]);
+    const input = await store.briefingInput(new Date('2026-09-28T13:00:00Z'), 'America/Sao_Paulo');
+    expect(input.events.map((e) => e.title)).toEqual(['Manhã', 'Noite']);
+    expect(input.overdue.map((t) => t.title)).toEqual(['Atrasada']);
+    expect(input.dueToday.map((t) => t.title)).toEqual(['Hoje']);
+  });
+
+  it('briefingInput inclui evento de duração zero à meia-noite local e exclui o que termina nela', async () => {
+    const other = await db.auth.admin.createUser({
+      email: `ponte-meia-noite-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true,
+    });
+    if (other.error) throw other.error;
+    const uid = other.data.user.id;
+    const s = new SupabaseStore(db, uid, () => {});
+    await db.from('events').insert([
+      { user_id: uid, title: 'Zero à meia-noite', starts_at: '2026-10-05T03:00:00Z', ends_at: '2026-10-05T03:00:00Z' },
+      { user_id: uid, title: 'Terminou à meia-noite', starts_at: '2026-10-05T02:00:00Z', ends_at: '2026-10-05T03:00:00Z' },
+    ]);
+    const input = await s.briefingInput(new Date('2026-10-05T13:00:00Z'), 'America/Sao_Paulo');
+    expect(input.events.map((e) => e.title)).toEqual(['Zero à meia-noite']);
+  });
+
+  it('sweepStuckCommands marca como falhos os comandos presos em execução', async () => {
+    const old = new Date(Date.now() - 20 * 60_000).toISOString();
+    const { data } = await db.from('alexa_commands')
+      .insert({ user_id: userId, kind: 'sync', status: 'running', started_at: old }).select().single();
+    const { data: fresh } = await db.from('alexa_commands')
+      .insert({ user_id: userId, kind: 'sync', status: 'running', started_at: new Date().toISOString() }).select().single();
+    expect(await store.sweepStuckCommands()).toBe(1);
+    const rows = (await db.from('alexa_commands').select('id, status').in('id', [data!.id, fresh!.id])).data!;
+    expect(rows.find((r) => r.id === data!.id)?.status).toBe('failed');
+    expect(rows.find((r) => r.id === fresh!.id)?.status).toBe('running');
+  });
+
+  it('saveDevices remove dispositivos que sumiram', async () => {
+    await store.saveDevices([{ id: 'E1', name: 'Echo', online: true }], [{ id: 'L1', name: 'Luz', operations: ['turnOn'] }]);
+    await store.saveDevices([{ id: 'E1', name: 'Echo', online: false }], []);
+    const { data } = await db.from('alexa_devices').select('id, online').eq('user_id', userId);
+    expect(data).toEqual([{ id: 'E1', online: false }]);
+  });
+});
