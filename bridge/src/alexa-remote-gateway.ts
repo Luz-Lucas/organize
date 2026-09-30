@@ -7,7 +7,7 @@ import {
 type Any = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const KNOWN_OPERATIONS = ['turnOn', 'turnOff', 'setBrightness'];
-const AUTH_HINT = /401|403|cookie|unauthori[sz]ed|login|csrf/i;
+const AUTH_HINT = /\b(?:401|403)\b|unauthori[sz]ed|forbidden|invalid cookie|cookie (?:expired|invalid)|no cookie|login (?:required|failed)|csrf|not logged in/i;
 
 const asError = (err: unknown): Error => {
   const message = String((err as Error)?.message ?? err);

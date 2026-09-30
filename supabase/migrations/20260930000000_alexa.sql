@@ -105,16 +105,19 @@ declare
   affected integer;
 begin
   insert into public.wake_runs (user_id, plan_id, run_date, planned_for, status)
-  values (p_user, p_plan, p_date, p_planned, 'running')
+  select p_user, p.id, p_date, p_planned, 'running'
+  from public.wake_plans p
+  where p.id = p_plan and p.user_id = p_user
   on conflict (plan_id, run_date) do update
     set status = 'running'
-    where public.wake_runs.status in ('armed', 'cancelled');
+    where public.wake_runs.user_id = p_user
+      and public.wake_runs.status in ('armed', 'cancelled');
   get diagnostics affected = row_count;
   return affected > 0;
 end;
 $$;
 
-create or replace function public.claim_command(p_id uuid)
+create or replace function public.claim_command(p_user uuid, p_id uuid)
 returns boolean
 language plpgsql
 security invoker
@@ -124,7 +127,7 @@ declare
   affected integer;
 begin
   update public.alexa_commands set status = 'running', started_at = now()
-  where id = p_id and status = 'pending';
+  where id = p_id and user_id = p_user and status = 'pending';
   get diagnostics affected = row_count;
   return affected > 0;
 end;

@@ -114,7 +114,8 @@ export class SupabaseStore implements WakeStore {
   }
 
   async setRunStatus(runId: string, status: RunStatus, note: string | null = null): Promise<void> {
-    this.check(await this.db.from('wake_runs').update({ status, note }).eq('id', runId));
+    this.check(await this.db.from('wake_runs').update({ status, note })
+      .eq('id', runId).eq('user_id', this.userId));
   }
 
   async claimRun(planId: string, runDate: string, plannedFor: Date): Promise<boolean> {
@@ -125,7 +126,7 @@ export class SupabaseStore implements WakeStore {
 
   async finishRun(planId: string, runDate: string, status: 'done' | 'failed', note: string): Promise<void> {
     this.check(await this.db.from('wake_runs').update({ status, note })
-      .eq('plan_id', planId).eq('run_date', runDate));
+      .eq('user_id', this.userId).eq('plan_id', planId).eq('run_date', runDate));
   }
 
   async pendingCommands(): Promise<Command[]> {
@@ -134,12 +135,13 @@ export class SupabaseStore implements WakeStore {
   }
 
   async claimCommand(id: string): Promise<boolean> {
-    return Boolean(this.check(await this.db.rpc('claim_command', { p_id: id })));
+    return Boolean(this.check(await this.db.rpc('claim_command', { p_user: this.userId, p_id: id })));
   }
 
   async finishCommand(id: string, status: 'done' | 'failed' | 'expired', result: string): Promise<void> {
     this.check(await this.db.from('alexa_commands')
-      .update({ status, result, finished_at: new Date().toISOString() }).eq('id', id));
+      .update({ status, result, finished_at: new Date().toISOString() })
+      .eq('id', id).eq('user_id', this.userId));
   }
 
   onNewCommand(cb: (cmd: Command) => void): () => void {
@@ -147,7 +149,11 @@ export class SupabaseStore implements WakeStore {
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'alexa_commands', filter: `user_id=eq.${this.userId}` },
         (payload) => cb(toCommand(payload.new as Row)))
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          this.log(`realtime de comandos indisponível (${status}); a varredura de 15 s cobre`);
+        }
+      });
     return () => { void this.db.removeChannel(channel); };
   }
 

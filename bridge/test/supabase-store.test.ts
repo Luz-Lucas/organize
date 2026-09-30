@@ -99,6 +99,19 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
     expect(rows.find((r) => r.id === fresh!.id)?.status).toBe('running');
   });
 
+  it('comando de outro usuário não pode ser reivindicado nem finalizado', async () => {
+    const other = await db.auth.admin.createUser({
+      email: `ponte-outro-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true,
+    });
+    if (other.error) throw other.error;
+    const { data } = await db.from('alexa_commands')
+      .insert({ user_id: other.data.user.id, kind: 'speak', payload: {} }).select().single();
+    expect(await store.claimCommand(data!.id)).toBe(false);
+    await store.finishCommand(data!.id, 'done', 'invasor');
+    const row = (await db.from('alexa_commands').select('status, result').eq('id', data!.id).single()).data!;
+    expect(row).toEqual({ status: 'pending', result: null });
+  });
+
   it('saveDevices remove dispositivos que sumiram', async () => {
     await store.saveDevices([{ id: 'E1', name: 'Echo', online: true }], [{ id: 'L1', name: 'Luz', operations: ['turnOn'] }]);
     await store.saveDevices([{ id: 'E1', name: 'Echo', online: false }], []);
