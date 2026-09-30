@@ -3,3 +3,4 @@ app/env.json
 supabase/.temp/
 supabase/.branches/
 .superpowers/
+supabase/functions/.env
