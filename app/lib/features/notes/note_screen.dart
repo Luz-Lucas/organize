@@ -38,6 +38,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool _saving = false;
   bool _saveAgain = false;
   bool _disposed = false;
+  bool _deleted = false;
 
   @override
   void initState() {
@@ -50,7 +51,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   void dispose() {
     _debounce?.cancel();
     _disposed = true;
-    if (_dirty) unawaited(_flush());
+    if (!_deleted && _dirty) unawaited(_flush());
     _title.dispose();
     _body.dispose();
     super.dispose();
@@ -80,6 +81,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   }
 
   Future<void> _save() async {
+    if (_deleted) return;
     if (_title.text.trim().isEmpty) {
       if (!_disposed) setState(() => _saveError = 'O título não pode ficar vazio.');
       return;
@@ -93,6 +95,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   /// vence). Se a tela já foi fechada e a gravação falha, guarda o rascunho
   /// para recuperação na próxima abertura.
   Future<void> _flush() async {
+    if (_deleted) return;
     if (_saving) {
       _saveAgain = true;
       return;
@@ -102,7 +105,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       while (true) {
         _saveAgain = false;
         final note = _note;
-        if (note == null) break;
+        if (note == null || _deleted) break;
         final draft = _draftNote(note);
         if (draft == _lastSaved) break;
         try {
@@ -116,7 +119,9 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             });
           }
         } on RepositoryException catch (e) {
-          if (_disposed) {
+          if (_deleted) {
+            // Nota excluída durante a gravação: não guardar rascunho.
+          } else if (_disposed) {
             _drafts.put(draft);
           } else {
             setState(() => _saveError = e.duplicate
@@ -146,10 +151,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       ),
     );
     if (confirmed != true) return;
+    _debounce?.cancel();
+    _deleted = true;
     try {
       await _repo.deleteNote(note.id);
+      _drafts.take(note.id);
       if (context.mounted) context.pop();
     } on RepositoryException {
+      _deleted = false;
       if (context.mounted) showError(context, 'Não foi possível excluir a nota.');
     }
   }

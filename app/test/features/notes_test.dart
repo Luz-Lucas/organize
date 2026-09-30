@@ -233,6 +233,28 @@ void main() {
     expect(find.byKey(const Key('note-title')), findsNothing);
   });
 
+  testWidgets('excluir nota com edições pendentes não a recria', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
+    await repo.upsertNote(const Note(id: 'n1', title: 'Limites', spaceId: 's1'));
+    await pumpApp(tester, repo, location: '/espacos/s1');
+    await tester.tap(find.text('Limites'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('note-body')), 'edição pendente');
+    await tester.tap(find.byKey(const Key('delete-note')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Excluir'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(await repo.watchNotes().first, isEmpty);
+  });
+
   testWidgets('falha ao excluir nota mostra aviso em pt-BR', (tester) async {
     final repo = MemoryRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Limites'));
