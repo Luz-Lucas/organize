@@ -49,6 +49,11 @@ class MemoryNewsRepository implements NewsRepository {
     _checkWrite();
     final problem = validateFeedUrl(feedUrl);
     if (problem != null) throw RepositoryException(problem);
+    if (_sources.any((s) => s.custom && s.feedUrl == feedUrl.trim())) {
+      throw const RepositoryException(
+          'duplicate key value violates unique constraint "news_sources_user_feed"',
+          duplicate: true);
+    }
     if (!validFeeds.contains(feedUrl.trim())) {
       throw const RepositoryException('Esse endereço não é um feed RSS/Atom.');
     }

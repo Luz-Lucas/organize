@@ -71,7 +71,10 @@ class SupabaseNewsRepository implements NewsRepository {
         final res = await _db.functions.invoke('news-fetch', body: {'validate': url});
         final data = (res.data as Map).cast<String, dynamic>();
         if (data['ok'] != true) {
-          throw RepositoryException('Esse endereço não é um feed RSS/Atom (${data['error']}).');
+          final reason = '${data['error']}';
+          throw RepositoryException(reason.contains('RSS/Atom')
+              ? 'Esse endereço não é um feed RSS/Atom.'
+              : 'Não foi possível validar o feed: $reason.');
         }
         final row = await _db
             .from('news_sources')

@@ -1,7 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { isAuthorized } from "./auth.ts";
 import { collect } from "./collect.ts";
-import { FeedError, fetchFeed, normalizeUrl } from "./feed.ts";
+import { fetchFeed, normalizeUrl } from "./feed.ts";
+import { validateErrorMessage } from "./validate.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
   auth: { persistSession: false },
@@ -29,7 +30,7 @@ Deno.serve(async (req) => {
       const items = await fetchFeed(url);
       return json({ ok: true, count: items.length, sample: items[0]?.title ?? null });
     } catch (e) {
-      return json({ ok: false, error: e instanceof FeedError ? e.message : `não foi possível baixar: ${e}` });
+      return json({ ok: false, error: validateErrorMessage(e) });
     }
   }
 
