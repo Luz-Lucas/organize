@@ -78,6 +78,82 @@ Contra o Supabase local: `npx supabase functions serve news-fetch --env-file sup
 3. Coloque um interesse que esteja em alguma manchete e salve: ela sobe com ★.
 4. Adicione `https://g1.globo.com` como feed próprio: deve aparecer o erro (não é um feed RSS) e a fonte não é salva.
 
+## Alexa (ponte na VPS)
+
+Código em `bridge/`. Testes: `cd bridge && npx vitest run` (integração com `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` do Supabase local).
+
+> **Status: pendente para você.** Os arquivos de deploy (`bridge/Dockerfile`, `docker-compose.yml`, `Caddyfile`, `.env.example`) estão prontos e a imagem foi validada localmente, mas os passos abaixo exigem a sua VPS, DuckDNS, conta Amazon e o console de desenvolvedor da Alexa. Nada disso foi executado.
+
+### 1. Publicar a migration na nuvem (na sua máquina)
+```bash
+npx supabase db push
+```
+Aplica a migration da Alexa (tabelas `alexa_*`, `wake_plans`, `wake_runs`, RPC `claim_wake_run`).
+
+### 2. Preparar a VPS (Ubuntu, usuário com sudo)
+```bash
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git ufw
+sudo usermod -aG docker "$USER" && newgrp docker
+sudo ufw allow OpenSSH && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw --force enable
+git clone <seu-repositório> organizacional && cd organizacional/bridge
+cp .env.example .env && nano .env
+```
+Preencha o `.env` (fica só na VPS, nunca vai para o git):
+- `DOMAIN`: crie um subdomínio grátis em https://www.duckdns.org apontando para o IP da VPS.
+- `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`: Supabase, Project Settings → API.
+- `ORGANIZACIONAL_USER_ID`: Authentication → Users, o UUID do seu usuário.
+- `ALEXA_ALLOWED_USER_ID`: deixe vazio por enquanto (passo 5).
+- Os demais (`TZ_NAME`, `ALEXA_COOKIE_FILE`, `AMAZON_PAGE`, `ALEXA_SERVICE_HOST`, `PORT`, `LOGIN_PROXY_PORT`) já vêm com valores certos para o Brasil.
+
+### 3. Login da Alexa
+Na VPS:
+```bash
+docker compose build
+docker compose run --rm -p 127.0.0.1:3001:3001 bridge node dist/scripts/login.js
+```
+No seu PC: `ssh -L 3001:127.0.0.1:3001 <usuario>@<vps>` e abra http://localhost:3001. Entre na conta Amazon (com 2FA, se tiver). Esperado: a VPS imprime `Login salvo em /data/alexa-cookie.json` e o comando termina. Se o login da Amazon Brasil falhar, use `ALEXA_SERVICE_HOST=pitangui.amazon.com` no `.env` e repita.
+
+Teste de fumaça:
+```bash
+docker compose run --rm bridge node dist/scripts/smoke.js --speak <SERIAL_DO_ECHO> Teste da ponte
+```
+Esperado: lista Echos (`id` = serial), dispositivos e rotinas, e o Echo fala "Teste da ponte".
+- Se `Dispositivos` vier vazio mas você tem lâmpadas na Alexa, salve a resposta crua de `getSmarthomeEntities` como `bridge/test/fixtures/entities.json`, adicione um caso em `mappers.test.ts` e ajuste `mapSmartEntities` até passar.
+- **Verificar:** o `alexa-remote2` fixa o locale `de-DE` em `playMusicProvider`. Confirme no smoke test/despertar de teste que a busca do Spotify em pt-BR toca a música certa; se não tocar, investigue esse locale.
+
+### 4. Subir o serviço
+```bash
+docker compose up -d --build && sleep 20 && curl -s https://$DOMAIN/health && docker compose logs --tail=20 bridge
+```
+Esperado: `{"ok":true}`; logs com `ouvindo na porta 8080` e `sincronizado: N Echos, ...`. No SQL Editor do Supabase, `select state, last_seen from alexa_bridge_status;` mostra `ok` com horário recente.
+
+### 5. Criar a skill no console
+Em https://developer.amazon.com/alexa/console/ask:
+1. **Create Skill**: nome "Organizacional", idioma **Portuguese (BR)**, modelo **Custom**, hospedagem **Provision your own**, template **Start from scratch**.
+2. **Interaction Model → JSON Editor**: cole `bridge/skill/interaction-model.pt-BR.json` → **Save** → **Build skill**.
+3. **Endpoint**: HTTPS → `https://<DOMAIN>/alexa`, certificado **"My development endpoint has a certificate from a trusted certificate authority"** → **Save**.
+4. **Test**: ative **Development** e digite "abrir organizacional".
+
+Esperado: a skill responde "Skill ainda não configurada..." e `docker compose logs bridge | grep "skill chamada"` mostra `amzn1.ask.account...`. Copie esse valor para `ALEXA_ALLOWED_USER_ID` no `.env`, rode `docker compose up -d` e teste de novo: o resumo do dia é falado. No Echo: "Alexa, abre organizacional".
+
+### Operação
+- Subir/atualizar: `cd bridge && docker compose up -d --build`. Saúde: `https://$DOMAIN/health`.
+- **Refazer o login da Alexa** (quando o app avisar):
+  1. Na VPS: `docker compose run --rm -p 127.0.0.1:3001:3001 bridge node dist/scripts/login.js`
+  2. No seu PC: `ssh -L 3001:127.0.0.1:3001 <usuario>@<vps>` e abra http://localhost:3001
+  3. `docker compose restart bridge`
+- Diagnóstico: `docker compose run --rm bridge node dist/scripts/smoke.js`.
+- Despertares: se a ponte cair, o **alarme reserva** (criado até 24 h antes no próprio Echo) toca 10 min depois do horário.
+- Skill: "Alexa, abre organizacional" / "Alexa, pergunte ao organizacional quais são as notícias".
+
+### Teste manual da Fase 3 (com a ponte no ar)
+Rode o app: `cd app && flutter run -d linux --dart-define-from-file=env.json`.
+1. Casa → ⟳ (sincronizar): aparecem os Echos, as rotinas e os dispositivos; aparece "Feito.".
+2. Toque em ▶ numa rotina: o Echo executa.
+3. Crie um despertar para daqui a 5 minutos, com seu Echo e uma busca do Spotify; toque em **Testar agora**: toca a música e fala o resumo.
+4. Espere o horário: o despertar toca sozinho. No SQL Editor, `select status, note from wake_runs order by created_at desc limit 1;` mostra `done`, e o alarme "(reserva)" some do app Alexa.
+5. `docker compose stop bridge` na VPS; em até 3 minutos, Hoje mostra o aviso (se houver despertar ativo). Rode `docker compose start bridge`.
+
 ## Builds
 ```bash
 cd app
