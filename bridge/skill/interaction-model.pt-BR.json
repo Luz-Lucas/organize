@@ -1,0 +1,25 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "organizacional",
+      "intents": [
+        {
+          "name": "ResumoDoDiaIntent",
+          "slots": [],
+          "samples": ["qual é o meu dia", "o que eu tenho hoje", "meu resumo", "resumo do dia", "como está minha agenda", "minha agenda de hoje"]
+        },
+        {
+          "name": "NoticiasIntent",
+          "slots": [],
+          "samples": ["quais são as notícias", "notícias", "manchetes", "me conta as notícias", "o que está acontecendo"]
+        },
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] }
+      ],
+      "types": []
+    }
+  }
+}
