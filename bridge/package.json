@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -19,13 +19,13 @@
     "ask-sdk-core": "^2.14.0",
     "ask-sdk-express-adapter": "^2.14.0",
     "ask-sdk-model": "^1.86.0",
-    "express": "^5.2.1"
+    "express": "^4.21.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.25",
-    "@types/node": "^26.6.3",
+    "@types/node": "^22",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "typescript": "~7.0.2",
+    "vitest": "~5.0.3"
   }
 }

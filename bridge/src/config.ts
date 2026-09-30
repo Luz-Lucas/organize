@@ -17,17 +17,23 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     if (!v) throw new Error(`variável ${key} obrigatória`);
     return v;
   };
+  const num = (key: string, fallback: string) => {
+    const raw = opt(key, fallback);
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n <= 0 || n > 65535) throw new Error(`variável ${key} deve ser uma porta válida`);
+    return n;
+  };
   const opt = (key: string, fallback: string) => env[key]?.trim() || fallback;
   return {
     supabaseUrl: need('SUPABASE_URL'),
     serviceKey: need('SUPABASE_SERVICE_ROLE_KEY'),
     userId: need('ORGANIZACIONAL_USER_ID'),
     timeZone: opt('TZ_NAME', 'America/Sao_Paulo'),
-    port: Number(opt('PORT', '8080')),
+    port: num('PORT', '8080'),
     allowedAlexaUserId: env.ALEXA_ALLOWED_USER_ID?.trim() || null,
     cookieFile: opt('ALEXA_COOKIE_FILE', '/data/alexa-cookie.json'),
     amazonPage: opt('AMAZON_PAGE', 'amazon.com.br'),
     alexaServiceHost: opt('ALEXA_SERVICE_HOST', 'alexa.amazon.com.br'),
-    loginProxyPort: Number(opt('LOGIN_PROXY_PORT', '3001')),
+    loginProxyPort: num('LOGIN_PROXY_PORT', '3001'),
   };
 }

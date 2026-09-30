@@ -23,4 +23,9 @@ describe('loadConfig', () => {
       'variável SUPABASE_SERVICE_ROLE_KEY obrigatória',
     );
   });
+
+  it('rejeita porta inválida', () => {
+    expect(() => loadConfig({ ...base, PORT: 'abc' })).toThrow('variável PORT deve ser uma porta válida');
+    expect(() => loadConfig({ ...base, LOGIN_PROXY_PORT: '0' })).toThrow('variável LOGIN_PROXY_PORT deve ser uma porta válida');
+  });
 });
