@@ -17,7 +17,7 @@ Future<void> pumpApp(
   DateTime? now,
   Size size = const Size(1000, 800),
   NewsRepository? news,
-  Future<void> Function(Uri)? openLink,
+  Future<bool> Function(Uri)? openLink,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -27,7 +27,7 @@ Future<void> pumpApp(
       repositoryProvider.overrideWithValue(repo),
       clockProvider.overrideWithValue(() => now ?? defaultNow),
       newsRepositoryProvider.overrideWithValue(news ?? MemoryNewsRepository()),
-      linkOpenerProvider.overrideWithValue(openLink ?? (_) async {}),
+      linkOpenerProvider.overrideWithValue(openLink ?? (_) async => true),
     ],
     child: OrganizacionalApp(
       router: buildRouter(initialLocation: location, isSignedIn: () => true),

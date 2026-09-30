@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/providers.dart';
 import '../domain/news.dart';
+import 'common.dart';
 
 class NewsTile extends ConsumerWidget {
   const NewsTile({super.key, required this.item});
@@ -28,7 +29,23 @@ class NewsTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
       ),
       isThreeLine: item.summary.isNotEmpty,
-      onTap: () => ref.read(linkOpenerProvider)(Uri.parse(item.url)),
+      onTap: () => _open(context, ref),
     );
+  }
+
+  Future<void> _open(BuildContext context, WidgetRef ref) async {
+    const message = 'Não foi possível abrir o link.';
+    final uri = Uri.tryParse(item.url);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      showError(context, message);
+      return;
+    }
+    var opened = false;
+    try {
+      opened = await ref.read(linkOpenerProvider)(uri);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && context.mounted) showError(context, message);
   }
 }

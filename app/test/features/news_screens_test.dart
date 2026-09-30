@@ -40,7 +40,10 @@ void main() {
   testWidgets('lista notícias com destaque primeiro e abre o link', (tester) async {
     final opened = <Uri>[];
     await pumpApp(tester, MemoryRepository(),
-        location: '/noticias', now: _now, news: _news(), openLink: (u) async => opened.add(u));
+        location: '/noticias', now: _now, news: _news(), openLink: (u) async {
+          opened.add(u);
+          return true;
+        });
     final ia = tester.getTopLeft(find.text('Nova IA brasileira'));
     final chuva = tester.getTopLeft(find.text('Chuva forte em BH'));
     expect(ia.dy, lessThan(chuva.dy));
@@ -138,5 +141,95 @@ void main() {
     await tester.tap(find.byKey(const Key('open-news')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Notícias'), findsOneWidget);
+  });
+
+  testWidgets('Ajustes tem botão de voltar para Notícias', (tester) async {
+    await pumpApp(tester, MemoryRepository(), location: '/noticias', news: _news());
+    await tester.tap(find.byKey(const Key('news-settings')));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Fontes e interesses'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Notícias'), findsOneWidget);
+  });
+
+  testWidgets('Notícias relê o feed ao entrar vindo de Hoje', (tester) async {
+    final news = _news();
+    await pumpApp(tester, MemoryRepository(), now: _now, news: news);
+    expect(find.text('Chuva forte em BH'), findsOneWidget);
+    await news.setSubscribed('g1', false); // mudança no servidor
+    await tester.tap(find.byKey(const Key('open-news')));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Notícias'), findsOneWidget);
+    expect(find.text('Chuva forte em BH'), findsNothing);
+  });
+
+  testWidgets('feed duplicado mostra mensagem em português', (tester) async {
+    final news = _news();
+    await pumpApp(
+      tester,
+      MemoryRepository(),
+      location: '/noticias/ajustes',
+      news: news,
+      size: const Size(1000, 1600),
+    );
+    for (var i = 0; i < 2; i++) {
+      await tester.tap(find.byKey(const Key('add-feed')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('feed-name')), 'Meu blog');
+      await tester.enterText(find.byKey(const Key('feed-url')), 'https://blog.dev/feed');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Adicionar'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Esse feed já foi adicionado.'), findsOneWidget);
+    expect(find.textContaining('duplicate key'), findsNothing);
+  });
+
+  testWidgets('falha ao abrir o link mostra erro', (tester) async {
+    await pumpApp(
+      tester,
+      MemoryRepository(),
+      location: '/noticias',
+      news: _news(),
+      openLink: (_) async => false,
+    );
+    await tester.tap(find.text('Chuva forte em BH'));
+    await tester.pumpAndSettle();
+    expect(find.text('Não foi possível abrir o link.'), findsOneWidget);
+  });
+
+  testWidgets('link com esquema inválido não é aberto', (tester) async {
+    final opened = <Uri>[];
+    final news = MemoryNewsRepository(
+      sources: const [
+        NewsSource(id: 'g1', name: 'G1', section: 'P', feedUrl: 'https://g1', subscribed: true),
+      ],
+      items: [
+        NewsItem(
+          id: 'x',
+          sourceId: 'g1',
+          sourceName: 'G1',
+          title: 'Link estranho',
+          url: 'javascript:alert(1)',
+          publishedAt: _now,
+        ),
+      ],
+    );
+    await pumpApp(
+      tester,
+      MemoryRepository(),
+      location: '/noticias',
+      now: _now,
+      news: news,
+      openLink: (u) async {
+        opened.add(u);
+        return true;
+      },
+    );
+    await tester.tap(find.text('Link estranho'));
+    await tester.pumpAndSettle();
+    expect(opened, isEmpty);
+    expect(find.text('Não foi possível abrir o link.'), findsOneWidget);
   });
 }

@@ -7,8 +7,20 @@ import '../../data/repository.dart';
 import '../../ui/common.dart';
 import '../../ui/news_tile.dart';
 
-class NewsScreen extends ConsumerWidget {
+class NewsScreen extends ConsumerStatefulWidget {
   const NewsScreen({super.key});
+
+  @override
+  ConsumerState<NewsScreen> createState() => _NewsScreenState();
+}
+
+class _NewsScreenState extends ConsumerState<NewsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Ao entrar em Notícias, relê o feed (o provider pode seguir vivo na troca de tela).
+    ref.invalidate(newsFeedProvider);
+  }
 
   Future<void> _refresh(BuildContext context, WidgetRef ref) async {
     try {
@@ -21,7 +33,7 @@ class NewsScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final feed = ref.watch(newsFeedProvider);
     return Scaffold(
       appBar: AppBar(

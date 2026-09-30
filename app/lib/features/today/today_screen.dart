@@ -26,6 +26,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   @override
   void initState() {
     super.initState();
+    // Ao entrar em Hoje, relê as manchetes (o provider pode seguir vivo na troca de tela).
+    ref.invalidate(newsFeedProvider);
     _scheduleMidnightRollover();
   }
 
@@ -43,6 +45,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final nextMidnight = DateTime(now.year, now.month, now.day + 1);
     _midnightTimer = Timer(nextMidnight.difference(now), () {
       if (!mounted) return;
+      ref.invalidate(newsFeedProvider);
       setState(_scheduleMidnightRollover);
     });
   }

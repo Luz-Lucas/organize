@@ -7,6 +7,7 @@ import 'package:organizacional/data/memory_news_repository.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/calendar_event.dart';
 import 'package:organizacional/domain/task_item.dart';
+import 'package:organizacional/domain/news.dart';
 
 import '../helpers.dart';
 
@@ -68,5 +69,54 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
     expect(find.text('terça-feira, 29 de setembro'), findsOneWidget);
+  });
+
+  testWidgets('Manchetes são relidas na meia-noite', (tester) async {
+    var current = DateTime(2026, 9, 28, 23, 59, 58);
+    final news = MemoryNewsRepository(
+      sources: const [
+        NewsSource(id: 'a', name: 'A', section: 's', feedUrl: 'https://a', subscribed: true),
+        NewsSource(id: 'b', name: 'B', section: 's', feedUrl: 'https://b'),
+      ],
+      items: [
+        NewsItem(
+          id: '1',
+          sourceId: 'a',
+          sourceName: 'A',
+          title: 'Manchete de ontem',
+          url: 'https://a/1',
+          publishedAt: DateTime(2026, 9, 28, 20),
+        ),
+        NewsItem(
+          id: '2',
+          sourceId: 'b',
+          sourceName: 'B',
+          title: 'Manchete nova',
+          url: 'https://b/2',
+          publishedAt: DateTime(2026, 9, 28, 23),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(MemoryRepository()),
+          clockProvider.overrideWithValue(() => current),
+          newsRepositoryProvider.overrideWithValue(news),
+        ],
+        child: OrganizacionalApp(
+          router: buildRouter(initialLocation: '/', isSignedIn: () => true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Manchete de ontem'), findsOneWidget);
+    expect(find.text('Manchete nova'), findsNothing);
+
+    await news.setSubscribed('b', true); // mudança no servidor, sem invalidar nada
+    current = DateTime(2026, 9, 29, 0, 0, 1);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(find.text('Manchete nova'), findsOneWidget);
   });
 }

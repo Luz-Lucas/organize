@@ -76,7 +76,9 @@ class _NewsSettingsScreenState extends ConsumerState<NewsSettingsScreen> {
       if (!mounted) return;
       _refreshFeed();
     } on RepositoryException catch (e) {
-        if (mounted) showError(context, e.message);
+      if (mounted) {
+        showError(context, e.duplicate ? 'Esse feed já foi adicionado.' : e.message);
+      }
     }
   }
 

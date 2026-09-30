@@ -63,10 +63,15 @@ GoRouter buildRouter({
                 return NoteScreen(key: ValueKey(id), noteId: id);
               },
             ),
-            GoRoute(path: '/noticias', builder: (context, state) => const NewsScreen()),
             GoRoute(
-              path: '/noticias/ajustes',
-              builder: (context, state) => const NewsSettingsScreen(),
+              path: '/noticias',
+              builder: (context, state) => const NewsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'ajustes',
+                  builder: (context, state) => const NewsSettingsScreen(),
+                ),
+              ],
             ),
           ],
         ),

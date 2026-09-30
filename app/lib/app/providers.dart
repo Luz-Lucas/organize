@@ -50,17 +50,17 @@ final newsRepositoryProvider = Provider<NewsRepository>(
   (ref) => throw UnimplementedError('newsRepositoryProvider precisa de override'),
 );
 
+// autoDispose: cada visita a Hoje/Notícias relê o servidor e nada vaza entre contas.
 final newsFeedProvider =
-    FutureProvider<List<NewsItem>>((ref) => ref.watch(newsRepositoryProvider).feed());
+    FutureProvider.autoDispose<List<NewsItem>>((ref) => ref.watch(newsRepositoryProvider).feed());
 
 final newsSourcesProvider =
-    FutureProvider<List<NewsSource>>((ref) => ref.watch(newsRepositoryProvider).sources());
+    FutureProvider.autoDispose<List<NewsSource>>((ref) => ref.watch(newsRepositoryProvider).sources());
 
 final newsPrefsProvider =
-    FutureProvider<NewsPrefs>((ref) => ref.watch(newsRepositoryProvider).prefs());
+    FutureProvider.autoDispose<NewsPrefs>((ref) => ref.watch(newsRepositoryProvider).prefs());
 
-final linkOpenerProvider = Provider<Future<void> Function(Uri)>(
-  (ref) => (uri) async {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  },
+/// Abre o link no app externo; devolve false se não foi possível.
+final linkOpenerProvider = Provider<Future<bool> Function(Uri)>(
+  (ref) => (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
 );
