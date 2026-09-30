@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../features/agenda/agenda_screen.dart';
 import '../features/auth/login_screen.dart';
+import '../features/home/home_screen.dart';
+import '../features/home/wake_plan_screen.dart';
 import '../features/news/news_screen.dart';
 import '../features/news/news_settings_screen.dart';
 import '../features/notes/note_screen.dart';
@@ -72,6 +74,14 @@ GoRouter buildRouter({
                   builder: (context, state) => const NewsSettingsScreen(),
                 ),
               ],
+            ),
+            GoRoute(path: '/casa', builder: (context, state) => const HomeScreen()),
+            GoRoute(
+              path: '/casa/despertar/:id',
+              builder: (context, state) {
+                final id = state.pathParameters['id']!;
+                return WakePlanScreen(key: ValueKey('wake-$id'), planId: id);
+              },
             ),
           ],
         ),

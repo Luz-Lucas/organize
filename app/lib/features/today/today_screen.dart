@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../app/providers.dart';
 import '../../domain/agenda.dart';
+import '../../domain/alexa.dart';
 import '../../domain/news.dart';
 import '../../ui/common.dart';
 import '../../ui/event_tile.dart';
@@ -52,11 +53,17 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final now = ref.watch(clockProvider)();
     final events = ref.watch(eventsFromProvider(startOfDay(now)));
     final tasks = ref.watch(tasksProvider);
     final spaces = ref.watch(spacesProvider);
     final headlines = (ref.watch(newsFeedProvider).value ?? const <NewsItem>[]).take(3).toList();
+    final warning = bridgeWarning(
+      ref.watch(bridgeStatusProvider).value,
+      ref.watch(wakePlansProvider).value ?? const <WakePlan>[],
+      now,
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text(DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(now)),
@@ -67,6 +74,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             icon: const Icon(Icons.newspaper_outlined),
             onPressed: () => context.go('/noticias'),
           ),
+          IconButton(
+            key: const Key('open-home'),
+            tooltip: 'Casa',
+            icon: const Icon(Icons.home_outlined),
+            onPressed: () => context.go('/casa'),
+          ),
         ],
       ),
       body: asyncView(events, (eventList) => asyncView(tasks, (taskList) {
@@ -75,6 +88,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (warning != null)
+                  Card(
+                    key: const Key('bridge-warning'),
+                    color: theme.colorScheme.errorContainer,
+                    child: ListTile(
+                      leading: const Icon(Icons.warning_amber_outlined),
+                      title: Text(warning),
+                      onTap: () => context.go('/casa'),
+                    ),
+                  ),
                 const SectionHeader('Aulas e eventos'),
                 if (agenda.events.isEmpty) const EmptyHint('Nada na agenda hoje.'),
                 for (final e in agenda.events) EventTile(event: e, spaceName: names[e.spaceId]),

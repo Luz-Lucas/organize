@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app/app.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
+import 'data/supabase_alexa_repository.dart';
 import 'data/supabase_news_repository.dart';
 import 'data/supabase_repository.dart';
 
@@ -35,6 +36,7 @@ Future<void> main() async {
     overrides: [
       repositoryProvider.overrideWithValue(SupabaseRepository(client)),
       newsRepositoryProvider.overrideWithValue(SupabaseNewsRepository(client)),
+      alexaRepositoryProvider.overrideWithValue(SupabaseAlexaRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
     ],
     child: OrganizacionalApp(router: router),

@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/alexa_repository.dart';
 import '../data/news_repository.dart';
 import '../data/repository.dart';
+import '../domain/alexa.dart';
 import '../domain/calendar_event.dart';
 import '../domain/news.dart';
 import '../domain/note.dart';
@@ -64,3 +66,19 @@ final newsPrefsProvider =
 final linkOpenerProvider = Provider<Future<bool> Function(Uri)>(
   (ref) => (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
 );
+
+final alexaRepositoryProvider = Provider<AlexaRepository>(
+  (ref) => throw UnimplementedError('alexaRepositoryProvider precisa de override'),
+);
+
+final bridgeStatusProvider =
+    StreamProvider<BridgeStatus?>((ref) => ref.watch(alexaRepositoryProvider).watchStatus());
+
+final alexaDevicesProvider =
+    StreamProvider<List<AlexaDevice>>((ref) => ref.watch(alexaRepositoryProvider).watchDevices());
+
+final alexaRoutinesProvider =
+    StreamProvider<List<AlexaRoutine>>((ref) => ref.watch(alexaRepositoryProvider).watchRoutines());
+
+final wakePlansProvider =
+    StreamProvider<List<WakePlan>>((ref) => ref.watch(alexaRepositoryProvider).watchWakePlans());

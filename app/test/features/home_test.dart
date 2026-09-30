@@ -1,0 +1,138 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:organizacional/data/memory_alexa_repository.dart';
+import 'package:organizacional/data/memory_repository.dart';
+import 'package:organizacional/domain/alexa.dart';
+
+import '../helpers.dart';
+
+const _tall = Size(1000, 1800);
+final _now = DateTime(2026, 9, 28, 10);
+const _plan = WakePlan(
+  id: 'p1', label: 'Aula cedo', days: [1, 2, 3, 4, 5], hour: 7, minute: 0,
+  echoDeviceId: 'ECHO', spotifyQuery: 'lofi',
+);
+
+MemoryAlexaRepository _alexa({
+  BridgeState state = BridgeState.ok,
+  int minutesAgo = 0,
+  List<WakePlan> plans = const [_plan],
+  CommandStatus? respondWith = CommandStatus.done,
+  String? respondResult = 'ok',
+}) =>
+    MemoryAlexaRepository(
+      status: BridgeStatus(state: state, lastSeen: _now.subtract(Duration(minutes: minutesAgo))),
+      devices: const [
+        AlexaDevice(id: 'ECHO', name: 'Echo do quarto', kind: 'echo'),
+        AlexaDevice(id: 'luz1', name: 'Luz do quarto', kind: 'smart', operations: ['turnOn', 'turnOff', 'setBrightness']),
+      ],
+      routines: const [AlexaRoutine(id: 'r1', name: 'Boa noite')],
+      plans: plans,
+      respondWith: respondWith,
+      respondResult: respondResult,
+    );
+
+void main() {
+  testWidgets('Casa lista despertares, rotinas e dispositivos; sem aviso com a ponte online', (tester) async {
+    await pumpApp(tester, MemoryRepository(), location: '/casa', now: _now, alexa: _alexa(), size: _tall);
+    expect(find.text('Aula cedo'), findsOneWidget);
+    expect(find.text('07:00 · Dias úteis · Echo do quarto · Spotify: lofi'), findsOneWidget);
+    expect(find.text('Boa noite'), findsOneWidget);
+    expect(find.text('Luz do quarto'), findsOneWidget);
+    expect(find.byKey(const Key('bridge-banner')), findsNothing);
+  });
+
+  testWidgets('ponte offline mostra aviso em Casa', (tester) async {
+    await pumpApp(tester, MemoryRepository(), location: '/casa', now: _now, alexa: _alexa(minutesAgo: 10), size: _tall);
+    expect(find.byKey(const Key('bridge-banner')), findsOneWidget);
+    expect(find.textContaining('offline desde 09:50'), findsOneWidget);
+  });
+
+  testWidgets('executar rotina envia o Echo escolhido e mostra o resultado', (tester) async {
+    final alexa = _alexa();
+    await pumpApp(tester, MemoryRepository(), location: '/casa', now: _now, alexa: alexa, size: _tall);
+    await tester.tap(find.byKey(const ValueKey('run-routine-r1')));
+    await tester.pumpAndSettle();
+    expect(alexa.sent.single.kind, 'routine');
+    expect(alexa.sent.single.payload, {'routineId': 'r1', 'echoDeviceId': 'ECHO'});
+    expect(find.text('Feito.'), findsOneWidget);
+  });
+
+  testWidgets('falha da ponte aparece para o usuário', (tester) async {
+    final alexa = _alexa(respondWith: CommandStatus.failed, respondResult: 'rotina não encontrada');
+    await pumpApp(tester, MemoryRepository(), location: '/casa', now: _now, alexa: alexa, size: _tall);
+    await tester.tap(find.byKey(const ValueKey('run-routine-r1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Falhou: rotina não encontrada'), findsOneWidget);
+  });
+
+  testWidgets('ligar dispositivo e falar no Echo', (tester) async {
+    final alexa = _alexa();
+    await pumpApp(tester, MemoryRepository(), location: '/casa', now: _now, alexa: alexa, size: _tall);
+    await tester.tap(find.byKey(const ValueKey('on-luz1')));
+    await tester.pumpAndSettle();
+    expect(alexa.sent.last.payload, {'entityId': 'luz1', 'action': 'turnOn'});
+    await tester.enterText(find.byKey(const Key('speak-text')), 'o jantar está pronto');
+    await tester.tap(find.byKey(const Key('speak-send')));
+    await tester.pumpAndSettle();
+    expect(alexa.sent.last.kind, 'speak');
+    expect(alexa.sent.last.payload, {'echoDeviceId': 'ECHO', 'text': 'o jantar está pronto'});
+  });
+
+  testWidgets('desativar despertar pelo switch', (tester) async {
+    final alexa = _alexa();
+    await pumpApp(tester, MemoryRepository(), location: '/casa', now: _now, alexa: alexa, size: _tall);
+    await tester.tap(find.byKey(const ValueKey('wake-enabled-p1')));
+    await tester.pumpAndSettle();
+    expect((await alexa.watchWakePlans().first).single.enabled, isFalse);
+  });
+
+  testWidgets('novo despertar valida dias e salva', (tester) async {
+    final alexa = _alexa(plans: const []);
+    await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/novo', now: _now, alexa: alexa, size: _tall);
+    await tester.enterText(find.byKey(const Key('wake-label')), 'Academia');
+    for (var d = 1; d <= 5; d++) {
+      await tester.tap(find.byKey(ValueKey('day-$d')));
+    }
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('wake-save')));
+    await tester.pump();
+    expect(find.text('Escolha pelo menos um dia.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('day-6')));
+    await tester.enterText(find.byKey(const Key('wake-spotify')), 'rock');
+    await tester.tap(find.byKey(const Key('wake-save')));
+    await tester.pumpAndSettle();
+    final saved = (await alexa.watchWakePlans().first).single;
+    expect(saved.label, 'Academia');
+    expect(saved.days, [6]);
+    expect(saved.echoDeviceId, 'ECHO');
+    expect(saved.spotifyQuery, 'rock');
+    expect(find.text('Academia'), findsOneWidget); // voltou para Casa
+  });
+
+  testWidgets('Hoje avisa login expirado quando há despertar ativo e abre Casa', (tester) async {
+    await pumpApp(tester, MemoryRepository(), now: _now, alexa: _alexa(state: BridgeState.authRequired));
+    expect(find.byKey(const Key('bridge-warning')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('open-home')));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Casa'), findsOneWidget);
+  });
+
+  testWidgets('Hoje sem despertar ativo não mostra aviso', (tester) async {
+    await pumpApp(tester, MemoryRepository(), now: _now, alexa: _alexa(state: BridgeState.authRequired, plans: const []));
+    expect(find.byKey(const Key('bridge-warning')), findsNothing);
+  });
+
+  testWidgets('excluir despertar confirma no diálogo e apaga o plano', (tester) async {
+    final alexa = _alexa();
+    await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+    await tester.tap(find.byKey(const Key('wake-delete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Excluir despertar?'), findsOneWidget);
+    await tester.tap(find.text('Excluir'));
+    await tester.pumpAndSettle();
+    expect(await alexa.watchWakePlans().first, isEmpty);
+    expect(find.widgetWithText(AppBar, 'Casa'), findsOneWidget);
+  });
+}
