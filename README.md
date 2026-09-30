@@ -45,11 +45,11 @@ cd app && SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" flutter test --t
 - Verificar o catálogo de feeds: `deno run --allow-net supabase/functions/news-fetch/check_feeds.ts`.
 - Local: `npx supabase functions serve news-fetch --env-file supabase/functions/.env` (`CRON_SECRET` nesse arquivo).
 - Filtro (interesses/bloqueios): função SQL `news_feed`. É a mesma regra usada pelo app, pela Alexa e pelo Claude.
-- Limitação conhecida (SSRF): o endpoint `validate` busca qualquer URL http/https em nome de um usuário logado. Aceito por ser uso pessoal; não exponha o projeto a usuários não confiáveis (mantenha o cadastro público desligado).
+- Limitação conhecida (SSRF): o endpoint `validate` busca qualquer URL http/https em nome de um usuário logado, e a coleta agendada busca todo feed próprio cadastrado (um usuário logado também pode gravar `feed_url` direto pela API, sem passar por `validate`). Aceito por ser uso pessoal; não exponha o projeto a usuários não confiáveis (mantenha o cadastro público desligado).
 
 ### Publicar na nuvem
 ```bash
-cd /home/only/organizacional
+# na raiz do repositório
 SEGREDO=$(openssl rand -hex 24)
 npx supabase db push
 npx supabase functions deploy news-fetch
