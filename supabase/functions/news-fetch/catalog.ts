@@ -1,0 +1,21 @@
+/** Espelho da lista inserida em supabase/migrations/20260929000000_news.sql. Mantenha os dois iguais. */
+export const CATALOG: { name: string; section: string; feedUrl: string }[] = [
+  { name: "G1", section: "Principais", feedUrl: "https://g1.globo.com/rss/g1/" },
+  { name: "G1", section: "Política", feedUrl: "https://g1.globo.com/rss/g1/politica/" },
+  { name: "G1", section: "Economia", feedUrl: "https://g1.globo.com/rss/g1/economia/" },
+  { name: "G1", section: "Tecnologia", feedUrl: "https://g1.globo.com/rss/g1/tecnologia/" },
+  { name: "G1", section: "Educação", feedUrl: "https://g1.globo.com/rss/g1/educacao/" },
+  { name: "G1", section: "Ciência e Saúde", feedUrl: "https://g1.globo.com/rss/g1/ciencia-e-saude/" },
+  { name: "Folha de S.Paulo", section: "Em cima da hora", feedUrl: "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml" },
+  { name: "Folha de S.Paulo", section: "Poder", feedUrl: "https://feeds.folha.uol.com.br/poder/rss091.xml" },
+  { name: "Folha de S.Paulo", section: "Mercado", feedUrl: "https://feeds.folha.uol.com.br/mercado/rss091.xml" },
+  { name: "Folha de S.Paulo", section: "Tec", feedUrl: "https://feeds.folha.uol.com.br/tec/rss091.xml" },
+  { name: "Folha de S.Paulo", section: "Mundo", feedUrl: "https://feeds.folha.uol.com.br/mundo/rss091.xml" },
+  { name: "Estadão", section: "Política", feedUrl: "https://www.estadao.com.br/arc/outboundfeeds/feeds/rss/sections/politica/" },
+  { name: "Estadão", section: "Economia", feedUrl: "https://www.estadao.com.br/arc/outboundfeeds/feeds/rss/sections/economia/" },
+  { name: "Estadão", section: "Brasil", feedUrl: "https://www.estadao.com.br/arc/outboundfeeds/feeds/rss/sections/brasil/" },
+  { name: "O Globo", section: "Principais", feedUrl: "https://oglobo.globo.com/rss/oglobo" },
+  { name: "CNN Brasil", section: "Principais", feedUrl: "https://www.cnnbrasil.com.br/feed/" },
+  { name: "BBC News Brasil", section: "Principais", feedUrl: "https://feeds.bbci.co.uk/portuguese/rss.xml" },
+  { name: "Agência Brasil", section: "Últimas", feedUrl: "https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml" },
+];
