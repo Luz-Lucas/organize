@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../data/news_repository.dart';
 import '../data/repository.dart';
 import '../domain/calendar_event.dart';
+import '../domain/news.dart';
 import '../domain/note.dart';
 import '../domain/space.dart';
 import '../domain/task_item.dart';
@@ -42,3 +45,22 @@ class NoteDrafts {
 }
 
 final noteDraftsProvider = Provider<NoteDrafts>((ref) => NoteDrafts());
+
+final newsRepositoryProvider = Provider<NewsRepository>(
+  (ref) => throw UnimplementedError('newsRepositoryProvider precisa de override'),
+);
+
+final newsFeedProvider =
+    FutureProvider<List<NewsItem>>((ref) => ref.watch(newsRepositoryProvider).feed());
+
+final newsSourcesProvider =
+    FutureProvider<List<NewsSource>>((ref) => ref.watch(newsRepositoryProvider).sources());
+
+final newsPrefsProvider =
+    FutureProvider<NewsPrefs>((ref) => ref.watch(newsRepositoryProvider).prefs());
+
+final linkOpenerProvider = Provider<Future<void> Function(Uri)>(
+  (ref) => (uri) async {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  },
+);

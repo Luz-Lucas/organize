@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/app/app.dart';
 import 'package:organizacional/app/providers.dart';
 import 'package:organizacional/app/router.dart';
+import 'package:organizacional/data/memory_news_repository.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/calendar_event.dart';
 import 'package:organizacional/domain/task_item.dart';
@@ -54,6 +55,7 @@ void main() {
       overrides: [
         repositoryProvider.overrideWithValue(repo),
         clockProvider.overrideWithValue(() => current),
+        newsRepositoryProvider.overrideWithValue(MemoryNewsRepository()),
       ],
       child: OrganizacionalApp(
         router: buildRouter(initialLocation: '/', isSignedIn: () => true),

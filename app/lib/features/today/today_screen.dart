@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../app/providers.dart';
 import '../../domain/agenda.dart';
+import '../../domain/news.dart';
 import '../../ui/common.dart';
 import '../../ui/event_tile.dart';
+import '../../ui/news_tile.dart';
 import '../../ui/task_tile.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
@@ -50,8 +53,19 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final events = ref.watch(eventsFromProvider(startOfDay(now)));
     final tasks = ref.watch(tasksProvider);
     final spaces = ref.watch(spacesProvider);
+    final headlines = (ref.watch(newsFeedProvider).value ?? const <NewsItem>[]).take(3).toList();
     return Scaffold(
-      appBar: AppBar(title: Text(DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(now))),
+      appBar: AppBar(
+        title: Text(DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(now)),
+        actions: [
+          IconButton(
+            key: const Key('open-news'),
+            tooltip: 'Notícias',
+            icon: const Icon(Icons.newspaper_outlined),
+            onPressed: () => context.go('/noticias'),
+          ),
+        ],
+      ),
       body: asyncView(events, (eventList) => asyncView(tasks, (taskList) {
             final names = {for (final s in spaces.value ?? const []) s.id: s.name};
             final agenda = buildDayAgenda(now: now, events: eventList, tasks: taskList);
@@ -70,6 +84,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 if (agenda.dueToday.isEmpty) const EmptyHint('Nenhuma tarefa para hoje.'),
                 for (final t in agenda.dueToday)
                   TaskTile(key: ValueKey(t.id), task: t, spaceName: names[t.spaceId]),
+                if (headlines.isNotEmpty) ...[
+                  const SectionHeader('Manchetes'),
+                  for (final n in headlines) NewsTile(key: ValueKey('news-${n.id}'), item: n),
+                ],
               ],
             );
           })),

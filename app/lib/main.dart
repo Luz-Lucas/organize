@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app/app.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
+import 'data/supabase_news_repository.dart';
 import 'data/supabase_repository.dart';
 
 const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
@@ -33,6 +34,7 @@ Future<void> main() async {
   runApp(ProviderScope(
     overrides: [
       repositoryProvider.overrideWithValue(SupabaseRepository(client)),
+      newsRepositoryProvider.overrideWithValue(SupabaseNewsRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
     ],
     child: OrganizacionalApp(router: router),

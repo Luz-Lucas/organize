@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../features/agenda/agenda_screen.dart';
 import '../features/auth/login_screen.dart';
+import '../features/news/news_screen.dart';
+import '../features/news/news_settings_screen.dart';
 import '../features/notes/note_screen.dart';
 import '../features/spaces/space_screen.dart';
 import '../features/spaces/spaces_screen.dart';
@@ -60,6 +62,11 @@ GoRouter buildRouter({
                 final id = state.pathParameters['id']!;
                 return NoteScreen(key: ValueKey(id), noteId: id);
               },
+            ),
+            GoRoute(path: '/noticias', builder: (context, state) => const NewsScreen()),
+            GoRoute(
+              path: '/noticias/ajustes',
+              builder: (context, state) => const NewsSettingsScreen(),
             ),
           ],
         ),
