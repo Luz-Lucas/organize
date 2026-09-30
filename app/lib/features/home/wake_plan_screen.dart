@@ -24,6 +24,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
   final _spotify = TextEditingController();
   WakePlan? _draft;
   String? _error;
+  bool _dirty = false; // alterações ainda não salvas
 
   bool get _isNew => widget.planId == 'novo';
 
@@ -49,7 +50,10 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
     );
   }
 
-  void _update(WakePlan Function(WakePlan d) change) => setState(() => _draft = change(_draft!));
+  void _update(WakePlan Function(WakePlan d) change) => setState(() {
+        _draft = change(_draft!);
+        _dirty = true;
+      });
 
   Future<void> _pickTime() async {
     final d = _draft!;
@@ -74,14 +78,18 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
   }
 
   Future<void> _test() async {
-    final outcome = await runCommand(
-      ref.read(alexaRepositoryProvider),
-      'wake_test',
-      {'planId': widget.planId},
-      timeout: const Duration(seconds: 90),
-    );
-    if (!mounted) return;
-    showError(context, outcome);
+    try {
+      final outcome = await runCommand(
+        ref.read(alexaRepositoryProvider),
+        'wake_test',
+        {'planId': widget.planId},
+        timeout: const Duration(seconds: 90),
+      );
+      if (!mounted) return;
+      showError(context, outcome);
+    } on RepositoryException {
+      if (mounted) showError(context, 'Não foi possível enviar o comando.');
+    }
   }
 
   Future<void> _delete() async {
@@ -145,6 +153,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
             TextField(
               key: const Key('wake-label'),
               controller: _label,
+              onChanged: (_) => setState(() => _dirty = true),
               decoration: const InputDecoration(labelText: 'Nome'),
             ),
             ListTile(
@@ -191,6 +200,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
             TextField(
               key: const Key('wake-spotify'),
               controller: _spotify,
+              onChanged: (_) => setState(() => _dirty = true),
               decoration: const InputDecoration(
                 labelText: 'Buscar no Spotify (opcional)',
                 hintText: 'Ex.: playlist Bom Dia',
@@ -240,7 +250,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
               children: [
                 FilledButton(key: const Key('wake-save'), onPressed: _save, child: const Text('Salvar')),
                 if (!_isNew)
-                  OutlinedButton(key: const Key('wake-test'), onPressed: _test, child: const Text('Testar agora')),
+                  OutlinedButton(key: const Key('wake-test'), onPressed: _dirty ? null : _test, child: const Text('Testar agora')),
               ],
             ),
           ],

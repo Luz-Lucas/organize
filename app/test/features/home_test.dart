@@ -135,4 +135,21 @@ void main() {
     expect(await alexa.watchWakePlans().first, isEmpty);
     expect(find.widgetWithText(AppBar, 'Casa'), findsOneWidget);
   });
+
+  testWidgets('testar despertar mostra erro quando o envio falha', (tester) async {
+    final alexa = _alexa()..failWrites = true;
+    await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+    await tester.tap(find.byKey(const Key('wake-test')));
+    await tester.pumpAndSettle();
+    expect(find.text('Não foi possível enviar o comando.'), findsOneWidget);
+  });
+
+  testWidgets('Testar agora fica desabilitado com alterações não salvas', (tester) async {
+    await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: _alexa(), size: _tall);
+    OutlinedButton btn() => tester.widget<OutlinedButton>(find.byKey(const Key('wake-test')));
+    expect(btn().onPressed, isNotNull);
+    await tester.enterText(find.byKey(const Key('wake-label')), 'Outro');
+    await tester.pump();
+    expect(btn().onPressed, isNull);
+  });
 }
