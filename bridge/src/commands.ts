@@ -1,7 +1,7 @@
 import { chunkSpeech } from './briefing.js';
 import type { AlexaGateway, DeviceAction } from './gateway.js';
 
-export type CommandKind = 'device' | 'routine' | 'speak' | 'music' | 'sync' | 'wake_test';
+export type CommandKind = 'device' | 'routine' | 'speak' | 'music' | 'sync' | 'wake_test' | 'delete_device';
 
 export interface Command {
   id: string;
@@ -57,6 +57,10 @@ export async function executeCommand(cmd: Command, deps: CommandDeps): Promise<s
     }
     case 'music':
       await deps.gateway.playSpotify(str(p, 'echoDeviceId'), str(p, 'query'));
+      return 'ok';
+    case 'delete_device':
+      await deps.gateway.deleteSmartDevice(str(p, 'entityId'));
+      await deps.sync();
       return 'ok';
     case 'sync':
       await deps.sync();

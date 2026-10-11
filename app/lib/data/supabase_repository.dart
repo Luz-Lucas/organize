@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/calendar_event.dart';
 import '../domain/note.dart';
+import '../domain/notice.dart';
 import '../domain/space.dart';
 import '../domain/task_item.dart';
 import 'repository.dart';
@@ -80,4 +81,17 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<void> deleteEvent(String id) => _delete('events', id);
+
+  @override
+  Stream<List<Notice>> watchNotices() => _db
+      .from('notices')
+      .stream(primaryKey: ['id'])
+      .order('created_at', ascending: false)
+      .map((rows) => rows.map(Notice.fromMap).toList());
+
+  @override
+  Future<void> upsertNotice(Notice notice) => _upsert('notices', notice.toMap());
+
+  @override
+  Future<void> deleteNotice(String id) => _delete('notices', id);
 }

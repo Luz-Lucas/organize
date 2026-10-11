@@ -3,6 +3,7 @@ import type { AlexaGateway, DeviceAction } from '../src/gateway.js';
 export class FakeGateway implements AlexaGateway {
   calls: string[] = [];
   failOn = new Set<string>();
+  deleted: string[] = [];
   alarms = new Map<string, { echo: string; at: Date; label: string }>();
   private next = 1;
 
@@ -17,6 +18,10 @@ export class FakeGateway implements AlexaGateway {
   async runRoutine(routineId: string, echo: string) { await this.record('runRoutine', `${routineId},${echo}`); }
   async deviceAction(entityId: string, action: DeviceAction, brightness?: number) {
     await this.record('deviceAction', `${entityId},${action}${brightness === undefined ? '' : `,${brightness}`}`);
+  }
+  async deleteSmartDevice(entityId: string) {
+    await this.record('deleteSmartDevice', entityId);
+    this.deleted.push(entityId);
   }
   async speak(echo: string, text: string) { await this.record('speak', `${echo},${text}`); }
   async setVolume(echo: string, volume: number) { await this.record('setVolume', `${echo},${volume}`); }

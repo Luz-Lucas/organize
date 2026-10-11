@@ -25,6 +25,23 @@ export function mapSmartEntities(raw: unknown): SmartDevice[] {
   });
 }
 
+/** Procura, em qualquer nível do JSON de getSmarthomeDevices, o applianceId do objeto com o entityId dado. */
+export function findApplianceId(raw: unknown, entityId: string): string | null {
+  const seen = new Set<object>();
+  const walk = (node: unknown): string | null => {
+    if (!node || typeof node !== 'object' || seen.has(node)) return null;
+    seen.add(node);
+    const o = node as Any;
+    if (o.entityId === entityId && typeof o.applianceId === 'string') return o.applianceId;
+    for (const v of Object.values(o)) {
+      const found = walk(v);
+      if (found) return found;
+    }
+    return null;
+  };
+  return walk(raw);
+}
+
 export function mapRoutines(raw: unknown): Routine[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((r: Any) => {
@@ -85,6 +102,13 @@ export class AlexaRemoteGateway implements AlexaGateway {
 
   async listSmartDevices(): Promise<SmartDevice[]> {
     return mapSmartEntities(await this.call<unknown>('getSmarthomeEntities'));
+  }
+
+  async deleteSmartDevice(entityId: string): Promise<void> {
+    const raw = await this.call<unknown>('getSmarthomeDevices');
+    const applianceId = findApplianceId(raw, entityId);
+    if (applianceId === null) throw new Error('dispositivo não encontrado na Alexa');
+    await this.call('deleteSmarthomeDevice', applianceId);
   }
 
   async listRoutines(): Promise<Routine[]> {

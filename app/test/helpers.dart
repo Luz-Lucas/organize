@@ -8,7 +8,9 @@ import 'package:organizacional/data/alexa_repository.dart';
 import 'package:organizacional/data/memory_alexa_repository.dart';
 import 'package:organizacional/data/memory_news_repository.dart';
 import 'package:organizacional/data/news_repository.dart';
+import 'package:organizacional/data/memory_settings_repository.dart';
 import 'package:organizacional/data/repository.dart';
+import 'package:organizacional/data/settings_repository.dart';
 
 final defaultNow = DateTime(2026, 9, 28, 10); // segunda-feira
 
@@ -21,6 +23,7 @@ Future<void> pumpApp(
   NewsRepository? news,
   Future<bool> Function(Uri)? openLink,
   AlexaRepository? alexa,
+  SettingsRepository? settings,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -32,6 +35,7 @@ Future<void> pumpApp(
       newsRepositoryProvider.overrideWithValue(news ?? MemoryNewsRepository()),
       linkOpenerProvider.overrideWithValue(openLink ?? (_) async => true),
       alexaRepositoryProvider.overrideWithValue(alexa ?? MemoryAlexaRepository()),
+      settingsRepositoryProvider.overrideWithValue(settings ?? MemorySettingsRepository()),
     ],
     child: OrganizacionalApp(
       router: buildRouter(initialLocation: location, isSignedIn: () => true),

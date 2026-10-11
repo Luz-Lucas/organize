@@ -80,4 +80,14 @@ void main() {
     expect(e.source, 'google');
     expect(e.externalId, 'abc');
   });
+
+  test('moved define e limpa completedAt', () {
+    final now = DateTime(2026, 10, 11, 9);
+    const t = TaskItem(id: 't', title: 'x');
+    final done = t.moved(TaskStatus.done, now);
+    expect([done.status, done.completedAt], [TaskStatus.done, now]);
+    final back = done.moved(TaskStatus.todo, now);
+    expect([back.status, back.completedAt], [TaskStatus.todo, null]);
+    expect(t.moved(TaskStatus.doing, now).completedAt, isNull);
+  });
 }

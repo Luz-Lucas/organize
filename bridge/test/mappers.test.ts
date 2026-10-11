@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapRoutines, mapSmartEntities } from '../src/alexa-remote-gateway.js';
+import { findApplianceId, mapRoutines, mapSmartEntities } from '../src/alexa-remote-gateway.js';
 
 describe('mapSmartEntities', () => {
   it('mantém só dispositivos controláveis e as operações conhecidas', () => {
@@ -33,5 +33,15 @@ describe('mapRoutines', () => {
       { id: 'a2', name: 'hora de estudar' },
       { id: 'a3', name: 'Rotina sem nome' },
     ]);
+  });
+});
+
+describe('findApplianceId', () => {
+  it('acha o applianceId pelo entityId em getSmarthomeDevices', () => {
+    const raw = { locationDetails: { Default_Location: { amazonBridgeDetails: { amazonBridgeDetails: {
+      'LambdaBridge_x': { applianceDetails: { applianceDetails: {
+        'SKILL_abc': { applianceId: 'SKILL_abc', entityId: 'ent-1', friendlyName: 'Luz' } } } } } } } } };
+    expect(findApplianceId(raw, 'ent-1')).toBe('SKILL_abc');
+    expect(findApplianceId(raw, 'nao-existe')).toBeNull();
   });
 });

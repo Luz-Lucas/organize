@@ -105,4 +105,17 @@ void main() {
     expect(validateEventTimes(start, start.add(const Duration(hours: 1))), isNull);
     expect(validateEventTimes(start, start), 'O fim precisa ser depois do início.');
   });
+
+  test('resolveEventEnd joga o fim para o dia seguinte se for antes do início', () {
+    final start = DateTime(2026, 10, 10, 22);
+    expect(resolveEventEnd(start, DateTime(2026, 10, 10), 2, 0), DateTime(2026, 10, 11, 2));
+    expect(resolveEventEnd(start, DateTime(2026, 10, 10), 23, 0), DateTime(2026, 10, 10, 23));
+    expect(resolveEventEnd(start, DateTime(2026, 10, 12), 1, 0), DateTime(2026, 10, 12, 1));
+  });
+  test('evento 22:00→02:00 aparece nos dois dias', () {
+    final e = CalendarEvent(id: 'f', title: 'Festa', startsAt: DateTime(2026, 10, 10, 22), endsAt: DateTime(2026, 10, 11, 2));
+    expect(eventsOnDay([e], DateTime(2026, 10, 10)), [e]);
+    expect(eventsOnDay([e], DateTime(2026, 10, 11)), [e]);
+    expect(eventsOnDay([e], DateTime(2026, 10, 12)), isEmpty);
+  });
 }

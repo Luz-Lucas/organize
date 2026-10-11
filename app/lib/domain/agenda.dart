@@ -79,3 +79,15 @@ DayAgenda buildDayAgenda({
 
 String? validateEventTimes(DateTime start, DateTime end) =>
     end.isAfter(start) ? null : 'O fim precisa ser depois do início.';
+
+/// Fim de um evento montado a partir de dia + hora. Se cair no mesmo dia do
+/// início mas não depois dele (ex.: 22:00 → 02:00), o fim vai para o dia seguinte.
+DateTime resolveEventEnd(DateTime start, DateTime endDay, int endHour, int endMinute) {
+  var end = DateTime(endDay.year, endDay.month, endDay.day, endHour, endMinute);
+  final sameDay =
+      endDay.year == start.year && endDay.month == start.month && endDay.day == start.day;
+  if (sameDay && !end.isAfter(start)) {
+    end = DateTime(end.year, end.month, end.day + 1, endHour, endMinute);
+  }
+  return end;
+}

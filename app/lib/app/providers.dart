@@ -4,12 +4,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/alexa_repository.dart';
 import '../data/news_repository.dart';
 import '../data/repository.dart';
+import '../data/settings_repository.dart';
 import '../domain/alexa.dart';
 import '../domain/calendar_event.dart';
 import '../domain/news.dart';
 import '../domain/note.dart';
+import '../domain/notice.dart';
 import '../domain/space.dart';
 import '../domain/task_item.dart';
+import '../domain/user_settings.dart';
 
 final repositoryProvider = Provider<Repository>(
   (ref) => throw UnimplementedError('repositoryProvider precisa de override'),
@@ -82,3 +85,13 @@ final alexaRoutinesProvider =
 
 final wakePlansProvider =
     StreamProvider<List<WakePlan>>((ref) => ref.watch(alexaRepositoryProvider).watchWakePlans());
+
+final settingsRepositoryProvider = Provider<SettingsRepository>(
+  (ref) => throw UnimplementedError('settingsRepositoryProvider precisa de override'),
+);
+
+final settingsProvider = StreamProvider<UserSettings>(
+    (ref) => ref.watch(settingsRepositoryProvider).watchSettings());
+
+final noticesProvider =
+    StreamProvider<List<Notice>>((ref) => ref.watch(repositoryProvider).watchNotices());

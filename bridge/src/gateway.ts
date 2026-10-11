@@ -13,6 +13,8 @@ export interface AlexaGateway {
   listRoutines(): Promise<Routine[]>;
   runRoutine(routineId: string, echoDeviceId: string): Promise<void>;
   deviceAction(entityId: string, action: DeviceAction, brightness?: number): Promise<void>;
+  /** Remove o dispositivo da conta Alexa (irreversível). */
+  deleteSmartDevice(entityId: string): Promise<void>;
   speak(echoDeviceId: string, text: string): Promise<void>;
   setVolume(echoDeviceId: string, volume: number): Promise<void>;
   playSpotify(echoDeviceId: string, query: string): Promise<void>;

@@ -42,6 +42,20 @@ class TaskItem {
         externalId: externalId,
       );
 
+  /// Move para outra coluna: define `completedAt` ao entrar em "feito" e limpa ao sair.
+  TaskItem moved(TaskStatus to, DateTime now) => TaskItem(
+        id: id,
+        title: title,
+        description: description,
+        status: to,
+        dueAt: dueAt,
+        completedAt: to == TaskStatus.done ? (isDone ? completedAt : now) : null,
+        spaceId: spaceId,
+        noteId: noteId,
+        source: source,
+        externalId: externalId,
+      );
+
   factory TaskItem.fromMap(Map<String, dynamic> m) => TaskItem(
         id: m['id'] as String,
         title: m['title'] as String,

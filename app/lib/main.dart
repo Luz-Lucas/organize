@@ -9,6 +9,7 @@ import 'app/router.dart';
 import 'data/supabase_alexa_repository.dart';
 import 'data/supabase_news_repository.dart';
 import 'data/supabase_repository.dart';
+import 'data/supabase_settings_repository.dart';
 
 const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const _supabaseKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -37,6 +38,7 @@ Future<void> main() async {
       repositoryProvider.overrideWithValue(SupabaseRepository(client)),
       newsRepositoryProvider.overrideWithValue(SupabaseNewsRepository(client)),
       alexaRepositoryProvider.overrideWithValue(SupabaseAlexaRepository(client)),
+      settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
     ],
     child: OrganizacionalApp(router: router),

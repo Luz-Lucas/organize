@@ -43,6 +43,19 @@ describe('executeCommand', () => {
     expect(h.synced).toBe(1);
   });
 
+  it('delete_device apaga no gateway e ressincroniza', async () => {
+    const t = deps();
+    expect(await executeCommand(cmd('delete_device', { entityId: 'ent-1' }), t.d)).toBe('ok');
+    expect(t.gateway.deleted).toEqual(['ent-1']);
+    expect(t.synced).toBe(1);
+  });
+
+  it('delete_device sem entityId falha com CommandError', async () => {
+    const t = deps();
+    await expect(executeCommand(cmd('delete_device', {}), t.d)).rejects.toThrow('campo "entityId" ausente');
+    expect(t.synced).toBe(0);
+  });
+
   it('comando com mais de 120 s expira', () => {
     const c = cmd('speak', {}, new Date('2026-09-28T10:00:00Z'));
     expect(isExpired(c, new Date('2026-09-28T10:02:00Z'))).toBe(false);
