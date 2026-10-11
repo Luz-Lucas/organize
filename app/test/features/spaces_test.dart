@@ -16,7 +16,7 @@ import '../helpers.dart';
 void main() {
   testWidgets('cria um espaço de hobby pelo diálogo', (tester) async {
     final repo = MemoryRepository();
-    await pumpApp(tester, repo, location: '/espacos');
+    await pumpApp(tester, repo, location: '/espacos', size: const Size(600, 800));
     await tester.tap(find.byKey(const Key('new-space')));
     await tester.pumpAndSettle();
     final criar = find.widgetWithText(FilledButton, 'Criar');

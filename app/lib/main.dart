@@ -40,6 +40,7 @@ Future<void> main() async {
       alexaRepositoryProvider.overrideWithValue(SupabaseAlexaRepository(client)),
       settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
+      currentEmailProvider.overrideWithValue(client.auth.currentUser?.email),
     ],
     child: OrganizacionalApp(router: router),
   ));

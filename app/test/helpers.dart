@@ -36,6 +36,7 @@ Future<void> pumpApp(
       linkOpenerProvider.overrideWithValue(openLink ?? (_) async => true),
       alexaRepositoryProvider.overrideWithValue(alexa ?? MemoryAlexaRepository()),
       settingsRepositoryProvider.overrideWithValue(settings ?? MemorySettingsRepository()),
+      googleFontsEnabledProvider.overrideWithValue(false),
     ],
     child: OrganizacionalApp(
       router: buildRouter(initialLocation: location, isSignedIn: () => true),

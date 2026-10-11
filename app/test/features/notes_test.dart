@@ -51,12 +51,13 @@ void main() {
     expect(find.text('Já existe uma nota com esse título.'), findsOneWidget);
   });
 
+  // Largura de celular: sem a árvore de notas da barra lateral repetindo títulos.
   testWidgets(
       'link [[...]] inexistente cria a nota, abre empilhada (dá para voltar) e mostra o backlink',
       (tester) async {
     final repo = MemoryRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'Ver [[Álgebra]]'));
-    await pumpApp(tester, repo, location: '/nota/n1');
+    await pumpApp(tester, repo, location: '/nota/n1', size: const Size(600, 800));
     await tester.tap(find.byKey(const Key('toggle-preview')));
     await tester.pumpAndSettle();
     await tester.tapOnText(find.textRange.ofSubstring('Álgebra'));
@@ -80,7 +81,7 @@ void main() {
     final repo = MemoryRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'Ver [[Álgebra]]'));
     await repo.upsertNote(const Note(id: 'n2', title: 'Álgebra'));
-    await pumpApp(tester, repo, location: '/nota/n1');
+    await pumpApp(tester, repo, location: '/nota/n1', size: const Size(600, 800));
     await tester.tap(find.byKey(const Key('toggle-preview')));
     await tester.pumpAndSettle();
     await tester.tapOnText(find.textRange.ofSubstring('Álgebra'));

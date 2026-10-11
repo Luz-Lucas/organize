@@ -26,6 +26,12 @@ final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 /// /login já acontece via o refreshListenable do router (mudança de sessão).
 final signOutProvider = Provider<Future<void> Function()>((ref) => () async {});
 
+/// Desligado nos testes (sem carregar fontes do Google Fonts).
+final googleFontsEnabledProvider = Provider<bool>((ref) => true);
+
+/// E-mail da conta logada (main.dart sobrescreve com o usuário do Supabase).
+final currentEmailProvider = Provider<String?>((ref) => null);
+
 final spacesProvider =
     StreamProvider<List<Space>>((ref) => ref.watch(repositoryProvider).watchSpaces());
 

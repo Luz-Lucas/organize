@@ -7,6 +7,8 @@ import '../features/agenda/agenda_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/home/wake_plan_screen.dart';
+import '../features/more/more_screen.dart';
+import '../features/settings/settings_screen.dart';
 import '../features/news/news_screen.dart';
 import '../features/news/news_settings_screen.dart';
 import '../features/notes/note_screen.dart';
@@ -53,6 +55,9 @@ GoRouter buildRouter({
             GoRoute(path: '/', builder: (context, state) => const TodayScreen()),
             GoRoute(path: '/agenda', builder: (context, state) => const AgendaScreen()),
             GoRoute(path: '/tarefas', builder: (context, state) => const TasksScreen()),
+            GoRoute(path: '/notas', builder: (context, state) => const SpacesScreen()),
+            GoRoute(path: '/mais', builder: (context, state) => const MoreScreen()),
+            GoRoute(path: '/ajustes', builder: (context, state) => const SettingsScreen()),
             GoRoute(path: '/espacos', builder: (context, state) => const SpacesScreen()),
             GoRoute(
               path: '/espacos/:id',
