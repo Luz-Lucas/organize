@@ -1,0 +1,782 @@
+{
+ "violeta": {
+  "name": "Violeta",
+  "tagline": "Noturno criativo: violeta profundo sobre ameixa quase-preta — para música, eventos, portfólio criativo.",
+  "tokens": {
+   "surface": [
+    "#160F1E",
+    "#F2EEF7"
+   ],
+   "surface-raised": [
+    "#251E2D",
+    "#EAE6F0"
+   ],
+   "line": [
+    "#413B49",
+    "#D4CFD9"
+   ],
+   "ink": [
+    "#EFE9F7",
+    "#1B1424"
+   ],
+   "ink-muted": [
+    "#9B8FAE",
+    "#6C6079"
+   ],
+   "accent": [
+    "#8B5CF6",
+    "#8B5CF6"
+   ],
+   "accent-deep": [
+    "#6633CC",
+    "#6633CC"
+   ],
+   "on-accent": [
+    "#FFFFFF",
+    "#FFFFFF"
+   ],
+   "accent-text": [
+    "#C0A9FF",
+    "#6633CC"
+   ],
+   "accent-soft": [
+    "#291B41",
+    "#E6DCF7"
+   ],
+   "secondary": [
+    "#F472B6",
+    "#F472B6"
+   ],
+   "secondary-soft": [
+    "#3A1F36",
+    "#F2DFEF"
+   ],
+   "link": [
+    "#C0A9FF",
+    "#6633CC"
+   ]
+  },
+  "fonts": {
+   "display": "Sora",
+   "sans": "Sora",
+   "mono": "Fira Code"
+  },
+  "radius": {
+   "radius-sm": 6,
+   "radius-md": 13,
+   "radius-lg": 24
+  },
+  "radius_desc": "bem arredondado — cara SaaS/IA, amigável.",
+  "motif": "diagonal-stripes",
+  "glyph": "✦",
+  "components": "EventCard , GlowButton , Waveform .",
+  "themes": [
+   "violeta-dark",
+   "#160F1E",
+   "violeta-light",
+   "#F2EEF7"
+  ]
+ },
+ "safira": {
+  "name": "Safira",
+  "tagline": "Frio e preciso: azul-safira sobre gelo e meia-noite — para fintech e produtos B2B.",
+  "tokens": {
+   "surface": [
+    "#081826",
+    "#EAF3FA"
+   ],
+   "surface-raised": [
+    "#172735",
+    "#E2EBF3"
+   ],
+   "line": [
+    "#324250",
+    "#CBD5DD"
+   ],
+   "ink": [
+    "#DCEBF7",
+    "#0B1B29"
+   ],
+   "ink-muted": [
+    "#7195AC",
+    "#4C6D82"
+   ],
+   "accent": [
+    "#0EA5E9",
+    "#0EA5E9"
+   ],
+   "accent-deep": [
+    "#0972A8",
+    "#0972A8"
+   ],
+   "on-accent": [
+    "#FFFFFF",
+    "#FFFFFF"
+   ],
+   "accent-text": [
+    "#6FCBF3",
+    "#08688F"
+   ],
+   "accent-soft": [
+    "#092F45",
+    "#D0EAF8"
+   ],
+   "secondary": [
+    "#22D3EE",
+    "#22D3EE"
+   ],
+   "secondary-soft": [
+    "#0C3646",
+    "#D2EFF9"
+   ],
+   "link": [
+    "#6FCBF3",
+    "#08688F"
+   ]
+  },
+  "fonts": {
+   "display": "Outfit",
+   "sans": "Outfit",
+   "mono": "Roboto Mono"
+  },
+  "radius": {
+   "radius-sm": 4,
+   "radius-md": 9,
+   "radius-lg": 16
+  },
+  "radius_desc": "bem arredondado — cara SaaS/IA, amigável.",
+  "motif": "wire-",
+  "glyph": "◆",
+  "components": "DataGridRow , ConnectionStatus , WireframeCard .",
+  "themes": [
+   "safira-dark",
+   "#081826",
+   "safira-light",
+   "#EAF3FA"
+  ]
+ },
+ "musgo": {
+  "name": "Musgo",
+  "tagline": "Editorial orgânico: verde-musgo profundo, creme quente e serifa clássica — para conteúdo e portfólio.",
+  "tokens": {
+   "surface": [
+    "#141912",
+    "#F3EFE2"
+   ],
+   "surface-raised": [
+    "#232720",
+    "#EBE8DB"
+   ],
+   "line": [
+    "#3F423A",
+    "#D5D2C6"
+   ],
+   "ink": [
+    "#EBE8DA",
+    "#1B2117"
+   ],
+   "ink-muted": [
+    "#9AA08D",
+    "#6C7360"
+   ],
+   "accent": [
+    "#5F7A3D",
+    "#5F7A3D"
+   ],
+   "accent-deep": [
+    "#3E5527",
+    "#3E5527"
+   ],
+   "on-accent": [
+    "#FFFFFF",
+    "#FFFFFF"
+   ],
+   "accent-text": [
+    "#9CB679",
+    "#3E5527"
+   ],
+   "accent-soft": [
+    "#202919",
+    "#E1E1CE"
+   ],
+   "secondary": [
+    "#B08D2E",
+    "#B08D2E"
+   ],
+   "secondary-soft": [
+    "#2D2C16",
+    "#EBE3CC"
+   ],
+   "link": [
+    "#9CB679",
+    "#3E5527"
+   ]
+  },
+  "fonts": {
+   "display": "Libre Baskerville",
+   "sans": "Source Sans 3",
+   "mono": "IBM Plex Mono"
+  },
+  "radius": {
+   "radius-sm": 8,
+   "radius-md": 14,
+   "radius-lg": 20
+  },
+  "radius_desc": "misto — pílulas totalmente redondas convivendo com cards de cantos discretos.",
+  "motif": "leaf-rings",
+  "glyph": "❧",
+  "components": "QuoteLeaf , TagChip , ByLine .",
+  "themes": [
+   "musgo-dark",
+   "#141912",
+   "musgo-light",
+   "#F3EFE2"
+  ]
+ },
+ "lunar": {
+  "name": "Lunar",
+  "tagline": "Futurista frio: cinza-lunar quase monocromático com um acento elétrico — para AI, ciência, espaço.",
+  "tokens": {
+   "surface": [
+    "#0A0A0D",
+    "#F4F4F6"
+   ],
+   "surface-raised": [
+    "#1A1A1D",
+    "#ECECEE"
+   ],
+   "line": [
+    "#37373A",
+    "#D4D4D6"
+   ],
+   "ink": [
+    "#EAEAEE",
+    "#101014"
+   ],
+   "ink-muted": [
+    "#84858C",
+    "#63646B"
+   ],
+   "accent": [
+    "#7DF9FF",
+    "#7DF9FF"
+   ],
+   "accent-deep": [
+    "#2FB8C2",
+    "#2FB8C2"
+   ],
+   "on-accent": [
+    "#101014",
+    "#101014"
+   ],
+   "accent-text": [
+    "#B4FCFF",
+    "#0B6B72"
+   ],
+   "accent-soft": [
+    "#1C3034",
+    "#E6F5F7"
+   ],
+   "secondary": [
+    "#C084FC",
+    "#C084FC"
+   ],
+   "secondary-soft": [
+    "#271E33",
+    "#EEE7F7"
+   ],
+   "link": [
+    "#B4FCFF",
+    "#0B6B72"
+   ]
+  },
+  "fonts": {
+   "display": "Unbounded",
+   "sans": "Inter",
+   "mono": "JetBrains Mono"
+  },
+  "radius": {
+   "radius-sm": 8,
+   "radius-md": 14,
+   "radius-lg": 20
+  },
+  "radius_desc": "misto — pílulas totalmente redondas convivendo com cards de cantos discretos.",
+  "motif": "orbit-rings",
+  "glyph": "○",
+  "components": "OrbitLoader , GlowTag , SignalBars .",
+  "themes": [
+   "lunar-dark",
+   "#0A0A0D",
+   "lunar-light",
+   "#F4F4F6"
+  ]
+ },
+ "indigo": {
+  "name": "Índigo",
+  "tagline": "Luxo editorial: índigo profundo e dourado sobre pergaminho — para produtos premium e convites.",
+  "tokens": {
+   "surface": [
+    "#0F1330",
+    "#F6F1E4"
+   ],
+   "surface-raised": [
+    "#1F223E",
+    "#EEE9DE"
+   ],
+   "line": [
+    "#3B3E58",
+    "#D7D3CB"
+   ],
+   "ink": [
+    "#EDEAF8",
+    "#1B1930"
+   ],
+   "ink-muted": [
+    "#8D8AB0",
+    "#736C4F"
+   ],
+   "accent": [
+    "#C9A227",
+    "#C9A227"
+   ],
+   "accent-deep": [
+    "#9C7C12",
+    "#9C7C12"
+   ],
+   "on-accent": [
+    "#101014",
+    "#101014"
+   ],
+   "accent-text": [
+    "#E4C866",
+    "#7A600E"
+   ],
+   "accent-soft": [
+    "#2D2A2F",
+    "#F1E8CD"
+   ],
+   "secondary": [
+    "#5A4FCF",
+    "#5A4FCF"
+   ],
+   "secondary-soft": [
+    "#1B1D49",
+    "#E3DEE1"
+   ],
+   "link": [
+    "#E4C866",
+    "#7A600E"
+   ]
+  },
+  "fonts": {
+   "display": "Cormorant Garamond",
+   "sans": "Karla",
+   "mono": "JetBrains Mono"
+  },
+  "radius": {
+   "radius-sm": 2,
+   "radius-md": 4,
+   "radius-lg": 2
+  },
+  "radius_desc": "quase reto — cantos discretos, cara editorial/técnica.",
+  "motif": "ornament-dots",
+  "glyph": "✧",
+  "components": "OrnamentDivider , InviteCard , MonogramBadge .",
+  "themes": [
+   "indigo-dark",
+   "#0F1330",
+   "indigo-light",
+   "#F6F1E4"
+  ]
+ },
+ "grafite": {
+  "name": "Grafite",
+  "tagline": "Minimal monocromático: grafite e prata puros, tipografia mono como protagonista — para devtools e CLI.",
+  "tokens": {
+   "surface": [
+    "#111213",
+    "#F1F1F0"
+   ],
+   "surface-raised": [
+    "#202122",
+    "#E9E9E8"
+   ],
+   "line": [
+    "#3D3E3E",
+    "#D2D2D1"
+   ],
+   "ink": [
+    "#EDEDEC",
+    "#141414"
+   ],
+   "ink-muted": [
+    "#8A8B8C",
+    "#6E6F70"
+   ],
+   "accent": [
+    "#B8B9BB",
+    "#B8B9BB"
+   ],
+   "accent-deep": [
+    "#8A8B8C",
+    "#8A8B8C"
+   ],
+   "on-accent": [
+    "#101014",
+    "#101014"
+   ],
+   "accent-text": [
+    "#D7D8D9",
+    "#4A4B4C"
+   ],
+   "accent-soft": [
+    "#2C2D2E",
+    "#EAEAEA"
+   ],
+   "secondary": [
+    "#3DDC97",
+    "#3DDC97"
+   ],
+   "secondary-soft": [
+    "#183228",
+    "#DBEEE5"
+   ],
+   "link": [
+    "#D7D8D9",
+    "#4A4B4C"
+   ]
+  },
+  "fonts": {
+   "display": "IBM Plex Mono",
+   "sans": "IBM Plex Sans",
+   "mono": "IBM Plex Mono"
+  },
+  "radius": {
+   "radius-sm": 2,
+   "radius-md": 4,
+   "radius-lg": 4
+  },
+  "radius_desc": "quase reto — cantos discretos, cara editorial/técnica.",
+  "motif": "scanlines",
+  "glyph": "›",
+  "components": "TerminalPrompt , KeyCap , DiffLine .",
+  "themes": [
+   "grafite-dark",
+   "#111213",
+   "grafite-light",
+   "#F1F1F0"
+  ]
+ },
+ "coral": {
+  "name": "Coral",
+  "tagline": "Quente e acolhedor: coral vibrante sobre areia clara — para lifestyle, food, criação de conteúdo.",
+  "tokens": {
+   "surface": [
+    "#241512",
+    "#FBF1E7"
+   ],
+   "surface-raised": [
+    "#332420",
+    "#F4E9E0"
+   ],
+   "line": [
+    "#4E3F3B",
+    "#DED3C9"
+   ],
+   "ink": [
+    "#F7E9E1",
+    "#2B1913"
+   ],
+   "ink-muted": [
+    "#B08D80",
+    "#8A6C5E"
+   ],
+   "accent": [
+    "#FF6F59",
+    "#FF6F59"
+   ],
+   "accent-deep": [
+    "#D14B36",
+    "#D14B36"
+   ],
+   "on-accent": [
+    "#FFFFFF",
+    "#FFFFFF"
+   ],
+   "accent-text": [
+    "#FF9C89",
+    "#C13F2B"
+   ],
+   "accent-soft": [
+    "#47231D",
+    "#FBE1D6"
+   ],
+   "secondary": [
+    "#FFC24B",
+    "#FFC24B"
+   ],
+   "secondary-soft": [
+    "#47311B",
+    "#FBEBD4"
+   ],
+   "link": [
+    "#FF9C89",
+    "#C13F2B"
+   ]
+  },
+  "fonts": {
+   "display": "Fraunces",
+   "sans": "Nunito Sans",
+   "mono": "JetBrains Mono"
+  },
+  "radius": {
+   "radius-sm": 10,
+   "radius-md": 22,
+   "radius-lg": 40
+  },
+  "radius_desc": "bem arredondado, quase orgânico — blocos suaves, pouco geométrico.",
+  "motif": "wave-lines",
+  "glyph": "~.",
+  "components": "RecipeStep , RatingHearts , PillNav .",
+  "themes": [
+   "coral-dark",
+   "#241512",
+   "coral-light",
+   "#FBF1E7"
+  ]
+ },
+ "cobalto": {
+  "name": "Cobalto",
+  "tagline": "Tech editorial: azul cobalto elétrico sobre navy profundo e papel frio — para produto e dashboards.",
+  "tokens": {
+   "surface": [
+    "#0B1220",
+    "#EEF1F6"
+   ],
+   "surface-raised": [
+    "#1A212F",
+    "#E6E9EF"
+   ],
+   "line": [
+    "#373E4B",
+    "#CFD2D9"
+   ],
+   "ink": [
+    "#E7ECF5",
+    "#101724"
+   ],
+   "ink-muted": [
+    "#8792A6",
+    "#5B6577"
+   ],
+   "accent": [
+    "#2F6FED",
+    "#2F6FED"
+   ],
+   "accent-deep": [
+    "#1D4FBF",
+    "#1D4FBF"
+   ],
+   "on-accent": [
+    "#FFFFFF",
+    "#FFFFFF"
+   ],
+   "accent-text": [
+    "#7FA6FF",
+    "#1D4FBF"
+   ],
+   "accent-soft": [
+    "#112141",
+    "#D7E1F5"
+   ],
+   "secondary": [
+    "#00C2A8",
+    "#00C2A8"
+   ],
+   "secondary-soft": [
+    "#092E36",
+    "#D1EBED"
+   ],
+   "link": [
+    "#7FA6FF",
+    "#1D4FBF"
+   ]
+  },
+  "fonts": {
+   "display": "Space Grotesk",
+   "sans": "Inter",
+   "mono": "JetBrains Mono"
+  },
+  "radius": {
+   "radius-sm": 3,
+   "radius-md": 7,
+   "radius-lg": 12
+  },
+  "radius_desc": "levemente arredondado — equilíbrio entre editorial e produto.",
+  "motif": "dot-grid",
+  "glyph": "▪",
+  "components": "StatusPill , MetricCard , CodeBlock .",
+  "themes": [
+   "cobalto-dark",
+   "#0B1220",
+   "cobalto-light",
+   "#EEF1F6"
+  ]
+ },
+ "cacto": {
+  "name": "Cacto",
+  "tagline": "Deserto quente: verde-cacto e terracota sobre areia — para outdoor, viagem, sustentabilidade.",
+  "tokens": {
+   "surface": [
+    "#1D1712",
+    "#F5EEE0"
+   ],
+   "surface-raised": [
+    "#2C2620",
+    "#EEE7D9"
+   ],
+   "line": [
+    "#47413A",
+    "#D8D1C3"
+   ],
+   "ink": [
+    "#F0E9D8",
+    "#241C13"
+   ],
+   "ink-muted": [
+    "#A99A7C",
+    "#8A7A5C"
+   ],
+   "accent": [
+    "#5C8A5C",
+    "#5C8A5C"
+   ],
+   "accent-deep": [
+    "#3D6640",
+    "#3D6640"
+   ],
+   "on-accent": [
+    "#FFFFFF",
+    "#FFFFFF"
+   ],
+   "accent-text": [
+    "#8FBE8B",
+    "#33552F"
+   ],
+   "accent-soft": [
+    "#27291E",
+    "#E3E2D0"
+   ],
+   "secondary": [
+    "#C1662F",
+    "#C1662F"
+   ],
+   "secondary-soft": [
+    "#372417",
+    "#EFDECB"
+   ],
+   "link": [
+    "#8FBE8B",
+    "#33552F"
+   ]
+  },
+  "fonts": {
+   "display": "DM Serif Display",
+   "sans": "DM Sans",
+   "mono": "JetBrains Mono"
+  },
+  "radius": {
+   "radius-sm": 2,
+   "radius-md": 4,
+   "radius-lg": 6
+  },
+  "radius_desc": "quase reto — cantos discretos, cara editorial/técnica.",
+  "motif": "brick-texture",
+  "glyph": "◧",
+  "components": "TrailMarker , WeatherChip , TextureCard .",
+  "themes": [
+   "cacto-dark",
+   "#1D1712",
+   "cacto-light",
+   "#F5EEE0"
+  ]
+ },
+ "bronze": {
+  "name": "Bronze",
+  "tagline": "Editorial artesanal: bronze e cobre quente sobre carvão — para estúdios, marcenaria, ateliê.",
+  "tokens": {
+   "surface": [
+    "#1B1512",
+    "#F1E9DC"
+   ],
+   "surface-raised": [
+    "#2A2320",
+    "#EAE2D5"
+   ],
+   "line": [
+    "#463E39",
+    "#D4CCC0"
+   ],
+   "ink": [
+    "#F0E4D5",
+    "#221A13"
+   ],
+   "ink-muted": [
+    "#AB9885",
+    "#8A7860"
+   ],
+   "accent": [
+    "#B8692F",
+    "#B8692F"
+   ],
+   "accent-deep": [
+    "#8C4B1E",
+    "#8C4B1E"
+   ],
+   "on-accent": [
+    "#FFFFFF",
+    "#FFFFFF"
+   ],
+   "accent-text": [
+    "#E0A268",
+    "#7A4218"
+   ],
+   "accent-soft": [
+    "#342217",
+    "#EADAC7"
+   ],
+   "secondary": [
+    "#7A8B6F",
+    "#7A8B6F"
+   ],
+   "secondary-soft": [
+    "#2A2821",
+    "#E3DECF"
+   ],
+   "link": [
+    "#E0A268",
+    "#7A4218"
+   ]
+  },
+  "fonts": {
+   "display": "Bitter",
+   "sans": "Barlow",
+   "mono": "JetBrains Mono"
+  },
+  "radius": {
+   "radius-sm": 2,
+   "radius-md": 6,
+   "radius-lg": 10
+  },
+  "radius_desc": "levemente arredondado — equilíbrio entre editorial e produto.",
+  "motif": "cross-hatch",
+  "glyph": "†",
+  "components": "MaterialSwatch , CraftBadge , PriceTag .",
+  "themes": [
+   "bronze-dark",
+   "#1B1512",
+   "bronze-light",
+   "#F1E9DC"
+  ]
+ }
+}
