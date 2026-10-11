@@ -122,6 +122,147 @@ void main() {
     expect(find.text('Academia'), findsOneWidget); // voltou para Casa
   });
 
+  group('atraso do resumo em segundos', () {
+    bool selected(WidgetTester tester, String key) => tester.widget<ChoiceChip>(find.byKey(Key(key))).selected;
+
+    testWidgets('despertar novo começa em 10 s e salva a escolha de 20 s', (tester) async {
+      final alexa = _alexa(plans: const []);
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/novo', now: _now, alexa: alexa, size: _tall);
+      expect(find.text('Falar o resumo após'), findsOneWidget);
+      expect(find.text('A música toca primeiro para você acordar de verdade.'), findsOneWidget);
+      expect(selected(tester, 'briefing-delay-10'), isTrue);
+      await tester.tap(find.byKey(const Key('briefing-delay-20')));
+      await tester.pump();
+      expect(selected(tester, 'briefing-delay-20'), isTrue);
+      expect(selected(tester, 'briefing-delay-10'), isFalse);
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      expect((await alexa.watchWakePlans().first).single.briefingDelaySec, 20);
+    });
+
+    testWidgets('despertar novo salvo sem mexer grava 10 s', (tester) async {
+      final alexa = _alexa(plans: const []);
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/novo', now: _now, alexa: alexa, size: _tall);
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      expect((await alexa.watchWakePlans().first).single.briefingDelaySec, 10);
+    });
+
+    testWidgets('despertar antigo mostra os minutos convertidos e não perde o valor', (tester) async {
+      final alexa = _alexa(); // briefingDelayMin 3, sem segundos
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+      expect(selected(tester, 'briefing-delay-180'), isTrue);
+      expect(find.byKey(const Key('briefing-delay-custom')), findsNothing);
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      expect((await alexa.watchWakePlans().first).single.briefingDelaySec, isNull);
+    });
+
+    testWidgets('legado sem opção equivalente vira Personalizado até escolher outra', (tester) async {
+      final alexa = _alexa(plans: const [
+        WakePlan(
+          id: 'p1', label: 'Aula cedo', days: [1, 2, 3, 4, 5], hour: 7, minute: 0,
+          echoDeviceId: 'ECHO', spotifyQuery: 'lofi', briefingDelayMin: 5,
+        ),
+      ]);
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+      expect(find.text('Personalizado (5 min)'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('briefing-delay-30')));
+      await tester.pump();
+      expect(find.byKey(const Key('briefing-delay-custom')), findsNothing);
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      expect((await alexa.watchWakePlans().first).single.briefingDelaySec, 30);
+    });
+
+    testWidgets('escolher um tempo de parada esconde o seletor de atraso', (tester) async {
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: _alexa(), size: _tall);
+      expect(find.text('Falar o resumo após'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('music-stop-30')));
+      await tester.pump();
+      expect(find.text('Falar o resumo após'), findsNothing);
+      expect(find.byKey(const Key('briefing-delay-10')), findsNothing);
+    });
+  });
+
+  group('parar a música', () {
+    testWidgets('escolher 30 s e "Só as manchetes" e salvar grava os campos', (tester) async {
+      final alexa = _alexa();
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+      expect(find.text('Parar a música após'), findsOneWidget);
+      expect(find.text('Depois da música'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('music-stop-30')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('after-music-headlines')));
+      await tester.pump();
+      expect(find.text('O resumo começa assim que a música parar.'), findsOneWidget);
+      expect(find.byKey(const Key('briefing-delay-180')), findsNothing);
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      final saved = (await alexa.watchWakePlans().first).single;
+      expect(saved.musicStopAfterSec, 30);
+      expect(saved.afterMusic, AfterMusic.headlines);
+    });
+
+    testWidgets('"Não parar" volta ao atraso do resumo e limpa o tempo', (tester) async {
+      final alexa = _alexa(plans: const [
+        WakePlan(
+          id: 'p1', label: 'Aula cedo', days: [1, 2, 3, 4, 5], hour: 7, minute: 0,
+          echoDeviceId: 'ECHO', spotifyQuery: 'lofi', musicStopAfterSec: 60, afterMusic: AfterMusic.end,
+        ),
+      ]);
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('music-stop-60'))).selected, isTrue);
+      expect(tester.widget<SegmentedButton<AfterMusic>>(find.byType(SegmentedButton<AfterMusic>)).selected, {AfterMusic.end});
+      await tester.tap(find.byKey(const Key('music-stop-none')));
+      await tester.pump();
+      expect(find.byKey(const Key('briefing-delay-180')), findsOneWidget);
+      expect(find.text('O resumo começa assim que a música parar.'), findsNothing);
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      final saved = (await alexa.watchWakePlans().first).single;
+      expect(saved.musicStopAfterSec, isNull);
+      expect(saved.afterMusic, AfterMusic.end);
+    });
+
+    testWidgets('sem busca do Spotify o seletor de parada não aparece', (tester) async {
+      final alexa = _alexa(plans: const []);
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/novo', now: _now, alexa: alexa, size: _tall);
+      expect(find.text('Parar a música após'), findsNothing);
+      expect(find.byKey(const Key('music-stop-30')), findsNothing);
+      await tester.enterText(find.byKey(const Key('wake-spotify')), 'rock');
+      await tester.pump();
+      expect(find.text('Parar a música após'), findsOneWidget);
+      expect(find.byKey(const Key('music-stop-none')), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('wake-spotify')), '  ');
+      await tester.pump();
+      expect(find.text('Parar a música após'), findsNothing);
+    });
+
+    testWidgets('apagar a busca descarta o tempo de parada ao salvar', (tester) async {
+      final alexa = _alexa();
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+      await tester.tap(find.byKey(const Key('music-stop-30')));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('wake-spotify')), '');
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      final saved = (await alexa.watchWakePlans().first).single;
+      expect(saved.toMap()['spotify_query'], isNull);
+      expect(saved.musicStopAfterSec, isNull);
+    });
+
+    testWidgets('com "Música primeiro" desligada o seletor "Depois da música" some', (tester) async {
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: _alexa(), size: _tall);
+      expect(find.text('Depois da música'), findsOneWidget);
+      await tester.tap(find.text('Música antes do resumo'));
+      await tester.pump();
+      expect(find.text('Depois da música'), findsNothing);
+      expect(find.byKey(const Key('after-music-end')), findsNothing);
+      expect(find.byKey(const Key('briefing-delay-180')), findsNothing);
+    });
+  });
+
   testWidgets('Hoje avisa login expirado quando há despertar ativo e abre Casa', (tester) async {
     await pumpApp(
       tester,

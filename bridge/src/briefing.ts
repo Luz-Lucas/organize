@@ -37,8 +37,10 @@ export function headlinesText(news: BriefingNews[]): string {
   return `Manchetes: ${news.map((n) => `${n.source}: ${clean(n.title)}`).join('. ')}.`;
 }
 
-export function buildBriefing(i: BriefingInput): string {
+/** `weather` (texto falado do clima) entra logo depois da data; nulo/ausente mantém o resumo idêntico. */
+export function buildBriefing(i: BriefingInput, weather: string | null = null): string {
   const parts = [`${greeting(i.now, i.timeZone)}! Hoje é ${formatLongDate(i.now, i.timeZone)}.`];
+  if (weather && weather.trim()) parts.push(weather.trim());
 
   if (i.events.length === 0) {
     parts.push('Sua agenda de hoje está livre.');
@@ -64,8 +66,8 @@ export function buildBriefing(i: BriefingInput): string {
 }
 
 /** Os dois textos que o despertar pode falar: o resumo completo e só as manchetes. */
-export function wakeTexts(i: BriefingInput): { briefing: string; headlines: string } {
-  return { briefing: buildBriefing(i), headlines: headlinesText(i.news) };
+export function wakeTexts(i: BriefingInput, weather: string | null = null): { briefing: string; headlines: string } {
+  return { briefing: buildBriefing(i, weather), headlines: headlinesText(i.news) };
 }
 
 export function splitTasks(

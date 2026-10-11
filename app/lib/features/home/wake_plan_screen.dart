@@ -9,6 +9,26 @@ import '../../domain/alexa.dart';
 import '../../domain/ids.dart';
 import '../../ui/common.dart';
 
+const _stopOptions = [
+  (sec: 15, label: '15 s'),
+  (sec: 30, label: '30 s'),
+  (sec: 60, label: '1 min'),
+  (sec: 120, label: '2 min'),
+  (sec: 300, label: '5 min'),
+];
+
+const _delayOptions = [
+  (sec: 5, label: '5 s'),
+  (sec: 10, label: '10 s'),
+  (sec: 20, label: '20 s'),
+  (sec: 30, label: '30 s'),
+  (sec: 60, label: '1 min'),
+  (sec: 120, label: '2 min'),
+  (sec: 180, label: '3 min'),
+];
+
+String _customDelayLabel(int sec) => sec >= 60 && sec % 60 == 0 ? '${sec ~/ 60} min' : '$sec s';
+
 class WakePlanScreen extends ConsumerStatefulWidget {
   const WakePlanScreen({super.key, required this.planId});
 
@@ -46,6 +66,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
       days: const [1, 2, 3, 4, 5],
       hour: 7,
       minute: 0,
+      briefingDelaySec: 10,
       echoDeviceId: echos.where((e) => e.online).firstOrNull?.id ?? echos.firstOrNull?.id ?? '',
     );
   }
@@ -63,7 +84,12 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
   }
 
   Future<void> _save() async {
-    final plan = _draft!.copyWith(label: _label.text.trim(), spotifyQuery: _spotify.text.trim());
+    final query = _spotify.text.trim();
+    final plan = _draft!.copyWith(
+      label: _label.text.trim(),
+      spotifyQuery: query,
+      clearMusicStop: query.isEmpty, // sem busca do Spotify não há música para parar
+    );
     final problem = validateWakePlan(plan);
     if (problem != null) {
       setState(() => _error = problem);
@@ -133,6 +159,8 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
         _draft = _draft!.copyWith(echoDeviceId: echos.first.id); // dispositivos chegaram depois dos planos
       }
       final d = _draft!;
+      final hasMusic = _spotify.text.trim().isNotEmpty;
+      final stopping = hasMusic && d.musicStopAfterSec != null;
       final theme = Theme.of(context);
       return Scaffold(
         appBar: AppBar(
@@ -211,18 +239,72 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
               value: d.musicFirst,
               onChanged: (v) => _update((d) => d.copyWith(musicFirst: v)),
             ),
-            if (d.musicFirst)
+            if (hasMusic) ...[
+              const SectionHeader('Parar a música após'),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
-                  for (final m in const [1, 3, 5])
+                  ChoiceChip(
+                    key: const Key('music-stop-none'),
+                    label: const Text('Não parar'),
+                    selected: d.musicStopAfterSec == null,
+                    onSelected: (_) => _update((d) => d.copyWith(clearMusicStop: true)),
+                  ),
+                  for (final o in _stopOptions)
                     ChoiceChip(
-                      label: Text('Resumo após $m min'),
-                      selected: d.briefingDelayMin == m,
-                      onSelected: (_) => _update((d) => d.copyWith(briefingDelayMin: m)),
+                      key: Key('music-stop-${o.sec}'),
+                      label: Text(o.label),
+                      selected: d.musicStopAfterSec == o.sec,
+                      onSelected: (_) => _update((d) => d.copyWith(musicStopAfterSec: o.sec)),
                     ),
                 ],
               ),
+            ],
+            if (d.musicFirst) ...[
+              const SectionHeader('Depois da música'),
+              SegmentedButton<AfterMusic>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final a in AfterMusic.values)
+                    ButtonSegment(value: a, label: Text(a.label, key: Key('after-music-${a.name}'))),
+                ],
+                selected: {d.afterMusic},
+                onSelectionChanged: (s) => _update((d) => d.copyWith(afterMusic: s.first)),
+              ),
+              if (stopping)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('O resumo começa assim que a música parar.'),
+                )
+              else ...[
+                const SectionHeader('Falar o resumo após'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final o in _delayOptions)
+                      ChoiceChip(
+                        key: Key('briefing-delay-${o.sec}'),
+                        label: Text(o.label),
+                        selected: d.effectiveBriefingDelaySec == o.sec,
+                        onSelected: (_) => _update((d) => d.copyWith(briefingDelaySec: o.sec)),
+                      ),
+                    if (!_delayOptions.any((o) => o.sec == d.effectiveBriefingDelaySec))
+                      ChoiceChip(
+                        key: const Key('briefing-delay-custom'),
+                        label: Text('Personalizado (${_customDelayLabel(d.effectiveBriefingDelaySec)})'),
+                        selected: true,
+                        onSelected: (_) {},
+                      ),
+                  ],
+                ),
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('A música toca primeiro para você acordar de verdade.'),
+                ),
+              ],
+            ],
             ListTile(
               title: Text('Volume ${d.volume}%'),
               subtitle: Slider(

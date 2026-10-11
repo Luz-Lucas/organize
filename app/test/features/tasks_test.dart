@@ -6,10 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/space.dart';
 import 'package:organizacional/domain/task_item.dart';
+import 'package:organizacional/ui/org_widgets.dart';
 
 import '../helpers.dart';
 
 void main() {
+  _tasksPriorityTests();
+
   testWidgets('adiciona tarefa pelo campo rápido', (tester) async {
     final repo = MemoryRepository();
     await pumpApp(tester, repo, location: '/tarefas');
@@ -39,8 +42,9 @@ void main() {
     expect(find.text('Resumo'), findsOneWidget);
   });
 
-  testWidgets('desktop: três colunas com contagem e arrastar muda status e completedAt',
-      (tester) async {
+  testWidgets('desktop: três colunas com contagem e arrastar muda status e completedAt', (
+    tester,
+  ) async {
     final repo = MemoryRepository();
     await repo.upsertTask(const TaskItem(id: 'a', title: 'Relatório'));
     await repo.upsertTask(const TaskItem(id: 'b', title: 'Lista', status: TaskStatus.doing));
@@ -88,8 +92,7 @@ void main() {
     await tester.tap(find.text('Fazendo'));
     await tester.pumpAndSettle();
 
-    expect((await repo.watchTasks().first).firstWhere((t) => t.id == 'a').status,
-        TaskStatus.doing);
+    expect((await repo.watchTasks().first).firstWhere((t) => t.id == 'a').status, TaskStatus.doing);
     expect(find.text('A fazer 1'), findsOneWidget);
     expect(find.text('Fazendo 1'), findsOneWidget);
     expect(find.byKey(const ValueKey('task-card-a')), findsOneWidget); // aba Fazendo ativa
@@ -133,24 +136,28 @@ void main() {
     expect(await repo.watchTasks().first, isEmpty);
   });
 
-  testWidgets('prazo vencido aparece em destaque de atraso e feito vem riscado',
-      (tester) async {
+  testWidgets('prazo vencido aparece em destaque de atraso e feito vem riscado', (tester) async {
     final repo = MemoryRepository();
-    await repo.upsertTask(TaskItem(id: 'a', title: 'Relatório', dueAt: DateTime(2026, 9, 27, 23, 59)));
-    await repo.upsertTask(TaskItem(
-      id: 'b',
-      title: 'Antiga',
-      status: TaskStatus.done,
-      completedAt: DateTime(2026, 9, 20),
-    ));
+    await repo.upsertTask(
+      TaskItem(id: 'a', title: 'Relatório', dueAt: DateTime(2026, 9, 27, 23, 59)),
+    );
+    await repo.upsertTask(
+      TaskItem(
+        id: 'b',
+        title: 'Antiga',
+        status: TaskStatus.done,
+        completedAt: DateTime(2026, 9, 20),
+      ),
+    );
     await pumpApp(tester, repo, location: '/tarefas');
     expect(find.textContaining('27'), findsOneWidget);
     final done = tester.widget<Text>(find.text('Antiga'));
     expect(done.style?.decoration, TextDecoration.lineThrough);
   });
 
-  testWidgets('sair da tela antes do salvamento terminar não gera erro (guarda mounted)',
-      (tester) async {
+  testWidgets('sair da tela antes do salvamento terminar não gera erro (guarda mounted)', (
+    tester,
+  ) async {
     final repo = _GatedTaskRepository();
     await pumpApp(tester, repo, location: '/tarefas');
     await tester.enterText(find.byKey(const Key('quick-add-todo')), 'Tarefa lenta');
@@ -181,6 +188,310 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Lista 1'), findsOneWidget);
     expect(find.text('Comprar cordas'), findsNothing);
+  });
+}
+
+Future<void> _pickDay(WidgetTester tester, String key, int day) async {
+  await tester.tap(find.byKey(Key(key)));
+  await tester.pumpAndSettle();
+  await tester.tap(find.descendant(of: find.byType(DatePickerDialog), matching: find.text('$day')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('OK'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pickPriority(WidgetTester tester, String status, TaskPriority p) async {
+  await tester.tap(find.byKey(Key('quick-priority-$status')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(Key('quick-priority-$status-${p.name}')));
+  await tester.pumpAndSettle();
+}
+
+Finder _in(String key, String text) =>
+    find.descendant(of: find.byKey(Key(key)), matching: find.text(text));
+
+void _tasksPriorityTests() {
+  group('adição rápida com prioridade e prazo', () {
+    testWidgets('começa em "Média" e "Sem prazo"', (tester) async {
+      await pumpApp(tester, MemoryRepository(), location: '/tarefas');
+      for (final s in ['todo', 'doing', 'done']) {
+        expect(_in('quick-priority-$s', 'Média'), findsOneWidget);
+        expect(_in('quick-due-$s', 'Sem prazo'), findsOneWidget);
+        expect(find.byKey(Key('quick-more-$s')), findsOneWidget);
+      }
+    });
+
+    testWidgets('salva prioridade e prazo (23:59) escolhidos e zera os chips', (tester) async {
+      final repo = MemoryRepository();
+      await pumpApp(tester, repo, location: '/tarefas');
+      await _pickPriority(tester, 'todo', TaskPriority.alta);
+      expect(_in('quick-priority-todo', 'Alta'), findsOneWidget);
+      await _pickDay(tester, 'quick-due-todo', 30);
+      expect(_in('quick-due-todo', '30/09'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('quick-add-todo')), 'Prova de cálculo');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final t = (await repo.watchTasks().first).single;
+      expect(t.title, 'Prova de cálculo');
+      expect(t.priority, TaskPriority.alta);
+      expect(t.dueAt, DateTime(2026, 9, 30, 23, 59));
+      expect(_in('quick-priority-todo', 'Média'), findsOneWidget);
+      expect(_in('quick-due-todo', 'Sem prazo'), findsOneWidget);
+    });
+
+    testWidgets('prazo mostra "hoje" e "amanhã" e pode ser removido', (tester) async {
+      await pumpApp(tester, MemoryRepository(), location: '/tarefas');
+      expect(find.byKey(const Key('quick-due-clear-todo')), findsNothing);
+      await _pickDay(tester, 'quick-due-todo', 28);
+      expect(_in('quick-due-todo', 'hoje'), findsOneWidget);
+      await _pickDay(tester, 'quick-due-todo', 29);
+      expect(_in('quick-due-todo', 'amanhã'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('quick-due-clear-todo')));
+      await tester.pumpAndSettle();
+      expect(_in('quick-due-todo', 'Sem prazo'), findsOneWidget);
+      expect(find.byKey(const Key('quick-due-clear-todo')), findsNothing);
+    });
+
+    testWidgets('cada coluna tem seus próprios chips e cria no seu status', (tester) async {
+      final repo = MemoryRepository();
+      await pumpApp(tester, repo, location: '/tarefas');
+      await _pickPriority(tester, 'doing', TaskPriority.baixa);
+      expect(_in('quick-priority-todo', 'Média'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('quick-add-doing')), 'Devagar');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      final t = (await repo.watchTasks().first).single;
+      expect([t.status, t.priority, t.dueAt], [TaskStatus.doing, TaskPriority.baixa, null]);
+    });
+
+    testWidgets('texto em branco com chips escolhidos não cria nada', (tester) async {
+      final repo = MemoryRepository();
+      await pumpApp(tester, repo, location: '/tarefas');
+      await _pickPriority(tester, 'todo', TaskPriority.alta);
+      await tester.enterText(find.byKey(const Key('quick-add-todo')), '  ');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(await repo.watchTasks().first, isEmpty);
+      expect(_in('quick-priority-todo', 'Alta'), findsOneWidget);
+    });
+
+    testWidgets('falha ao gravar mantém texto, prioridade e prazo', (tester) async {
+      final repo = MemoryRepository()..failWrites = true;
+      await pumpApp(tester, repo, location: '/tarefas');
+      await _pickPriority(tester, 'todo', TaskPriority.alta);
+      await _pickDay(tester, 'quick-due-todo', 30);
+      await tester.enterText(find.byKey(const Key('quick-add-todo')), 'Resumo');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('Não foi possível adicionar. O texto continua no campo.'), findsOneWidget);
+      expect(find.text('Resumo'), findsOneWidget);
+      expect(_in('quick-priority-todo', 'Alta'), findsOneWidget);
+      expect(_in('quick-due-todo', '30/09'), findsOneWidget);
+    });
+
+    testWidgets('celular: chips cabem na tela e criam com prioridade e prazo', (tester) async {
+      final repo = MemoryRepository();
+      await pumpApp(tester, repo, location: '/tarefas', size: const Size(360, 700));
+      await _pickPriority(tester, 'todo', TaskPriority.alta);
+      await _pickDay(tester, 'quick-due-todo', 29);
+      await tester.enterText(find.byKey(const Key('quick-add-todo')), 'No celular');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final t = (await repo.watchTasks().first).single;
+      expect([t.priority, t.dueAt], [TaskPriority.alta, DateTime(2026, 9, 29, 23, 59)]);
+    });
+  });
+
+  group('mais opções (diálogo de criação)', () {
+    testWidgets('abre vazio no status da coluna, sem botão de excluir, e cria', (tester) async {
+      final repo = MemoryRepository();
+      await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
+      await pumpApp(tester, repo, location: '/tarefas');
+      await tester.tap(find.byKey(const Key('quick-more-doing')));
+      await tester.pumpAndSettle();
+      expect(find.text('Nova tarefa'), findsOneWidget);
+      expect(find.textContaining('Excluir'), findsNothing);
+      await tester.enterText(find.byKey(const Key('task-title')), 'Projeto final');
+      await tester.enterText(find.byKey(const Key('task-description')), 'Entregar o PDF');
+      await tester.tap(find.byKey(const Key('task-priority-alta')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('task-save')));
+      await tester.pumpAndSettle();
+      final t = (await repo.watchTasks().first).single;
+      expect(t.title, 'Projeto final');
+      expect(t.description, 'Entregar o PDF');
+      expect(t.priority, TaskPriority.alta);
+      expect(t.status, TaskStatus.doing);
+      expect(find.byKey(const Key('task-save')), findsNothing);
+    });
+
+    testWidgets('leva o texto, a prioridade e o prazo já escolhidos e limpa o campo ao criar', (
+      tester,
+    ) async {
+      final repo = MemoryRepository();
+      await pumpApp(tester, repo, location: '/tarefas');
+      await _pickPriority(tester, 'todo', TaskPriority.baixa);
+      await _pickDay(tester, 'quick-due-todo', 30);
+      await tester.enterText(find.byKey(const Key('quick-add-todo')), 'Rascunho');
+      await tester.tap(find.byKey(const Key('quick-more-todo')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byKey(const Key('task-title'))).controller!.text,
+        'Rascunho',
+      );
+      expect(find.textContaining('Prazo: 30'), findsOneWidget);
+      expect(
+        tester
+            .widget<SegmentedButton<TaskPriority>>(find.byType(SegmentedButton<TaskPriority>))
+            .selected,
+        {TaskPriority.baixa},
+      );
+      await tester.tap(find.byKey(const Key('task-save')));
+      await tester.pumpAndSettle();
+      final t = (await repo.watchTasks().first).single;
+      expect(
+        [t.title, t.priority, t.dueAt],
+        ['Rascunho', TaskPriority.baixa, DateTime(2026, 9, 30, 23, 59)],
+      );
+      expect(
+        tester.widget<TextField>(find.byKey(const Key('quick-add-todo'))).controller!.text,
+        '',
+      );
+      expect(_in('quick-priority-todo', 'Média'), findsOneWidget);
+      expect(_in('quick-due-todo', 'Sem prazo'), findsOneWidget);
+    });
+
+    testWidgets('cancelar não cria nem apaga o que estava no campo', (tester) async {
+      final repo = MemoryRepository();
+      await pumpApp(tester, repo, location: '/tarefas');
+      await tester.enterText(find.byKey(const Key('quick-add-todo')), 'Rascunho');
+      await tester.tap(find.byKey(const Key('quick-more-todo')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(await repo.watchTasks().first, isEmpty);
+      expect(find.text('Rascunho'), findsOneWidget);
+    });
+
+    testWidgets('título em branco no diálogo não cria', (tester) async {
+      final repo = MemoryRepository();
+      await pumpApp(tester, repo, location: '/tarefas');
+      await tester.tap(find.byKey(const Key('quick-more-todo')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('task-save')));
+      await tester.pumpAndSettle();
+      expect(await repo.watchTasks().first, isEmpty);
+      expect(find.byKey(const Key('task-save')), findsOneWidget);
+    });
+  });
+
+  group('editar e ver prioridade', () {
+    testWidgets('diálogo de edição mostra a prioridade atual e salva a nova', (tester) async {
+      final repo = MemoryRepository();
+      await repo.upsertTask(
+        const TaskItem(id: 'a', title: 'Relatório', priority: TaskPriority.baixa),
+      );
+      await pumpApp(tester, repo, location: '/tarefas');
+      await tester.tap(find.byKey(const ValueKey('task-card-a')));
+      await tester.pumpAndSettle();
+      expect(find.text('Tarefa'), findsOneWidget);
+      expect(find.byKey(const ValueKey('delete-task-a')), findsOneWidget);
+      final seg = tester.widget<SegmentedButton<TaskPriority>>(
+        find.byType(SegmentedButton<TaskPriority>),
+      );
+      expect(seg.selected, {TaskPriority.baixa});
+      await tester.tap(find.byKey(const Key('task-priority-alta')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('task-save')));
+      await tester.pumpAndSettle();
+      expect((await repo.watchTasks().first).single.priority, TaskPriority.alta);
+    });
+
+    testWidgets('cartão: alta em destaque de perigo, baixa apagada, média sem marcador', (
+      tester,
+    ) async {
+      final repo = MemoryRepository();
+      await repo.upsertTask(const TaskItem(id: 'a', title: 'A', priority: TaskPriority.alta));
+      await repo.upsertTask(const TaskItem(id: 'b', title: 'B', priority: TaskPriority.baixa));
+      await repo.upsertTask(const TaskItem(id: 'c', title: 'C'));
+      await pumpApp(tester, repo, location: '/tarefas');
+      OrgBadge badge(String id, String label) => tester.widget<OrgBadge>(
+        find.descendant(
+          of: find.byKey(ValueKey('task-card-$id')),
+          matching: find.widgetWithText(OrgBadge, label),
+        ),
+      );
+      expect(badge('a', 'Alta').tone, OrgBadgeTone.danger);
+      expect(badge('b', 'Baixa').tone, OrgBadgeTone.neutral);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('task-card-c')),
+          matching: find.byType(OrgBadge),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('ordem na coluna: prioridade, depois prazo (sem prazo por último), depois título', (
+      tester,
+    ) async {
+      final repo = MemoryRepository();
+      Future<void> add(String id, TaskPriority p, [DateTime? due]) =>
+          repo.upsertTask(TaskItem(id: id, title: id, priority: p, dueAt: due));
+      await add('media-sem-prazo', TaskPriority.media);
+      await add('baixa-cedo', TaskPriority.baixa, DateTime(2026, 9, 29, 23, 59));
+      await add('alta-sem-prazo-b', TaskPriority.alta);
+      await add('alta-tarde', TaskPriority.alta, DateTime(2026, 10, 5, 23, 59));
+      await add('alta-sem-prazo-a', TaskPriority.alta);
+      await add('alta-cedo', TaskPriority.alta, DateTime(2026, 9, 29, 23, 59));
+      await add('media-cedo', TaskPriority.media, DateTime(2026, 9, 29, 23, 59));
+      await pumpApp(tester, repo, location: '/tarefas', size: const Size(1000, 2400));
+      final ids = [
+        'alta-cedo',
+        'alta-tarde',
+        'alta-sem-prazo-a',
+        'alta-sem-prazo-b',
+        'media-cedo',
+        'media-sem-prazo',
+        'baixa-cedo',
+      ];
+      final ys = [
+        for (final id in ids) tester.getTopLeft(find.byKey(ValueKey('task-card-$id'))).dy,
+      ];
+      expect(ys, orderedEquals([...ys]..sort()));
+    });
+
+    testWidgets('"Feito" continua por conclusão mais recente, ignorando a prioridade', (
+      tester,
+    ) async {
+      final repo = MemoryRepository();
+      await repo.upsertTask(
+        TaskItem(
+          id: 'velha',
+          title: 'velha',
+          status: TaskStatus.done,
+          priority: TaskPriority.alta,
+          completedAt: DateTime(2026, 9, 20),
+        ),
+      );
+      await repo.upsertTask(
+        TaskItem(
+          id: 'nova',
+          title: 'nova',
+          status: TaskStatus.done,
+          priority: TaskPriority.baixa,
+          completedAt: DateTime(2026, 9, 27),
+        ),
+      );
+      await pumpApp(tester, repo, location: '/tarefas');
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('task-card-nova'))).dy,
+        lessThan(tester.getTopLeft(find.byKey(const ValueKey('task-card-velha'))).dy),
+      );
+    });
   });
 }
 

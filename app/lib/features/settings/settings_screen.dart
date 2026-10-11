@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,6 +47,16 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: Text(
+                  'O ícone do app muda junto com o tema. Se o atalho da tela inicial '
+                  'sumir, arraste o ícone novo da lista de apps.',
+                  key: const Key('app-icon-note'),
+                  style: theme.textTheme.bodySmall?.copyWith(color: context.org.inkMuted),
+                ),
+              ),
             const SectionHeader('Conta'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),

@@ -43,13 +43,12 @@ class TarefasWidgetProvider : BaseOrgWidget() {
         val shown = tasks.take(cap)
         shown.forEachIndexed { i, t ->
             val due = t.due
-            val overdue = due != null && WidgetData.isOverdue(due, nowMillis, zone)
             views.setViewVisibility(rows[i], View.VISIBLE)
             views.setTextViewText(times[i], if (due == null) "" else WidgetData.dayLabel(due, nowMillis, zone))
-            views.setTextColor(times[i], if (overdue) theme.danger else theme.inkMuted)
+            if (due != null) views.setTextColor(times[i], WidgetData.taskDueColor(due, nowMillis, zone, theme))
             views.setViewVisibility(times[i], if (due == null) View.GONE else View.VISIBLE)
             views.setTextViewText(titles[i], t.title)
-            views.setTextColor(titles[i], if (t.status == "doing") theme.accentText else theme.ink)
+            views.setTextColor(titles[i], WidgetData.taskTitleColor(t, theme))
         }
         val extra = tasks.size - shown.size
         if (extra > 0) {

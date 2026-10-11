@@ -91,6 +91,25 @@ const weekdayShort = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
 String twoDigits(int n) => n.toString().padLeft(2, '0');
 
+/// O que vem depois da música (só vale com "música primeiro").
+enum AfterMusic {
+  briefing('Resumo do dia'),
+  headlines('Só as manchetes'),
+  end('Encerrar');
+
+  const AfterMusic(this.label);
+
+  final String label;
+
+  static AfterMusic parse(Object? value) => AfterMusic.values.where((a) => a.name == value).firstOrNull ?? briefing;
+}
+
+const musicStopMinSec = 5;
+const musicStopMaxSec = 600;
+const briefingDelayMaxSec = 1800;
+
+String _formatSeconds(int sec) => sec >= 60 && sec % 60 == 0 ? '${sec ~/ 60} min' : '$sec s';
+
 class WakePlan {
   const WakePlan({
     required this.id,
@@ -102,6 +121,9 @@ class WakePlan {
     this.spotifyQuery,
     this.musicFirst = true,
     this.briefingDelayMin = 3,
+    this.briefingDelaySec,
+    this.musicStopAfterSec,
+    this.afterMusic = AfterMusic.briefing,
     this.volume = 30,
     this.fallbackAlarm = true,
     this.enabled = true,
@@ -116,6 +138,19 @@ class WakePlan {
   final String? spotifyQuery;
   final bool musicFirst;
   final int briefingDelayMin;
+
+  /// Espera, em segundos, entre a música começar e o resumo falado (null = usa
+  /// [briefingDelayMin], legado). Ignorada quando [musicStopAfterSec] está preenchido.
+  final int? briefingDelaySec;
+
+  /// Atraso efetivo do resumo, em segundos.
+  int get effectiveBriefingDelaySec => briefingDelaySec ?? briefingDelayMin * 60;
+
+  /// Para a música depois de N segundos (null = não para). Exige [spotifyQuery].
+  final int? musicStopAfterSec;
+
+  /// O que vem depois da música (só com [musicFirst]).
+  final AfterMusic afterMusic;
   final int volume;
   final bool fallbackAlarm;
   final bool enabled;
@@ -132,6 +167,9 @@ class WakePlan {
       spotifyQuery: m['spotify_query'] as String?,
       musicFirst: (m['music_first'] as bool?) ?? true,
       briefingDelayMin: (m['briefing_delay_min'] as num?)?.toInt() ?? 3,
+      briefingDelaySec: (m['briefing_delay_sec'] as num?)?.toInt(),
+      musicStopAfterSec: (m['music_stop_after_sec'] as num?)?.toInt(),
+      afterMusic: AfterMusic.parse(m['after_music']),
       volume: (m['volume'] as num?)?.toInt() ?? 30,
       fallbackAlarm: (m['fallback_alarm'] as bool?) ?? true,
       enabled: (m['enabled'] as bool?) ?? true,
@@ -149,6 +187,9 @@ class WakePlan {
       'spotify_query': (query == null || query.isEmpty) ? null : query,
       'music_first': musicFirst,
       'briefing_delay_min': briefingDelayMin,
+      'briefing_delay_sec': briefingDelaySec,
+      'music_stop_after_sec': musicStopAfterSec,
+      'after_music': afterMusic.name,
       'volume': volume,
       'fallback_alarm': fallbackAlarm,
       'enabled': enabled,
@@ -164,6 +205,11 @@ class WakePlan {
     String? spotifyQuery,
     bool? musicFirst,
     int? briefingDelayMin,
+    int? briefingDelaySec,
+    bool clearBriefingDelay = false,
+    int? musicStopAfterSec,
+    bool clearMusicStop = false,
+    AfterMusic? afterMusic,
     int? volume,
     bool? fallbackAlarm,
     bool? enabled,
@@ -178,6 +224,9 @@ class WakePlan {
         spotifyQuery: spotifyQuery ?? this.spotifyQuery,
         musicFirst: musicFirst ?? this.musicFirst,
         briefingDelayMin: briefingDelayMin ?? this.briefingDelayMin,
+        briefingDelaySec: clearBriefingDelay ? null : (briefingDelaySec ?? this.briefingDelaySec),
+        musicStopAfterSec: clearMusicStop ? null : (musicStopAfterSec ?? this.musicStopAfterSec),
+        afterMusic: afterMusic ?? this.afterMusic,
         volume: volume ?? this.volume,
         fallbackAlarm: fallbackAlarm ?? this.fallbackAlarm,
         enabled: enabled ?? this.enabled,
@@ -195,19 +244,33 @@ class WakePlan {
       other.spotifyQuery == spotifyQuery &&
       other.musicFirst == musicFirst &&
       other.briefingDelayMin == briefingDelayMin &&
+      other.briefingDelaySec == briefingDelaySec &&
+      other.musicStopAfterSec == musicStopAfterSec &&
+      other.afterMusic == afterMusic &&
       other.volume == volume &&
       other.fallbackAlarm == fallbackAlarm &&
       other.enabled == enabled;
 
   @override
   int get hashCode => Object.hash(id, label, Object.hashAll(days), hour, minute, echoDeviceId,
-      spotifyQuery, musicFirst, briefingDelayMin, volume, fallbackAlarm, enabled);
+      spotifyQuery, musicFirst, briefingDelayMin, briefingDelaySec, musicStopAfterSec, afterMusic, volume, fallbackAlarm, enabled);
 }
 
 String? validateWakePlan(WakePlan p) {
   if (p.label.trim().isEmpty) return 'Dê um nome ao despertar.';
   if (p.days.isEmpty) return 'Escolha pelo menos um dia.';
   if (p.echoDeviceId.isEmpty) return 'Escolha em qual Echo tocar.';
+  final delay = p.briefingDelaySec;
+  if (delay != null && (delay < 0 || delay > briefingDelayMaxSec)) {
+    return 'O tempo para falar o resumo deve ficar entre 0 s e 30 min.';
+  }
+  final stop = p.musicStopAfterSec;
+  if (stop != null) {
+    if (stop < musicStopMinSec || stop > musicStopMaxSec) {
+      return 'O tempo para parar a música deve ficar entre 5 s e 10 min.';
+    }
+    if ((p.spotifyQuery?.trim() ?? '').isEmpty) return 'Para parar a música, escolha uma busca do Spotify.';
+  }
   return null;
 }
 
@@ -226,7 +289,10 @@ String wakeSummary(WakePlan p, Map<String, String> echoNames) {
     '${twoDigits(p.hour)}:${twoDigits(p.minute)}',
     formatDays(p.days),
     if (echoNames[p.echoDeviceId] != null) echoNames[p.echoDeviceId]!,
-    if (query.isNotEmpty) 'Spotify: $query',
+    if (query.isNotEmpty)
+      'Spotify: $query${p.musicStopAfterSec != null ? ' (para após ${_formatSeconds(p.musicStopAfterSec!)})' : ''}',
+    if (p.briefingDelaySec != null && p.musicFirst && p.musicStopAfterSec == null)
+      'fala após ${_formatSeconds(p.briefingDelaySec!)}',
   ].join(' · ');
 }
 

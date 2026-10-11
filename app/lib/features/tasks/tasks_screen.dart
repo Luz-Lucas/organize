@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/ids.dart';
+import '../../domain/space.dart';
 import '../../domain/task_item.dart';
 import '../../ui/common.dart';
 import '../../ui/org_widgets.dart';
@@ -20,15 +21,26 @@ class TasksScreen extends ConsumerStatefulWidget {
 class _TasksScreenState extends ConsumerState<TasksScreen> {
   String? _spaceFilter;
 
-  Future<bool> _add(String title, TaskStatus status) async {
+  TaskItem _draft(String title, TaskStatus status, TaskPriority priority, DateTime? dueAt) {
     final now = ref.read(clockProvider)();
-    final task = TaskItem(
+    return TaskItem(
       id: newId(),
       title: title,
       status: status,
+      priority: priority,
+      dueAt: dueAt,
       completedAt: status == TaskStatus.done ? now : null,
       spaceId: _spaceFilter,
     );
+  }
+
+  Future<bool> _add(
+    String title,
+    TaskStatus status,
+    TaskPriority priority,
+    DateTime? dueAt,
+  ) async {
+    final task = _draft(title, status, priority, dueAt);
     try {
       await ref.read(repositoryProvider).upsertTask(task);
       return mounted;
@@ -36,6 +48,25 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       if (mounted) showError(context, 'Não foi possível adicionar. O texto continua no campo.');
       return false;
     }
+  }
+
+  /// "Mais opções" do campo rápido: abre o diálogo completo em modo de criação.
+  Future<bool> _addWithDialog(
+    String title,
+    TaskStatus status,
+    TaskPriority priority,
+    DateTime? dueAt,
+    List<Space> spaces,
+  ) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => TaskDialog(
+        task: _draft(title, status, priority, dueAt),
+        spaces: spaces,
+        isNew: true,
+      ),
+    );
+    return saved == true && mounted;
   }
 
   Future<void> _move(TaskItem task, TaskStatus to) async {
@@ -90,7 +121,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                       now: now,
                       onMove: _move,
                       onQuickAdd: _add,
-                      onOpen: (t) => showDialog<void>(
+                      onQuickAddWithDialog: (title, status, priority, dueAt) =>
+                          _addWithDialog(title, status, priority, dueAt, spaceList),
+                      onOpen: (t) => showDialog<bool>(
                         context: context,
                         builder: (_) => TaskDialog(task: t, spaces: spaceList),
                       ),

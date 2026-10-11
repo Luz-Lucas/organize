@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app/app.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
+import 'app_icon/app_icon.dart';
 import 'data/supabase_alexa_repository.dart';
 import 'data/supabase_news_repository.dart';
 import 'data/supabase_repository.dart';
@@ -60,6 +61,7 @@ Future<void> main() async {
       settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
       if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
+      if (isAndroid) appIconServiceProvider.overrideWithValue(const MethodChannelAppIconService()),
       currentEmailProvider.overrideWithValue(client.auth.currentUser?.email),
     ],
     child: OrganizacionalApp(router: router),

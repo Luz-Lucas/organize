@@ -9,11 +9,12 @@ type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
 
 const title = z.string().trim().min(1).max(200);
 const status = z.enum(['todo', 'doing', 'done']);
+const priority = z.enum(['baixa', 'media', 'alta']);
 const when = z.string().min(8).max(40);
 
 export function taskOut(r: Row, tz: string) {
   return {
-    id: r.id, title: r.title, description: r.description, status: r.status,
+    id: r.id, title: r.title, description: r.description, status: r.status, priority: r.priority,
     dueAt: toIso(r.due_at, tz), completedAt: toIso(r.completed_at, tz), spaceId: r.space_id, noteId: r.note_id,
   };
 }
@@ -30,13 +31,15 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
       'Lista tarefas ordenadas: em andamento, a fazer, depois concluídas; dentro de cada grupo por prazo (sem prazo por último). ' +
       'Sem `status`, as concluídas ficam de fora (peça `status: "done"` para vê-las).',
     inputSchema: {
-      status: status.optional(), dueBefore: when.optional().describe('Só tarefas com prazo até esta data/hora'),
+      status: status.optional(), priority: priority.optional().describe('Só tarefas com esta prioridade'),
+      dueBefore: when.optional().describe('Só tarefas com prazo até esta data/hora'),
       spaceId: z.string().uuid().optional(), limit: z.number().int().min(1).max(200).optional(),
     },
     annotations: READ,
   }, safe(async (a) => {
     let q = ctx.db.from('tasks').select('*').eq('user_id', ctx.userId);
     q = a.status ? q.eq('status', a.status) : q.neq('status', 'done');
+    if (a.priority) q = q.eq('priority', a.priority);
     if (a.spaceId) q = q.eq('space_id', a.spaceId);
     if (a.dueBefore) q = q.not('due_at', 'is', null).lte('due_at', parseDue(a.dueBefore).toISOString());
     const rows = check(await q.limit(2000)) as Row[];
@@ -53,9 +56,9 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
 
   server.registerTool('create_task', {
     title: 'Criar tarefa',
-    description: 'Cria uma tarefa. `dueAt` aceita só data (vale até 23:59 desse dia).',
+    description: 'Cria uma tarefa. `dueAt` aceita só data (vale até 23:59 desse dia). `priority`: baixa, media (padrão) ou alta.',
     inputSchema: {
-      title, description: z.string().max(10_000).optional(), status: status.optional(),
+      title, description: z.string().max(10_000).optional(), status: status.optional(), priority: priority.optional(),
       dueAt: when.optional(), spaceId: z.string().uuid().optional(), noteId: z.string().uuid().optional(),
     },
     annotations: { ...WRITE, idempotentHint: false },
@@ -64,7 +67,7 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
     if (a.noteId) await assertOwned(ctx, 'notes', a.noteId, 'Nota');
     const st = a.status ?? 'todo';
     const row = check(await ctx.db.from('tasks').insert({
-      user_id: ctx.userId, title: a.title, description: a.description ?? '', status: st,
+      user_id: ctx.userId, title: a.title, description: a.description ?? '', status: st, priority: a.priority ?? 'media',
       due_at: a.dueAt ? parseDue(a.dueAt).toISOString() : null,
       completed_at: st === 'done' ? ctx.now().toISOString() : null,
       space_id: a.spaceId ?? null, note_id: a.noteId ?? null, source: 'manual',
@@ -76,10 +79,10 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
     title: 'Editar tarefa',
     description:
       'Edita uma tarefa. Mudar `status` para "done" registra a conclusão; sair de "done" a limpa. ' +
-      '`dueAt: null` remove o prazo.',
+      '`dueAt: null` remove o prazo. `priority`: baixa, media ou alta.',
     inputSchema: {
       id: z.string().uuid(), title: title.optional(), description: z.string().max(10_000).optional(),
-      status: status.optional(), dueAt: when.nullable().optional(),
+      status: status.optional(), priority: priority.optional(), dueAt: when.nullable().optional(),
       spaceId: z.string().uuid().nullable().optional(), noteId: z.string().uuid().nullable().optional(),
     },
     annotations: { ...WRITE, idempotentHint: true },
@@ -89,6 +92,7 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
     const patch: Row = {};
     if (a.title !== undefined) patch.title = a.title;
     if (a.description !== undefined) patch.description = a.description;
+    if (a.priority !== undefined) patch.priority = a.priority;
     if (a.dueAt !== undefined) patch.due_at = a.dueAt === null ? null : parseDue(a.dueAt).toISOString();
     if (a.spaceId !== undefined) {
       if (a.spaceId) await assertOwned(ctx, 'spaces', a.spaceId, 'Espaço');

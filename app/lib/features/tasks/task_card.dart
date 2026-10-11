@@ -15,7 +15,8 @@ String dueLabel(DateTime due, DateTime now) {
   return DateFormat('EEE, d', 'pt_BR').format(due);
 }
 
-/// Cartão de tarefa do Kanban: título, espaço, prazo e ícone de nota.
+/// Cartão de tarefa do Kanban: título, prioridade (só alta e baixa), espaço,
+/// prazo e ícone de nota.
 class TaskCard extends StatelessWidget {
   const TaskCard({
     super.key,
@@ -51,13 +52,20 @@ class TaskCard extends StatelessWidget {
               color: task.isDone ? org.inkMuted : org.ink,
             ),
           ),
-          if (spaceName != null || due != null || task.noteId != null) ...[
+          if (spaceName != null ||
+              due != null ||
+              task.noteId != null ||
+              task.priority != TaskPriority.media) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
               runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                if (task.priority == TaskPriority.alta)
+                  OrgBadge(task.priority.label, tone: OrgBadgeTone.danger),
+                if (task.priority == TaskPriority.baixa)
+                  OrgBadge(task.priority.label, tone: OrgBadgeTone.neutral),
                 if (spaceName != null) OrgBadge(spaceName!),
                 if (due != null)
                   OrgBadge(

@@ -51,6 +51,30 @@ describe('buildBriefing', () => {
   });
 });
 
+describe('buildBriefing com clima', () => {
+  const w = 'Em Belo Horizonte� agora faz 22 graus, céu limpo. Hoje a máxima é de 28 e a mínima de 17.';
+
+  it('o clima entra logo depois da data', () => {
+    expect(buildBriefing(input(), w)).toBe(
+      `Bom dia! Hoje é segunda-feira, 28 de setembro. ${w} Sua agenda de hoje está livre. Nenhuma tarefa com prazo para hoje.`,
+    );
+  });
+
+  it('nulo, vazio ou ausente deixa o resumo idêntico', () => {
+    const base = buildBriefing(input());
+    expect(buildBriefing(input(), null)).toBe(base);
+    expect(buildBriefing(input(), '  ')).toBe(base);
+  });
+
+  it('wakeTexts leva o clima só no resumo, não nas manchetes', () => {
+    const i = input({ news: [{ source: 'G1', title: 'Chuva forte em BH.' }] });
+    const t = wakeTexts(i, w);
+    expect(t.briefing).toContain(w);
+    expect(t.headlines).toBe(headlinesText(i.news));
+    expect(wakeTexts(i, null)).toEqual(wakeTexts(i));
+  });
+});
+
 describe('auxiliares', () => {
   it('headlinesText sem manchetes', () => {
     expect(headlinesText([])).toBe('Não encontrei manchetes das suas fontes agora.');

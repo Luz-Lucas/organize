@@ -1,6 +1,18 @@
+import type { DeviceAction } from './gateway.js';
 import { addDays, localParts, zonedTime } from './time.js';
 
 export type AfterMusic = 'briefing' | 'headlines' | 'end';
+export type PhoneAlarm = 'never' | 'fallback' | 'always';
+
+/** Ação num dispositivo inteligente executada durante o despertar, após `delayMin` minutos. */
+export interface WakeDeviceAction {
+  entityId: string;
+  name: string;
+  action: DeviceAction;
+  /** 0-100; só para setBrightness. */
+  brightness?: number;
+  delayMin: number;
+}
 
 export interface WakePlan {
   id: string;
@@ -11,6 +23,8 @@ export interface WakePlan {
   spotifyQuery: string | null;
   musicFirst: boolean;
   briefingDelayMin: number;
+  /** Espera em segundos entre a música e o resumo; null = usa briefingDelayMin (minutos). */
+  briefingDelaySec: number | null;
   /** Segundos de música antes de parar; null = não para. */
   musicStopAfterSec: number | null;
   /** O que vem depois da música (só com musicFirst). */
@@ -18,9 +32,16 @@ export interface WakePlan {
   volume: number;
   fallbackAlarm: boolean;
   enabled: boolean;
+  /** Fala a previsão do tempo logo depois da data. */
+  includeWeather: boolean;
+  /** Ações de dispositivos, em paralelo com a música e a fala. */
+  deviceActions: WakeDeviceAction[];
+  /** Só usado na fase 2 (alarme no celular). */
+  phoneAlarm: PhoneAlarm;
 }
 
-export type RunStatus = 'armed' | 'running' | 'done' | 'failed' | 'missed' | 'cancelled';
+/** `skipped`: o usuário estava fora de casa; é um estado final, nunca rearmado nem disparado de novo. */
+export type RunStatus = 'armed' | 'running' | 'done' | 'failed' | 'missed' | 'cancelled' | 'skipped';
 
 export interface WakeRun {
   id: string;

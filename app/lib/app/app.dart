@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../app_icon/app_icon.dart';
 import '../ui/org_theme.dart';
 import '../widgets/widget_sync.dart';
 import 'providers.dart';
@@ -17,6 +18,7 @@ class OrganizacionalApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(widgetSyncProvider);
+    ref.watch(appIconSyncProvider);
     final id = ref.watch(settingsProvider).value?.theme ?? 'violeta';
     final theme = buildOrgTheme(
       orgThemeById(id),

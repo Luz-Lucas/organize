@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GERADO por tool/gen_app_icons.dart a partir de themes-10.json. Não edite à mão. -->
+<resources>
+    <color name="ic_bg_violeta">#160F1E</color>
+    <color name="ic_card_violeta">#6633CC</color>
+    <color name="ic_head_violeta">#C0A9FF</color>
+    <color name="ic_check_violeta">#FFFFFF</color>
+    <color name="ic_bg_safira">#081826</color>
+    <color name="ic_card_safira">#0972A8</color>
+    <color name="ic_head_safira">#6FCBF3</color>
+    <color name="ic_check_safira">#FFFFFF</color>
+    <color name="ic_bg_musgo">#141912</color>
+    <color name="ic_card_musgo">#3E5527</color>
+    <color name="ic_head_musgo">#9CB679</color>
+    <color name="ic_check_musgo">#FFFFFF</color>
+    <color name="ic_bg_lunar">#0A0A0D</color>
+    <color name="ic_card_lunar">#2FB8C2</color>
+    <color name="ic_head_lunar">#B4FCFF</color>
+    <color name="ic_check_lunar">#101014</color>
+    <color name="ic_bg_indigo">#0F1330</color>
+    <color name="ic_card_indigo">#9C7C12</color>
+    <color name="ic_head_indigo">#E4C866</color>
+    <color name="ic_check_indigo">#101014</color>
+    <color name="ic_bg_grafite">#111213</color>
+    <color name="ic_card_grafite">#8A8B8C</color>
+    <color name="ic_head_grafite">#D7D8D9</color>
+    <color name="ic_check_grafite">#101014</color>
+    <color name="ic_bg_coral">#241512</color>
+    <color name="ic_card_coral">#D14B36</color>
+    <color name="ic_head_coral">#FF9C89</color>
+    <color name="ic_check_coral">#FFFFFF</color>
+    <color name="ic_bg_cobalto">#0B1220</color>
+    <color name="ic_card_cobalto">#1D4FBF</color>
+    <color name="ic_head_cobalto">#7FA6FF</color>
+    <color name="ic_check_cobalto">#FFFFFF</color>
+    <color name="ic_bg_cacto">#1D1712</color>
+    <color name="ic_card_cacto">#3D6640</color>
+    <color name="ic_head_cacto">#8FBE8B</color>
+    <color name="ic_check_cacto">#FFFFFF</color>
+    <color name="ic_bg_bronze">#1B1512</color>
+    <color name="ic_card_bronze">#8C4B1E</color>
+    <color name="ic_head_bronze">#E0A268</color>
+    <color name="ic_check_bronze">#FFFFFF</color>
+</resources>

@@ -118,4 +118,44 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
     const { data } = await db.from('alexa_devices').select('id, online').eq('user_id', userId);
     expect(data).toEqual([{ id: 'E1', online: false }]);
   });
+  it('finishRun aceita skipped; listWakeRuns devolve o status e toPlan lê os campos novos', async () => {
+    const planId = await newPlan();
+    const at = new Date('2026-10-13T10:00:00Z');
+    await store.armRun(planId, '2026-10-13', at, 'reserva');
+    expect(await store.claimRun(planId, '2026-10-13', at)).toBe(true);
+    await store.finishRun(planId, '2026-10-13', 'skipped', 'fora de casa (a 900 m)');
+    const run = (await store.listWakeRuns('2026-10-13')).find((r) => r.planId === planId);
+    expect(run?.status).toBe('skipped');
+    expect(await store.claimRun(planId, '2026-10-13', at)).toBe(false);
+    const plan = (await store.listWakePlans()).find((p) => p.id === planId);
+    expect(plan).toMatchObject({ includeWeather: true, deviceActions: [], phoneAlarm: 'fallback', briefingDelaySec: null });
+  });
+
+  it('loadPresenceInput filtra pelo usuário: sem dados -> padrões; com dados -> só os dele', async () => {
+    const mk = async (tag: string) => {
+      const u = await db.auth.admin.createUser({
+        email: `ponte-${tag}-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true,
+      });
+      if (u.error) throw u.error;
+      return u.data.user.id;
+    };
+    const a = await mk('pres-a');
+    const b = await mk('pres-b');
+    const sa = new SupabaseStore(db, a, () => {});
+    expect(await sa.loadPresenceInput()).toEqual({ home: null, requireHome: true, location: null });
+
+    const ok = (res: { error: { message: string } | null }) => { if (res.error) throw new Error(res.error.message); };
+    ok(await db.from('user_settings').insert([
+      { user_id: a, home_lat: -19.9167, home_lon: -45.7, home_radius_m: 80, require_home: false },
+      { user_id: b, home_lat: 10, home_lon: 10, home_radius_m: 50, require_home: true },
+    ]));
+    ok(await db.from('user_locations').insert([
+      { user_id: a, lat: -22.2, lon: -45.6, accuracy_m: 12, reported_at: '2026-10-13T10:00:00Z' },
+      { user_id: b, lat: 1, lon: 1, accuracy_m: null, reported_at: '2026-10-13T10:00:00Z' },
+    ]));
+    expect(await sa.loadPresenceInput()).toEqual({
+      home: { lat: -19.9167, lon: -45.7, radiusM: 80 }, requireHome: false,
+      location: { lat: -22.2, lon: -45.6, accuracyM: 12, reportedAt: new Date('2026-10-13T10:00:00Z') },
+    });
+  });
 });

@@ -2,7 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { splitTasks, type BriefingInput } from './briefing.js';
 import type { Command, CommandKind } from './commands.js';
 import type { EchoDevice, Routine, SmartDevice } from './gateway.js';
-import type { AfterMusic, RunStatus, WakePlan, WakeRun } from './scheduler.js';
+import type { DeviceAction } from './gateway.js';
+import type { PresenceInput } from './presence.js';
+import type { AfterMusic, PhoneAlarm, RunStatus, WakeDeviceAction, WakePlan, WakeRun } from './scheduler.js';
 import { zonedDayRange } from './time.js';
 import type { WakeStore } from './wake.js';
 
@@ -18,6 +20,37 @@ const toCommand = (r: Row): Command => ({
 });
 
 const AFTER_MUSIC: readonly AfterMusic[] = ['briefing', 'headlines', 'end'];
+const PHONE_ALARMS: readonly PhoneAlarm[] = ['never', 'fallback', 'always'];
+const DEVICE_ACTIONS: readonly DeviceAction[] = ['turnOn', 'turnOff', 'setBrightness'];
+const MAX_ACTION_DELAY_MIN = 30;
+
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Lê `device_actions` (jsonb) descartando entradas inválidas, para um dado ruim nunca derrubar o despertar. */
+export function toDeviceActions(raw: unknown): WakeDeviceAction[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WakeDeviceAction[] = [];
+  for (const item of raw as unknown[]) {
+    if (typeof item !== 'object' || item === null) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.entityId !== 'string' || r.entityId.length === 0) continue;
+    if (!DEVICE_ACTIONS.includes(r.action as DeviceAction)) continue;
+    const action = r.action as DeviceAction;
+    const delay = isNum(r.delayMin) ? Math.round(r.delayMin) : 0;
+    const entry: WakeDeviceAction = {
+      entityId: r.entityId,
+      name: typeof r.name === 'string' && r.name ? r.name : r.entityId,
+      action,
+      delayMin: Math.min(Math.max(delay, 0), MAX_ACTION_DELAY_MIN),
+    };
+    if (action === 'setBrightness') {
+      if (!isNum(r.brightness)) continue;
+      entry.brightness = Math.min(Math.max(Math.round(r.brightness), 0), 100);
+    }
+    out.push(entry);
+  }
+  return out;
+}
 
 export const toPlan = (r: Row): WakePlan => ({
   id: r.id,
@@ -28,12 +61,32 @@ export const toPlan = (r: Row): WakePlan => ({
   spotifyQuery: r.spotify_query,
   musicFirst: r.music_first,
   briefingDelayMin: r.briefing_delay_min,
+  briefingDelaySec: isNum(r.briefing_delay_sec) ? r.briefing_delay_sec : null,
   musicStopAfterSec: r.music_stop_after_sec ?? null,
   afterMusic: AFTER_MUSIC.includes(r.after_music) ? r.after_music : 'briefing',
   volume: r.volume,
   fallbackAlarm: r.fallback_alarm,
   enabled: r.enabled,
+  includeWeather: r.include_weather !== false,
+  deviceActions: toDeviceActions(r.device_actions),
+  phoneAlarm: PHONE_ALARMS.includes(r.phone_alarm) ? r.phone_alarm : 'fallback',
 });
+
+/** Monta a entrada da presença a partir das linhas de `user_settings` e `user_locations` (qualquer uma pode faltar). */
+export function toPresenceSource(settings: Row | null, loc: Row | null): Omit<PresenceInput, 'now' | 'maxAgeMin'> {
+  const hasHome = isNum(settings?.home_lat) && isNum(settings?.home_lon);
+  const reportedAt = loc ? new Date(loc.reported_at) : null;
+  const hasLoc = loc !== null && isNum(loc.lat) && isNum(loc.lon) && reportedAt !== null && !Number.isNaN(reportedAt.getTime());
+  return {
+    home: hasHome
+      ? { lat: settings!.home_lat, lon: settings!.home_lon, radiusM: isNum(settings!.home_radius_m) ? settings!.home_radius_m : 50 }
+      : null,
+    requireHome: settings?.require_home !== false,
+    location: hasLoc
+      ? { lat: loc!.lat, lon: loc!.lon, accuracyM: isNum(loc!.accuracy_m) ? loc!.accuracy_m : null, reportedAt: reportedAt! }
+      : null,
+  };
+}
 
 const toRun = (r: Row): WakeRun => ({
   id: r.id,
@@ -128,7 +181,18 @@ export class SupabaseStore implements WakeStore {
     })));
   }
 
-  async finishRun(planId: string, runDate: string, status: 'done' | 'failed', note: string): Promise<void> {
+  /** Casa e última localização do celular, para decidir a presença na hora do despertar. */
+  async loadPresenceInput(): Promise<Omit<PresenceInput, 'now' | 'maxAgeMin'>> {
+    const settings = this.check(await this.db.from('user_settings')
+      .select('home_lat, home_lon, home_radius_m, require_home')
+      .eq('user_id', this.userId).maybeSingle()) as Row | null;
+    const loc = this.check(await this.db.from('user_locations')
+      .select('lat, lon, accuracy_m, reported_at')
+      .eq('user_id', this.userId).maybeSingle()) as Row | null;
+    return toPresenceSource(settings, loc);
+  }
+
+  async finishRun(planId: string, runDate: string, status: 'done' | 'failed' | 'skipped', note: string): Promise<void> {
     this.check(await this.db.from('wake_runs').update({ status, note })
       .eq('user_id', this.userId).eq('plan_id', planId).eq('run_date', runDate));
   }

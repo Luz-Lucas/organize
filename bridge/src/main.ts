@@ -7,10 +7,11 @@ import { CommandError, executeCommand, isExpired, type Command } from './command
 import { loadConfig } from './config.js';
 import { AlexaAuthError, type AlexaGateway } from './gateway.js';
 import { planWakeActions } from './scheduler.js';
+import { fetchWeather, reverseCity, weatherText } from './weather.js';
 import { buildSkill } from './skill.js';
 import { SupabaseStore } from './supabase-store.js';
 import { addDays, localParts, timeZoneMatches } from './time.js';
-import { applyWakeActions, runWake, testPlan } from './wake.js';
+import { applyWakeActions, runWake, testPlan, weatherSpeech, type PresenceSource } from './wake.js';
 
 const { ExpressAdapter } = expressAdapter;
 const cfg = loadConfig(process.env);
@@ -27,6 +28,14 @@ process.on('unhandledRejection', (reason) => log(`rejeição não tratada: ${Str
 const db = createClient(cfg.supabaseUrl, cfg.serviceKey, { auth: { persistSession: false } });
 const store = new SupabaseStore(db, cfg.userId, log);
 const briefingInput = () => store.briefingInput(new Date(), cfg.timeZone);
+
+/** Texto falado do clima para um ponto; falhas viram null (o despertar segue sem clima). Não registra coordenadas. */
+async function weatherAt(at: { lat: number; lon: number }): Promise<string | null> {
+  const w = await fetchWeather(at.lat, at.lon, { fetch });
+  if (!w) return null;
+  const city = await reverseCity(at.lat, at.lon, { fetch });
+  return weatherText({ city, w });
+}
 
 // Parte oficial: sobe mesmo se a parte não oficial estiver sem login.
 const app = express();
@@ -85,7 +94,11 @@ async function wakeTest(planId: string): Promise<string> {
   const plan = (await store.listWakePlans()).find((p) => p.id === planId);
   if (!plan) throw new CommandError('despertar não encontrado');
   if (!gateway) throw new CommandError('ponte sem login na Alexa');
-  const result = await runWake(testPlan(plan), wakeTexts(await briefingInput()), gateway, sleep);
+  // "Testar agora" ignora a presença, mas fala o clima e executa as ações de dispositivos.
+  let source: PresenceSource | null = null;
+  if (plan.includeWeather) source = await store.loadPresenceInput().catch(() => null);
+  const weather = await weatherSpeech(plan, source, { weather: weatherAt, log });
+  const result = await runWake(testPlan(plan), wakeTexts(await briefingInput(), weather), gateway, sleep);
   return result.ok ? 'ok' : `falhou: ${result.notes.join('; ')}`;
 }
 
@@ -127,7 +140,9 @@ async function wakeTick(): Promise<void> {
     if (!gw) return; // sem login: o alarme reserva já armado toca sozinho
     const running = await applyWakeActions(actions, {
       gateway: gw, store, sleep, log,
-      briefing: async () => wakeTexts(await briefingInput()),
+      briefing: async (weather) => wakeTexts(await briefingInput(), weather),
+      presence: () => store.loadPresenceInput(),
+      weather: weatherAt,
     }, inFlight);
     // Cada despertar roda em segundo plano; AlexaAuthError vira status auth_required, sem rejeição solta.
     void Promise.allSettled(running).then(async (results) => {

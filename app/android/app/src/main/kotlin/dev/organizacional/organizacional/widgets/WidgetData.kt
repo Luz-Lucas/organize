@@ -238,6 +238,44 @@ object WidgetData {
         }
     }
 
+    // ---- Cores das linhas (compartilhadas por Hoje, Tarefas e Agenda e Tarefas) ----
+
+    private fun isOngoing(e: WidgetEvent, nowMillis: Long) =
+        !e.allDay && e.start <= nowMillis && nowMillis < e.end
+
+    /** Título do evento: em andamento = accentText; já terminado = inkMuted; senão ink. */
+    fun eventTitleColor(e: WidgetEvent, nowMillis: Long, theme: WidgetTheme): Int = when {
+        isOngoing(e, nowMillis) -> theme.accentText
+        !e.allDay && e.end <= nowMillis -> theme.inkMuted
+        else -> theme.ink
+    }
+
+    /** Horário do evento: em andamento = accentText; senão inkMuted. */
+    fun eventTimeColor(e: WidgetEvent, nowMillis: Long, theme: WidgetTheme): Int =
+        if (isOngoing(e, nowMillis)) theme.accentText else theme.inkMuted
+
+    /** Título da tarefa: "doing" = accentText; senão ink. */
+    fun taskTitleColor(t: WidgetTask, theme: WidgetTheme): Int =
+        if (t.status == "doing") theme.accentText else theme.ink
+
+    /** Prazo da tarefa: atrasada = danger; senão inkMuted. */
+    fun taskDueColor(due: Long, nowMillis: Long, zone: ZoneId, theme: WidgetTheme): Int =
+        if (isOverdue(due, nowMillis, zone)) theme.danger else theme.inkMuted
+
+    /**
+     * Divide [total] linhas entre duas seções, cada uma com no mínimo 1 linha (a mensagem de
+     * vazio ocupa uma) e no máximo [capEach]; quando falta espaço, tira da seção maior.
+     */
+    fun splitRows(total: Int, needA: Int, needB: Int, capEach: Int = 4): Pair<Int, Int> {
+        var a = needA.coerceIn(1, capEach)
+        var b = needB.coerceIn(1, capEach)
+        val t = maxOf(total, 2)
+        while (a + b > t) {
+            if (a >= b) a-- else b--
+        }
+        return a to b
+    }
+
     /** Quantas linhas cabem na altura (dp) do widget, limitado a [cap]. */
     fun rowsFor(heightDp: Int, cap: Int, fixedDp: Int = 44, rowDp: Int = 18): Int {
         if (heightDp <= 0) return cap

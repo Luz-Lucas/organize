@@ -37,8 +37,8 @@ select ok(
 select ok(
   not claim_wake_run('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000001', '2026-09-28', now()),
   'segunda reivindicação no mesmo dia não dispara de novo');
-select ok(claim_command('11111111-1111-1111-1111-111111111111', (select id from alexa_commands limit 1)), 'primeira reivindicação do comando vence');
-select ok(not claim_command('11111111-1111-1111-1111-111111111111', (select id from alexa_commands limit 1)), 'comando não roda duas vezes');
+select ok(claim_command('11111111-1111-1111-1111-111111111111', (select id from alexa_commands where user_id = '11111111-1111-1111-1111-111111111111' and status = 'pending' order by created_at limit 1)), 'primeira reivindicação do comando vence');
+select ok(not claim_command('11111111-1111-1111-1111-111111111111', (select id from alexa_commands where user_id = '11111111-1111-1111-1111-111111111111' and status = 'running' order by created_at limit 1)), 'comando não roda duas vezes');
 
 select * from finish();
 rollback;

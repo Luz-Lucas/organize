@@ -8,11 +8,14 @@ import '../../domain/space.dart';
 import '../../domain/task_item.dart';
 import '../../ui/common.dart';
 
-/// Edição de uma tarefa: título, descrição, prazo, espaço e exclusão.
-/// Falha ao gravar mantém o diálogo aberto com o que foi digitado.
+/// Edição de uma tarefa (ou criação, com [isNew]): título, descrição,
+/// prioridade, prazo, espaço e, ao editar, exclusão. Fecha com `true` quando
+/// salva. Falha ao gravar mantém o diálogo aberto com o que foi digitado.
 class TaskDialog extends ConsumerStatefulWidget {
-  const TaskDialog({super.key, required this.task, required this.spaces});
+  const TaskDialog({super.key, required this.task, required this.spaces, this.isNew = false});
 
+  /// Em modo de criação, a tarefa já vem montada (id novo, status da coluna).
+  final bool isNew;
   final TaskItem task;
   final List<Space> spaces;
 
@@ -23,6 +26,7 @@ class TaskDialog extends ConsumerStatefulWidget {
 class _TaskDialogState extends ConsumerState<TaskDialog> {
   late final _title = TextEditingController(text: widget.task.title);
   late final _description = TextEditingController(text: widget.task.description);
+  late TaskPriority _priority = widget.task.priority;
   late DateTime? _due = widget.task.dueAt;
   late String? _spaceId = widget.task.spaceId;
 
@@ -55,6 +59,7 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
       title: title,
       description: _description.text.trim(),
       status: t.status,
+      priority: _priority,
       dueAt: _due,
       completedAt: t.completedAt,
       spaceId: _spaceId,
@@ -64,7 +69,7 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
     );
     try {
       await ref.read(repositoryProvider).upsertTask(updated);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop(true);
     } on RepositoryException {
       if (mounted) showError(context, 'Não foi possível salvar a tarefa.');
     }
@@ -82,7 +87,7 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Tarefa'),
+      title: Text(widget.isNew ? 'Nova tarefa' : 'Tarefa'),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -102,6 +107,19 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
                 minLines: 2,
                 maxLines: 5,
                 decoration: const InputDecoration(labelText: 'Descrição'),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<TaskPriority>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final p in TaskPriority.values)
+                    ButtonSegment(
+                      value: p,
+                      label: Text(p.label, key: Key('task-priority-${p.name}')),
+                    ),
+                ],
+                selected: {_priority},
+                onSelectionChanged: (v) => setState(() => _priority = v.first),
               ),
               const SizedBox(height: 12),
               Row(
@@ -144,12 +162,13 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          key: ValueKey('delete-task-${widget.task.id}'),
-          onPressed: _delete,
-          style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-          child: const Text('Excluir'),
-        ),
+        if (!widget.isNew)
+          TextButton(
+            key: ValueKey('delete-task-${widget.task.id}'),
+            onPressed: _delete,
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('Excluir'),
+          ),
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
         FilledButton(key: const Key('task-save'), onPressed: _save, child: const Text('Salvar')),
       ],

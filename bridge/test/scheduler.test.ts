@@ -4,8 +4,8 @@ import { planWakeActions, type WakePlan, type WakeRun } from '../src/scheduler.j
 const SP = 'America/Sao_Paulo';
 const plan = (over: Partial<WakePlan> = {}): WakePlan => ({
   id: 'p1', label: 'Aula', days: [1, 2, 3, 4, 5], time: '07:00:00', echoDeviceId: 'ECHO',
-  spotifyQuery: 'lofi', musicFirst: true, briefingDelayMin: 3, musicStopAfterSec: null, afterMusic: 'briefing', volume: 30,
-  fallbackAlarm: true, enabled: true, ...over,
+  spotifyQuery: 'lofi', musicFirst: true, briefingDelayMin: 3, briefingDelaySec: null, musicStopAfterSec: null, afterMusic: 'briefing', volume: 30,
+  fallbackAlarm: true, enabled: true, includeWeather: true, deviceActions: [], phoneAlarm: 'fallback', ...over,
 });
 const run = (over: Partial<WakeRun> = {}): WakeRun => ({
   id: 'r1', planId: 'p1', runDate: '2026-09-28', plannedFor: new Date('2026-09-28T10:00:00Z'),
@@ -80,6 +80,14 @@ describe('planWakeActions', () => {
     const p = plan({ time: '23:55', days: [1], fallbackAlarm: false });
     const actions = planWakeActions([p], [], at('2026-09-29T03:05:00Z'), SP); // terça 00:05 local
     expect(actions).toEqual([{ type: 'fire', plan: p, runDate: '2026-09-28', plannedFor: at('2026-09-29T02:55:00Z'), run: null }]);
+  });
+
+  it('execução pulada (fora de casa) é final: não dispara, não rearma e não conta como armada', () => {
+    const skipped = run({ status: 'skipped', fallbackHandle: null });
+    expect(planWakeActions([plan()], [skipped], at('2026-09-28T10:01:00Z'), SP).map((a) => `${a.type}:${'runDate' in a ? a.runDate : ''}`))
+      .toEqual(['arm:2026-09-29']); // só o reserva de amanhã; nada para 2026-09-28
+    expect(planWakeActions([plan()], [skipped], at('2026-09-28T09:00:00Z'), SP)).toEqual([]);
+    expect(planWakeActions([plan()], [skipped], at('2026-09-28T10:20:00Z'), SP).filter((a) => a.type !== 'arm')).toEqual([]);
   });
 
   it('run cancelado pode ser rearmado e disparado', () => {

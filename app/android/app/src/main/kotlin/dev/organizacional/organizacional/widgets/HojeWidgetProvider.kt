@@ -42,18 +42,11 @@ class HojeWidgetProvider : BaseOrgWidget() {
         val cap = WidgetData.rowsFor(heightDp, rows.size)
         val shown = today.take(cap)
         shown.forEachIndexed { i, e ->
-            val ongoing = !e.allDay && e.start <= nowMillis && nowMillis < e.end
-            val finished = !e.allDay && e.end <= nowMillis
-            val color = when {
-                ongoing -> theme.accentText
-                finished -> theme.inkMuted
-                else -> theme.ink
-            }
             views.setViewVisibility(rows[i], View.VISIBLE)
             views.setTextViewText(times[i], WidgetData.eventTimeLabel(e, nowMillis, zone))
-            views.setTextColor(times[i], if (ongoing) theme.accentText else theme.inkMuted)
+            views.setTextColor(times[i], WidgetData.eventTimeColor(e, nowMillis, theme))
             views.setTextViewText(titles[i], e.title)
-            views.setTextColor(titles[i], color)
+            views.setTextColor(titles[i], WidgetData.eventTitleColor(e, nowMillis, theme))
         }
         val extra = today.size - shown.size
         if (extra > 0) {

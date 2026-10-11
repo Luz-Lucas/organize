@@ -72,4 +72,30 @@ class WidgetDataTest {
         assertTrue(WidgetData.isStale(0L, 4L * 3600 * 1000))
         assertTrue(!WidgetData.isStale(0L, 2L * 3600 * 1000))
     }
+
+    @Test fun splitRowsSharesSpaceAndKeepsAtLeastOneEach() {
+        assertEquals(4 to 4, WidgetData.splitRows(8, 10, 10))
+        assertEquals(2 to 3, WidgetData.splitRows(5, 2, 9))
+        assertEquals(1 to 1, WidgetData.splitRows(2, 0, 0))
+        assertEquals(1 to 1, WidgetData.splitRows(0, 4, 4))
+        assertEquals(2 to 3, WidgetData.splitRows(5, 4, 4))
+        assertEquals(1 to 4, WidgetData.splitRows(8, 0, 9))
+    }
+
+    @Test fun rowColorsFollowTheDisplayRules() {
+        val t = WidgetData.VIOLETA
+        val now = ms(2026, 10, 11, 12)
+        val ongoing = ev("a", ms(2026, 10, 11, 11), ms(2026, 10, 11, 13))
+        val done = ev("b", ms(2026, 10, 11, 8), ms(2026, 10, 11, 9))
+        val later = ev("c", ms(2026, 10, 11, 15), ms(2026, 10, 11, 16))
+        assertEquals(t.accentText, WidgetData.eventTitleColor(ongoing, now, t))
+        assertEquals(t.accentText, WidgetData.eventTimeColor(ongoing, now, t))
+        assertEquals(t.inkMuted, WidgetData.eventTitleColor(done, now, t))
+        assertEquals(t.ink, WidgetData.eventTitleColor(later, now, t))
+        assertEquals(t.inkMuted, WidgetData.eventTimeColor(later, now, t))
+        assertEquals(t.danger, WidgetData.taskDueColor(ms(2026, 10, 10, 20), now, sp, t))
+        assertEquals(t.inkMuted, WidgetData.taskDueColor(ms(2026, 10, 11, 8), now, sp, t))
+        assertEquals(t.accentText, WidgetData.taskTitleColor(WidgetTask("1", "x", "doing", null), t))
+        assertEquals(t.ink, WidgetData.taskTitleColor(WidgetTask("1", "x", "todo", null), t))
+    }
 }

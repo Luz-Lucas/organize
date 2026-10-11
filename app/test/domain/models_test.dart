@@ -90,4 +90,36 @@ void main() {
     expect([back.status, back.completedAt], [TaskStatus.todo, null]);
     expect(t.moved(TaskStatus.doing, now).completedAt, isNull);
   });
+  group('prioridade da tarefa', () {
+    test('padrão é média e rótulos em português', () {
+      const t = TaskItem(id: 't', title: 'x');
+      expect(t.priority, TaskPriority.media);
+      expect(TaskPriority.values.map((p) => p.label), ['Baixa', 'Média', 'Alta']);
+    });
+
+    test('ida e volta preserva a prioridade e usa o nome no banco', () {
+      for (final p in TaskPriority.values) {
+        final t = TaskItem(id: 't', title: 'x', priority: p);
+        expect(t.toMap()['priority'], p.name);
+        expect(TaskItem.fromMap(t.toMap()), t);
+        expect(TaskItem.fromMap(t.toMap()).priority, p);
+      }
+    });
+
+    test('valor ausente ou desconhecido vira média', () {
+      final base = const TaskItem(id: 't', title: 'x').toMap();
+      expect(TaskItem.fromMap({...base}..remove('priority')).priority, TaskPriority.media);
+      expect(TaskItem.fromMap({...base, 'priority': null}).priority, TaskPriority.media);
+      expect(TaskItem.fromMap({...base, 'priority': 'urgente'}).priority, TaskPriority.media);
+    });
+
+    test('moved e toggled mantêm a prioridade; igualdade considera a prioridade', () {
+      final now = DateTime(2026, 10, 11, 9);
+      const t = TaskItem(id: 't', title: 'x', priority: TaskPriority.alta);
+      expect(t.moved(TaskStatus.doing, now).priority, TaskPriority.alta);
+      expect(t.toggled(now).priority, TaskPriority.alta);
+      expect(t == const TaskItem(id: 't', title: 'x'), isFalse);
+      expect(t.hashCode == const TaskItem(id: 't', title: 'x').hashCode, isFalse);
+    });
+  });
 }

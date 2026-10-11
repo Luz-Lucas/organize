@@ -2,12 +2,30 @@ import 'json.dart';
 
 enum TaskStatus { todo, doing, done }
 
+enum TaskPriority {
+  baixa('Baixa'),
+  media('Média'),
+  alta('Alta');
+
+  const TaskPriority(this.label);
+  final String label;
+
+  /// Valor ausente ou desconhecido vira [media].
+  static TaskPriority parse(Object? value) {
+    for (final p in values) {
+      if (p.name == value) return p;
+    }
+    return media;
+  }
+}
+
 class TaskItem {
   const TaskItem({
     required this.id,
     required this.title,
     this.description = '',
     this.status = TaskStatus.todo,
+    this.priority = TaskPriority.media,
     this.dueAt,
     this.completedAt,
     this.spaceId,
@@ -20,6 +38,7 @@ class TaskItem {
   final String title;
   final String description;
   final TaskStatus status;
+  final TaskPriority priority;
   final DateTime? dueAt;
   final DateTime? completedAt;
   final String? spaceId;
@@ -34,6 +53,7 @@ class TaskItem {
         title: title,
         description: description,
         status: isDone ? TaskStatus.todo : TaskStatus.done,
+        priority: priority,
         dueAt: dueAt,
         completedAt: isDone ? null : now,
         spaceId: spaceId,
@@ -48,6 +68,7 @@ class TaskItem {
         title: title,
         description: description,
         status: to,
+        priority: priority,
         dueAt: dueAt,
         completedAt: to == TaskStatus.done ? (isDone ? completedAt : now) : null,
         spaceId: spaceId,
@@ -61,6 +82,7 @@ class TaskItem {
         title: m['title'] as String,
         description: (m['description'] as String?) ?? '',
         status: TaskStatus.values.byName(m['status'] as String),
+        priority: TaskPriority.parse(m['priority']),
         dueAt: parseDate(m['due_at']),
         completedAt: parseDate(m['completed_at']),
         spaceId: m['space_id'] as String?,
@@ -74,6 +96,7 @@ class TaskItem {
         'title': title,
         'description': description,
         'status': status.name,
+        'priority': priority.name,
         'due_at': encodeDate(dueAt),
         'completed_at': encodeDate(completedAt),
         'space_id': spaceId,
@@ -89,6 +112,7 @@ class TaskItem {
       other.title == title &&
       other.description == description &&
       other.status == status &&
+      other.priority == priority &&
       other.dueAt == dueAt &&
       other.completedAt == completedAt &&
       other.spaceId == spaceId &&
@@ -97,6 +121,6 @@ class TaskItem {
       other.externalId == externalId;
 
   @override
-  int get hashCode => Object.hash(id, title, description, status, dueAt,
+  int get hashCode => Object.hash(id, title, description, status, priority, dueAt,
       completedAt, spaceId, noteId, source, externalId);
 }

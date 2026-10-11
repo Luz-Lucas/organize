@@ -182,6 +182,36 @@ describe.skipIf(!hasDb)('ferramentas MCP (Supabase local)', () => {
       expect(names).toEqual(['ord-doing-cedo', 'ord-todo-cedo']);
     });
 
+    it('prioridade: padrão média, define na criação, edita, lista e filtra', async () => {
+      const mk = (title: string, extra: Record<string, unknown> = {}) => call(a.client, 'create_task', { title, ...extra });
+      const padrao = await mk('prio-padrao');
+      expect(padrao.data.task.priority).toBe('media');
+      const alta = await mk('prio-alta', { priority: 'alta' });
+      expect(alta.data.task.priority).toBe('alta');
+      await mk('prio-baixa', { priority: 'baixa' });
+
+      const upd = await call(a.client, 'update_task', { id: padrao.data.task.id, priority: 'baixa' });
+      expect(upd.data.task.priority).toBe('baixa');
+      const so = await call(a.client, 'update_task', { id: padrao.data.task.id, title: 'prio-padrao-2' });
+      expect(so.data.task.priority).toBe('baixa'); // outro campo não mexe na prioridade
+
+      const todas = await call(a.client, 'list_tasks', { limit: 200 });
+      const byTitle = Object.fromEntries(todas.data.tasks.filter((t: any) => t.title.startsWith('prio-')).map((t: any) => [t.title, t.priority]));
+      expect(byTitle).toEqual({ 'prio-padrao-2': 'baixa', 'prio-alta': 'alta', 'prio-baixa': 'baixa' });
+
+      const soAltas = await call(a.client, 'list_tasks', { priority: 'alta', limit: 200 });
+      const names = soAltas.data.tasks.map((t: any) => t.title).filter((t: string) => t.startsWith('prio-'));
+      expect(names).toEqual(['prio-alta']);
+      expect(soAltas.data.tasks.every((t: any) => t.priority === 'alta')).toBe(true);
+    });
+
+    it('prioridade inválida é rejeitada na criação e na edição', async () => {
+      expect((await call(a.client, 'create_task', { title: 'prio-ruim', priority: 'urgente' })).isError).toBe(true);
+      const ok = await call(a.client, 'create_task', { title: 'prio-ok' });
+      expect((await call(a.client, 'update_task', { id: ok.data.task.id, priority: 'ALTA' })).isError).toBe(true);
+      expect((await call(a.client, 'list_tasks', { priority: 'maxima' })).isError).toBe(true);
+    });
+
     it('rejeita título vazio/longo e spaceId de outro usuário', async () => {
       expect((await call(a.client, 'create_task', { title: '   ' })).isError).toBe(true);
       expect((await call(a.client, 'create_task', { title: 'x'.repeat(201) })).isError).toBe(true);

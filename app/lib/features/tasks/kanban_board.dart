@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../domain/space.dart';
 import '../../domain/task_item.dart';
@@ -7,6 +8,15 @@ import '../../ui/org_widgets.dart';
 import 'task_card.dart';
 
 const _doneStep = 20;
+
+/// Rótulo do chip de prazo do campo rápido: "hoje", "amanhã" ou "dd/MM".
+String quickDueLabel(DateTime due, DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  final diff = DateTime(due.year, due.month, due.day).difference(today).inDays;
+  if (diff == 0) return 'hoje';
+  if (diff == 1) return 'amanhã';
+  return DateFormat('dd/MM').format(due);
+}
 
 String statusLabel(TaskStatus s) => switch (s) {
       TaskStatus.todo => 'A fazer',
@@ -26,6 +36,7 @@ class KanbanBoard extends StatefulWidget {
     required this.onMove,
     required this.onOpen,
     required this.onQuickAdd,
+    required this.onQuickAddWithDialog,
   });
 
   final List<TaskItem> tasks;
@@ -35,7 +46,23 @@ class KanbanBoard extends StatefulWidget {
   final void Function(TaskItem task) onOpen;
 
   /// Devolve `true` quando a tarefa foi criada (o campo é então limpo).
-  final Future<bool> Function(String title, TaskStatus status) onQuickAdd;
+  final Future<bool> Function(
+    String title,
+    TaskStatus status,
+    TaskPriority priority,
+    DateTime? dueAt,
+  )
+  onQuickAdd;
+
+  /// "Mais opções": abre o diálogo completo de criação com o que já foi
+  /// digitado/escolhido. Devolve `true` quando a tarefa foi criada.
+  final Future<bool> Function(
+    String title,
+    TaskStatus status,
+    TaskPriority priority,
+    DateTime? dueAt,
+  )
+  onQuickAddWithDialog;
 
   @override
   State<KanbanBoard> createState() => _KanbanBoardState();
@@ -44,6 +71,8 @@ class KanbanBoard extends StatefulWidget {
 class _KanbanBoardState extends State<KanbanBoard> with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 3, vsync: this);
   final _inputs = {for (final s in TaskStatus.values) s: TextEditingController()};
+  final _priorities = {for (final s in TaskStatus.values) s: TaskPriority.media};
+  final _dues = <TaskStatus, DateTime?>{};
   int _doneLimit = _doneStep;
 
   @override
@@ -55,12 +84,44 @@ class _KanbanBoardState extends State<KanbanBoard> with SingleTickerProviderStat
     super.dispose();
   }
 
+  /// Limpa o campo e volta os chips para "Média" e "Sem prazo".
+  void _reset(TaskStatus status) {
+    _inputs[status]!.clear();
+    setState(() {
+      _priorities[status] = TaskPriority.media;
+      _dues[status] = null;
+    });
+  }
+
   Future<void> _add(TaskStatus status) async {
-    final controller = _inputs[status]!;
-    final title = controller.text.trim();
+    final title = _inputs[status]!.text.trim();
     if (title.isEmpty) return;
-    final ok = await widget.onQuickAdd(title, status);
-    if (ok && mounted) controller.clear();
+    final ok = await widget.onQuickAdd(title, status, _priorities[status]!, _dues[status]);
+    if (ok && mounted) _reset(status);
+  }
+
+  Future<void> _addWithDialog(TaskStatus status) async {
+    final title = _inputs[status]!.text.trim();
+    final ok = await widget.onQuickAddWithDialog(
+      title,
+      status,
+      _priorities[status]!,
+      _dues[status],
+    );
+    if (ok && mounted) _reset(status);
+  }
+
+  Future<void> _pickDue(TaskStatus status) async {
+    final now = widget.now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dues[status] ?? now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (picked != null && mounted) {
+      setState(() => _dues[status] = DateTime(picked.year, picked.month, picked.day, 23, 59));
+    }
   }
 
   List<TaskItem> _column(TaskStatus s) {
@@ -70,6 +131,8 @@ class _KanbanBoardState extends State<KanbanBoard> with SingleTickerProviderStat
       list.sort((a, b) => (b.completedAt ?? epoch).compareTo(a.completedAt ?? epoch));
     } else {
       list.sort((a, b) {
+        final byPriority = b.priority.index.compareTo(a.priority.index);
+        if (byPriority != 0) return byPriority;
         final ad = a.dueAt, bd = b.dueAt;
         if (ad == null && bd != null) return 1;
         if (ad != null && bd == null) return -1;
@@ -121,6 +184,12 @@ class _KanbanBoardState extends State<KanbanBoard> with SingleTickerProviderStat
           doneLimit: _doneLimit,
           onMore: () => setState(() => _doneLimit += _doneStep),
           onSubmit: () => _add(s),
+          priority: _priorities[s]!,
+          dueLabel: _dues[s] == null ? null : quickDueLabel(_dues[s]!, widget.now),
+          onPriority: (p) => setState(() => _priorities[s] = p),
+          onPickDue: () => _pickDue(s),
+          onClearDue: () => setState(() => _dues[s] = null),
+          onMoreOptions: () => _addWithDialog(s),
           onMove: widget.onMove,
           onOpen: widget.onOpen,
           onLongPress: _moveSheet,
@@ -169,6 +238,12 @@ class _KanbanColumn extends StatelessWidget {
     required this.doneLimit,
     required this.onMore,
     required this.onSubmit,
+    required this.priority,
+    required this.dueLabel,
+    required this.onPriority,
+    required this.onPickDue,
+    required this.onClearDue,
+    required this.onMoreOptions,
     required this.onMove,
     required this.onOpen,
     required this.onLongPress,
@@ -183,6 +258,14 @@ class _KanbanColumn extends StatelessWidget {
   final int doneLimit;
   final VoidCallback onMore;
   final VoidCallback onSubmit;
+  final TaskPriority priority;
+
+  /// `null` = sem prazo escolhido.
+  final String? dueLabel;
+  final void Function(TaskPriority) onPriority;
+  final VoidCallback onPickDue;
+  final VoidCallback onClearDue;
+  final VoidCallback onMoreOptions;
   final void Function(TaskItem, TaskStatus) onMove;
   final void Function(TaskItem) onOpen;
   final void Function(TaskItem) onLongPress;
@@ -254,6 +337,16 @@ class _KanbanColumn extends StatelessWidget {
                   isDense: true,
                 ),
               ),
+              const SizedBox(height: 8),
+              _QuickOptions(
+                status: status,
+                priority: priority,
+                dueLabel: dueLabel,
+                onPriority: onPriority,
+                onPickDue: onPickDue,
+                onClearDue: onClearDue,
+                onMoreOptions: onMoreOptions,
+              ),
               const SizedBox(height: 12),
               if (tasks.isEmpty) const EmptyHint('Nada por aqui.'),
               for (final t in shown)
@@ -268,6 +361,92 @@ class _KanbanColumn extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Linha compacta sob o campo rápido: prioridade, prazo e "mais opções".
+class _QuickOptions extends StatelessWidget {
+  const _QuickOptions({
+    required this.status,
+    required this.priority,
+    required this.dueLabel,
+    required this.onPriority,
+    required this.onPickDue,
+    required this.onClearDue,
+    required this.onMoreOptions,
+  });
+
+  final TaskStatus status;
+  final TaskPriority priority;
+  final String? dueLabel;
+  final void Function(TaskPriority) onPriority;
+  final VoidCallback onPickDue;
+  final VoidCallback onClearDue;
+  final VoidCallback onMoreOptions;
+
+  @override
+  Widget build(BuildContext context) {
+    final org = context.org;
+    final name = status.name;
+    final dueSet = dueLabel != null;
+    final urgent = priority == TaskPriority.alta;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        PopupMenuButton<TaskPriority>(
+          key: Key('quick-priority-$name'),
+          tooltip: 'Prioridade',
+          onSelected: onPriority,
+          itemBuilder: (_) => [
+            for (final p in TaskPriority.values)
+              PopupMenuItem(
+                key: Key('quick-priority-$name-${p.name}'),
+                value: p,
+                child: Text(p.label),
+              ),
+          ],
+          child: Chip(
+            avatar: Icon(
+              Icons.flag_outlined,
+              size: 16,
+              color: urgent ? Theme.of(context).colorScheme.error : org.inkMuted,
+            ),
+            label: Text(priority.label),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        ActionChip(
+          key: Key('quick-due-$name'),
+          avatar: Icon(
+            Icons.event_outlined,
+            size: 16,
+            color: dueSet ? org.accentText : org.inkMuted,
+          ),
+          label: Text(dueLabel ?? 'Sem prazo'),
+          onPressed: onPickDue,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        if (dueSet)
+          IconButton(
+            key: Key('quick-due-clear-$name'),
+            tooltip: 'Remover prazo',
+            icon: const Icon(Icons.close, size: 16),
+            visualDensity: VisualDensity.compact,
+            onPressed: onClearDue,
+          ),
+        IconButton(
+          key: Key('quick-more-$name'),
+          tooltip: 'Mais opções',
+          icon: const Icon(Icons.tune, size: 18),
+          visualDensity: VisualDensity.compact,
+          onPressed: onMoreOptions,
+        ),
+      ],
     );
   }
 }
