@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../ui/org_theme.dart';
+import '../widgets/widget_sync.dart';
 import 'providers.dart';
 
 /// Raiz do app. O tema vem de uma única fonte: `settingsProvider`
@@ -15,6 +16,7 @@ class OrganizacionalApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(widgetSyncProvider);
     final id = ref.watch(settingsProvider).value?.theme ?? 'violeta';
     final theme = buildOrgTheme(
       orgThemeById(id),

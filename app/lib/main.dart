@@ -1,5 +1,9 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,6 +14,10 @@ import 'data/supabase_alexa_repository.dart';
 import 'data/supabase_news_repository.dart';
 import 'data/supabase_repository.dart';
 import 'data/supabase_settings_repository.dart';
+import 'widgets/widget_background.dart';
+import 'widgets/widget_links.dart';
+import 'widgets/widget_sink.dart';
+import 'widgets/widget_sync.dart';
 
 const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const _supabaseKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -33,6 +41,17 @@ Future<void> main() async {
     isSignedIn: () => client.auth.currentSession != null,
     refresh: StreamListenable(client.auth.onAuthStateChange),
   );
+  final isAndroid = !kIsWeb && Platform.isAndroid;
+  if (isAndroid) {
+    void handle(Uri? uri) {
+      final route = uri == null ? null : routeForWidgetUri(uri);
+      if (route != null) router.go(route);
+    }
+
+    HomeWidget.initiallyLaunchedFromHomeWidget().then(handle).catchError((_) {});
+    HomeWidget.widgetClicked.listen(handle, onError: (_) {});
+    registerWidgetBackgroundRefresh().catchError((_) {});
+  }
   runApp(ProviderScope(
     overrides: [
       repositoryProvider.overrideWithValue(SupabaseRepository(client)),
@@ -40,6 +59,7 @@ Future<void> main() async {
       alexaRepositoryProvider.overrideWithValue(SupabaseAlexaRepository(client)),
       settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
+      if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
       currentEmailProvider.overrideWithValue(client.auth.currentUser?.email),
     ],
     child: OrganizacionalApp(router: router),

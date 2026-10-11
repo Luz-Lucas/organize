@@ -26,6 +26,39 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <receiver
+            android:name=".widgets.HojeWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_hoje_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_hoje_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.TarefasWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_tarefas_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tarefas_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.ProvaWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_prova_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prova_info" />
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
