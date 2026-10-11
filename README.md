@@ -154,6 +154,17 @@ Rode o app: `cd app && flutter run -d linux --dart-define-from-file=env.json`.
 4. Espere o horário: o despertar toca sozinho. No SQL Editor, `select status, note from wake_runs order by created_at desc limit 1;` mostra `done`, e o alarme "(reserva)" some do app Alexa.
 5. `docker compose stop bridge` na VPS; em até 3 minutos, Hoje mostra o aviso (se houver despertar ativo). Rode `docker compose start bridge`.
 
+## Claude no chat (MCP)
+
+O serviço `mcp/` (junto da ponte, atrás do mesmo Caddy) deixa o Claude ler e alterar agenda, tarefas, notas, avisos e despertares, e agir na casa (Echo, rotinas, luzes), com login OAuth de usuário único.
+
+1. Na VM, defina a senha de acesso: `cd bridge && docker compose run --rm -it mcp node dist/scripts/set-passphrase.js`; cole a linha `MCP_PASSPHRASE_HASH='…'` (com as aspas simples) no `bridge/.env`, junto de `MCP_PUBLIC_URL` e `MCP_JWT_SECRET` (`openssl rand -base64 48`). Veja `bridge/.env.example`.
+2. Suba o serviço: `docker compose up -d mcp caddy`.
+3. No claude.ai: Configurações → Conectores → **Adicionar conector personalizado** → `https://seu-dominio.duckdns.org/mcp`; digite a senha na página que abrir.
+4. Revogar: apague `bridge/mcp-data/refresh.json` (refresh tokens) ou troque `MCP_JWT_SECRET` (tudo); reinicie o `mcp`.
+
+Detalhes, segurança e lista de ferramentas: `mcp/README.md`.
+
 ## Builds
 ```bash
 cd app

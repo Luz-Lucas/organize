@@ -1,3 +1,9 @@
 {$DOMAIN} {
-	reverse_proxy bridge:8080
+	@mcp path /mcp /mcp/* /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/* /.well-known/oauth-authorization-server /.well-known/oauth-authorization-server/* /authorize /token /register /revoke
+	handle @mcp {
+		reverse_proxy mcp:8081
+	}
+	handle {
+		reverse_proxy bridge:8080
+	}
 }

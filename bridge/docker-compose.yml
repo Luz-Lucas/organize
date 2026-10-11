@@ -7,9 +7,22 @@ services:
       TZ: America/Sao_Paulo
     volumes:
       - ./data:/data
+  mcp:
+    build: ../mcp
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: America/Sao_Paulo
+      MCP_PORT: "8081"
+      MCP_DATA_DIR: /data
+    volumes:
+      - ./mcp-data:/data
   caddy:
     image: caddy:2
     restart: unless-stopped
+    depends_on:
+      - bridge
+      - mcp
     ports:
       - "80:80"
       - "443:443"
