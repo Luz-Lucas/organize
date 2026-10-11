@@ -49,6 +49,8 @@ dependencies:
       url: https://github.com/AppFlowy-IO/appflowy-editor.git
       ref: main
   markdown: ^7.3.1
+  home_widget: ^0.10.0
+  workmanager: ^0.10.10
 
 dev_dependencies:
   flutter_test:
