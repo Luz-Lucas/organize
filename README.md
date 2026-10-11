@@ -111,7 +111,7 @@ Na VPS:
 docker compose build
 docker compose run --rm -p 127.0.0.1:3001:3001 bridge node dist/scripts/login.js
 ```
-No seu PC: `ssh -L 3001:127.0.0.1:3001 <usuario>@<vps>` e abra http://localhost:3001. Entre na conta Amazon (com 2FA, se tiver). Esperado: a VPS imprime `Login salvo em /data/alexa-cookie.json` e o comando termina. Se o login da Amazon Brasil falhar, use `ALEXA_SERVICE_HOST=pitangui.amazon.com` no `.env` e repita.
+No seu PC: `ssh -L 3001:127.0.0.1:3001 <usuario>@<vps>` e abra http://localhost:3001. Entre na conta Amazon (com 2FA, se tiver). Esperado: a VPS imprime `Login salvo em /data/alexa-cookie.json` e o comando termina. Contas brasileiras fazem login por `amazon.com` + `pitangui.amazon.com` (padrão do `.env.example`); com `amazon.com.br` o login devolveu "Houve um problema". Se a Amazon pedir troca de senha durante o login, conclua por essa mesma página.
 
 Teste de fumaça:
 ```bash
