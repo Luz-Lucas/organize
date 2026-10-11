@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:organizacional/ui/org_widgets.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/note.dart';
 import 'package:organizacional/domain/space.dart';
@@ -25,7 +26,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('nav-/tarefas')));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Tarefas'), findsOneWidget);
+    expect(find.widgetWithText(PageHeader, 'Tarefas'), findsOneWidget);
   });
 
   testWidgets('recolher esconde rótulos e a árvore; expandir traz de volta', (tester) async {
@@ -42,7 +43,7 @@ void main() {
     // Os itens continuam clicáveis, só com ícones.
     await tester.tap(find.byKey(const ValueKey('nav-/tarefas')));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Tarefas'), findsOneWidget);
+    expect(find.widgetWithText(PageHeader, 'Tarefas'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('sidebar-collapse')));
     await tester.pumpAndSettle();
@@ -69,10 +70,11 @@ void main() {
     expect(find.byKey(const ValueKey('theme-violeta')), findsOneWidget);
   });
 
-  testWidgets('Notas no celular abre a lista de espaços', (tester) async {
+  testWidgets('Notas no celular abre a árvore de notas em tela cheia', (tester) async {
     await pumpApp(tester, MemoryRepository(), size: const Size(400, 800));
     await tester.tap(find.byKey(const ValueKey('nav-/notas')));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Espaços'), findsOneWidget);
+    expect(find.byKey(const Key('notes-search')), findsOneWidget);
+    expect(find.byKey(const Key('tree-new-note')), findsOneWidget);
   });
 }

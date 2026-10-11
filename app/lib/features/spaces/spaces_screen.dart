@@ -7,6 +7,8 @@ import '../../data/repository.dart';
 import '../../domain/ids.dart';
 import '../../domain/space.dart';
 import '../../ui/common.dart';
+import '../../ui/org_theme.dart';
+import '../../ui/org_widgets.dart';
 
 IconData iconForKind(SpaceKind kind) => switch (kind) {
       SpaceKind.materia => Icons.school_outlined,
@@ -68,10 +70,20 @@ class SpacesScreen extends ConsumerWidget {
               if (list.any((s) => s.kind == kind)) ...[
                 SectionHeader(kind.plural),
                 for (final s in list.where((s) => s.kind == kind))
-                  ListTile(
-                    leading: Icon(iconForKind(kind)),
-                    title: Text(s.name),
-                    onTap: () => context.go('/espacos/${s.id}'),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OrgCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      onTap: () => context.go('/espacos/${s.id}'),
+                      child: Row(
+                        children: [
+                          Icon(iconForKind(kind), color: context.org.accentText),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text(s.name, style: Theme.of(context).textTheme.titleMedium)),
+                          Icon(Icons.chevron_right, color: context.org.inkMuted),
+                        ],
+                      ),
+                    ),
                   ),
               ],
           ],

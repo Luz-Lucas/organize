@@ -44,6 +44,11 @@ dependencies:
   uuid: ^4.6.0
   url_launcher: ^6.3.2
   google_fonts: ^8.2.1
+  appflowy_editor:
+    git:
+      url: https://github.com/AppFlowy-IO/appflowy-editor.git
+      ref: main
+  markdown: ^7.3.1
 
 dev_dependencies:
   flutter_test:

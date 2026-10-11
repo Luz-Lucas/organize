@@ -6,18 +6,92 @@ import 'package:go_router/go_router.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/note.dart';
 import 'package:organizacional/domain/space.dart';
+import 'package:organizacional/features/notes/rich_note_editor.dart';
 
 import '../helpers.dart';
+
+/// Alterna do editor rico para o Markdown cru (`note-body`).
+Future<void> showMarkdown(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('toggle-markdown')));
+  await tester.pumpAndSettle();
+}
 
 void main() {
   testWidgets('edição é salva automaticamente', (tester) async {
     final repo = MemoryRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo'));
     await pumpApp(tester, repo, location: '/nota/n1');
+    await showMarkdown(tester);
     await tester.enterText(find.byKey(const Key('note-body')), '# Limites');
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     expect((await repo.watchNotes().first).single.body, '# Limites');
+  });
+
+  const mixed = '# Título\n\nVeja [[Cálculo — Resumo]] e [[Redes]].\n\n'
+      '- [ ] aberta\n- [x] feita\n\n1. um\n2. dois\n\n> citação\n\n```\ncódigo\n```';
+
+  testWidgets('abrir e sair sem editar não grava (Markdown intacto)', (tester) async {
+    final repo = _CountingRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Misto', body: mixed));
+    repo.upserts = 0;
+    await pumpApp(tester, repo, location: '/nota/n1');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rich-editor')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/espacos');
+    await tester.pumpAndSettle();
+    expect(repo.upserts, 0);
+    expect((await repo.watchNotes().first).single.body, mixed);
+  });
+
+  testWidgets('abrir, alternar para Markdown e voltar sem editar não grava', (tester) async {
+    final repo = _CountingRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Misto', body: mixed));
+    repo.upserts = 0;
+    await pumpApp(tester, repo, location: '/nota/n1');
+    await showMarkdown(tester);
+    await showMarkdown(tester);
+    await tester.pump(const Duration(seconds: 2));
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/espacos');
+    await tester.pumpAndSettle();
+    expect(repo.upserts, 0);
+  });
+
+  testWidgets('edição no editor rico grava o Markdown após o debounce', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    await tester.pumpAndSettle();
+    final editor = tester.widget<RichNoteEditor>(find.byKey(const Key('rich-editor')));
+    editor.onChanged('novo');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect((await repo.watchNotes().first).single.body, 'novo');
+  });
+
+  testWidgets('voltar do Markdown recria o editor rico com o texto editado', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    await showMarkdown(tester);
+    await tester.enterText(find.byKey(const Key('note-body')), '# Olá');
+    await showMarkdown(tester);
+    final editor = tester.widget<RichNoteEditor>(find.byKey(const Key('rich-editor')));
+    expect(editor.initialMarkdown, '# Olá');
+  });
+
+  testWidgets('atualização remota sem edição local recria o editor rico', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v1'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    await tester.pumpAndSettle();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v2 remoto'));
+    await tester.pumpAndSettle();
+    final editor = tester.widget<RichNoteEditor>(find.byKey(const Key('rich-editor')));
+    expect(editor.initialMarkdown, 'v2 remoto');
   });
 
   testWidgets('falha ao salvar mantém o texto e mostra aviso até salvar de novo', (tester) async {
@@ -25,6 +99,7 @@ void main() {
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo'));
     await pumpApp(tester, repo, location: '/nota/n1');
     repo.failWrites = true;
+    await showMarkdown(tester);
     await tester.enterText(find.byKey(const Key('note-body')), 'derivadas parciais');
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
@@ -107,6 +182,7 @@ void main() {
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo'));
     await pumpApp(tester, repo, location: '/nota/n1');
     repo.failWrites = true;
+    await showMarkdown(tester);
     await tester.enterText(find.byKey(const Key('note-body')), 'texto perdido');
     // Navega para fora ANTES do debounce de 800 ms disparar: o dispose()
     // deve tentar salvar, falhar (failWrites) e guardar o rascunho.
@@ -119,6 +195,7 @@ void main() {
     final backContext = tester.element(find.byType(Scaffold).first);
     GoRouter.of(backContext).go('/nota/n1');
     await tester.pumpAndSettle();
+    await showMarkdown(tester);
 
     expect(find.text('texto perdido'), findsOneWidget);
     expect(find.byKey(const Key('save-error')), findsOneWidget);
@@ -134,6 +211,7 @@ void main() {
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo'));
     await pumpApp(tester, repo, location: '/nota/n1');
     repo.failWrites = true;
+    await showMarkdown(tester);
     await tester.enterText(find.byKey(const Key('note-body')), 'texto perdido');
     var context = tester.element(find.byType(Scaffold).first);
     GoRouter.of(context).go('/espacos');
@@ -143,6 +221,7 @@ void main() {
     context = tester.element(find.byType(Scaffold).first);
     GoRouter.of(context).go('/nota/n1');
     await tester.pumpAndSettle();
+    await showMarkdown(tester);
     expect(find.text('texto perdido'), findsOneWidget);
     context = tester.element(find.byType(Scaffold).first);
     GoRouter.of(context).go('/espacos');
@@ -153,6 +232,7 @@ void main() {
     context = tester.element(find.byType(Scaffold).first);
     GoRouter.of(context).go('/nota/n1');
     await tester.pumpAndSettle();
+    await showMarkdown(tester);
     expect(find.text('texto perdido'), findsOneWidget);
     expect(
       find.text('Alterações não salvas foram recuperadas. Edite para tentar salvar de novo.'),
@@ -165,6 +245,7 @@ void main() {
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo'));
     await pumpApp(tester, repo, location: '/nota/n1');
     await tester.enterText(find.byKey(const Key('note-title')), '');
+    await showMarkdown(tester);
     await tester.enterText(find.byKey(const Key('note-body')), 'corpo sem título');
     final context = tester.element(find.byType(Scaffold).first);
     GoRouter.of(context).go('/espacos');
@@ -178,6 +259,7 @@ void main() {
     final repo = MemoryRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v1'));
     await pumpApp(tester, repo, location: '/nota/n1');
+    await showMarkdown(tester);
     expect(find.text('v1'), findsOneWidget);
 
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v2 (remoto)'));
@@ -192,6 +274,7 @@ void main() {
     final repo = MemoryRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v1'));
     await pumpApp(tester, repo, location: '/nota/n1');
+    await showMarkdown(tester);
     await tester.enterText(find.byKey(const Key('note-body')), 'editando localmente');
 
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'v2 (remoto)'));
@@ -242,6 +325,7 @@ void main() {
     await tester.tap(find.text('Limites'));
     await tester.pumpAndSettle();
 
+    await showMarkdown(tester);
     await tester.enterText(find.byKey(const Key('note-body')), 'edição pendente');
     await tester.tap(find.byKey(const Key('delete-note')));
     await tester.pump();
@@ -274,6 +358,7 @@ void main() {
     final repo = _FlakyNoteRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: 'conteúdo'));
     await pumpApp(tester, repo, location: '/nota/n1');
+    await showMarkdown(tester);
     expect(find.byKey(const Key('note-body')), findsOneWidget);
 
     repo.failNotesStream(Exception('RealtimeSubscribeException: network blip'));
@@ -295,6 +380,7 @@ void main() {
     final gate1 = repo.addGate();
     final gate2 = repo.addGate();
 
+    await showMarkdown(tester);
     await tester.enterText(find.byKey(const Key('note-body')), 'v1');
     await tester.pump(const Duration(milliseconds: 800)); // dispara o 1º salvamento (preso)
     await tester.enterText(find.byKey(const Key('note-body')), 'v2 final');
@@ -357,5 +443,16 @@ class _FlakyNoteRepository extends MemoryRepository {
       },
     );
     return controller.stream;
+  }
+}
+
+/// Conta quantas vezes uma nota foi gravada.
+class _CountingRepository extends MemoryRepository {
+  int upserts = 0;
+
+  @override
+  Future<void> upsertNote(Note note) {
+    upserts++;
+    return super.upsertNote(note);
   }
 }

@@ -10,6 +10,9 @@ import '../../domain/space.dart';
 import '../../domain/task_item.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
+import '../../ui/org_theme.dart';
+import '../../ui/org_widgets.dart';
+import 'spaces_screen.dart' show iconForKind;
 import '../../ui/task_tile.dart';
 
 class SpaceScreen extends ConsumerWidget {
@@ -96,6 +99,32 @@ class SpaceScreen extends ConsumerWidget {
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  OrgCard(
+                    child: Row(
+                      children: [
+                        Icon(iconForKind(space.kind), color: context.org.accentText, size: 28),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(space.name, style: Theme.of(context).textTheme.titleLarge),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${plural(spaceNotes.length, 'nota', 'notas')} · '
+                                '${plural(openTasks.length, 'tarefa aberta', 'tarefas abertas')}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: context.org.inkMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        OrgBadge(space.kind.singular),
+                      ],
+                    ),
+                  ),
                   Row(
                     children: [
                       const Expanded(child: SectionHeader('Notas')),
@@ -109,10 +138,19 @@ class SpaceScreen extends ConsumerWidget {
                   ),
                   if (spaceNotes.isEmpty) const EmptyHint('Nenhuma nota.'),
                   for (final n in spaceNotes)
-                    ListTile(
-                      leading: const Icon(Icons.description_outlined),
-                      title: Text(n.title),
-                      onTap: () => context.push('/nota/${n.id}'),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: OrgCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        onTap: () => context.push('/nota/${n.id}'),
+                        child: Row(
+                          children: [
+                            Icon(Icons.description_outlined, color: context.org.inkMuted),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text(n.title)),
+                          ],
+                        ),
+                      ),
                     ),
                   const SectionHeader('Tarefas abertas'),
                   if (openTasks.isEmpty) const EmptyHint('Nenhuma tarefa aberta.'),

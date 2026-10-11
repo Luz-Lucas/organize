@@ -12,6 +12,7 @@ import '../features/settings/settings_screen.dart';
 import '../features/news/news_screen.dart';
 import '../features/news/news_settings_screen.dart';
 import '../features/notes/note_screen.dart';
+import '../features/notes/notes_screen.dart';
 import '../features/spaces/space_screen.dart';
 import '../features/spaces/spaces_screen.dart';
 import '../features/tasks/tasks_screen.dart';
@@ -55,7 +56,7 @@ GoRouter buildRouter({
             GoRoute(path: '/', builder: (context, state) => const TodayScreen()),
             GoRoute(path: '/agenda', builder: (context, state) => const AgendaScreen()),
             GoRoute(path: '/tarefas', builder: (context, state) => const TasksScreen()),
-            GoRoute(path: '/notas', builder: (context, state) => const SpacesScreen()),
+            GoRoute(path: '/notas', builder: (context, state) => const NotesScreen()),
             GoRoute(path: '/mais', builder: (context, state) => const MoreScreen()),
             GoRoute(path: '/ajustes', builder: (context, state) => const SettingsScreen()),
             GoRoute(path: '/espacos', builder: (context, state) => const SpacesScreen()),

@@ -11,6 +11,7 @@ import '../../domain/ids.dart';
 import '../../domain/note.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
+import 'rich_note_editor.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   const NoteScreen({super.key, required this.noteId});
@@ -33,6 +34,11 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Note? _lastSaved;
   Timer? _debounce;
   bool _preview = false;
+  // Mostra o Markdown cru (TextField) em vez do editor rico.
+  bool _markdownMode = false;
+  // Muda para recriar o editor rico a partir de `_body` (volta do modo
+  // Markdown ou atualização remota).
+  int _editorEpoch = 0;
   String? _saveError;
   String? _remoteNotice;
   bool _saving = false;
@@ -180,6 +186,105 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
+  Widget _buildBody(
+      BuildContext context, ThemeData theme, List<Note> all, List<Note> backlinks) {
+    final header = <Widget>[
+      TextField(
+        key: const Key('note-title'),
+        controller: _title,
+        onChanged: (_) => _changed(),
+        style: theme.textTheme.headlineMedium,
+        decoration: const InputDecoration.collapsed(hintText: 'Título'),
+      ),
+      if (_saveError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            _saveError!,
+            key: const Key('save-error'),
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+        ),
+      if (_remoteNotice != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            _remoteNotice!,
+            key: const Key('remote-notice'),
+            style: TextStyle(color: theme.colorScheme.tertiary),
+          ),
+        ),
+      const SizedBox(height: 16),
+    ];
+    final backlinkTiles = <Widget>[
+      if (backlinks.isNotEmpty) ...[
+        const SectionHeader('Mencionada em'),
+        for (final n in backlinks)
+          ListTile(
+            leading: const Icon(Icons.link),
+            title: Text(n.title),
+            onTap: () => context.push('/nota/${n.id}'),
+          ),
+      ],
+    ];
+
+    if (!_preview && !_markdownMode) {
+      // O editor rico precisa de altura limitada (ele rola por conta própria),
+      // então fica num Expanded; os backlinks vão no rodapé dele.
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ...header,
+            Expanded(
+              child: KeyedSubtree(
+                key: ValueKey(_editorEpoch),
+                child: RichNoteEditor(
+                  key: const Key('rich-editor'),
+                  initialMarkdown: _body.text,
+                  onChanged: (md) {
+                    _body.text = md;
+                    _changed();
+                  },
+                  onWikiLink: (title) =>
+                      _openLink('wiki:${Uri.encodeComponent(title)}', all),
+                  footer: backlinkTiles.isEmpty
+                      ? const SizedBox(height: 48)
+                      : Column(children: [...backlinkTiles, const SizedBox(height: 48)]),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 48),
+      children: [
+        ...header,
+        if (_preview)
+          MarkdownBody(
+            data: wikiLinksToMarkdown(_body.text),
+            onTapLink: (text, href, title) => _openLink(href, all),
+          )
+        else
+          TextField(
+            key: const Key('note-body'),
+            controller: _body,
+            onChanged: (_) => _changed(),
+            maxLines: null,
+            minLines: 12,
+            keyboardType: TextInputType.multiline,
+            decoration: const InputDecoration.collapsed(
+              hintText: 'Escreva em Markdown. Use [[Título]] para ligar notas.',
+            ),
+          ),
+        ...backlinkTiles,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final notes = ref.watch(notesProvider);
@@ -207,6 +312,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             _lastSaved = current;
             _title.text = current.title;
             _body.text = current.body;
+            _editorEpoch++;
             _remoteNotice = null;
           }
         }
@@ -224,6 +330,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         appBar: AppBar(
           actions: [
             IconButton(
+              key: const Key('toggle-markdown'),
+              tooltip: _markdownMode ? 'Ver editor' : 'Ver como Markdown',
+              icon: Icon(_markdownMode ? Icons.edit_note : Icons.code),
+              onPressed: () => setState(() {
+                if (_markdownMode) _editorEpoch++;
+                _markdownMode = !_markdownMode;
+                _preview = false;
+              }),
+            ),
+            IconButton(
               key: const Key('toggle-preview'),
               tooltip: _preview ? 'Editar' : 'Visualizar',
               icon: Icon(_preview ? Icons.edit_outlined : Icons.visibility_outlined),
@@ -237,63 +353,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 48),
-          children: [
-            TextField(
-              key: const Key('note-title'),
-              controller: _title,
-              onChanged: (_) => _changed(),
-              style: theme.textTheme.headlineSmall,
-              decoration: const InputDecoration.collapsed(hintText: 'Título'),
-            ),
-            if (_saveError != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _saveError!,
-                  key: const Key('save-error'),
-                  style: TextStyle(color: theme.colorScheme.error),
-                ),
-              ),
-            if (_remoteNotice != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _remoteNotice!,
-                  key: const Key('remote-notice'),
-                  style: TextStyle(color: theme.colorScheme.tertiary),
-                ),
-              ),
-            const SizedBox(height: 16),
-            if (_preview)
-              MarkdownBody(
-                data: wikiLinksToMarkdown(_body.text),
-                onTapLink: (text, href, title) => _openLink(href, all),
-              )
-            else
-              TextField(
-                key: const Key('note-body'),
-                controller: _body,
-                onChanged: (_) => _changed(),
-                maxLines: null,
-                minLines: 12,
-                keyboardType: TextInputType.multiline,
-                decoration: const InputDecoration.collapsed(
-                  hintText: 'Escreva em Markdown. Use [[Título]] para ligar notas.',
-                ),
-              ),
-            if (backlinks.isNotEmpty) ...[
-              const SectionHeader('Mencionada em'),
-              for (final n in backlinks)
-                ListTile(
-                  leading: const Icon(Icons.link),
-                  title: Text(n.title),
-                  onTap: () => context.push('/nota/${n.id}'),
-                ),
-            ],
-          ],
-        ),
+        body: _buildBody(context, theme, all, backlinks),
       );
     });
   }
