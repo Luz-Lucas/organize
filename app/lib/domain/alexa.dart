@@ -271,6 +271,10 @@ String? validateWakePlan(WakePlan p) {
     }
     if ((p.spotifyQuery?.trim() ?? '').isEmpty) return 'Para parar a música, escolha uma busca do Spotify.';
   }
+  // "Encerrar" só vale depois de uma música que tocou; sem busca ninguém falaria nada ao despertar.
+  if (p.afterMusic == AfterMusic.end && (p.spotifyQuery?.trim() ?? '').isEmpty) {
+    return 'Para encerrar depois da música, escolha uma busca do Spotify.';
+  }
   return null;
 }
 

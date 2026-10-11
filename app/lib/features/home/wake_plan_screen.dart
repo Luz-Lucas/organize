@@ -228,7 +228,13 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
             TextField(
               key: const Key('wake-spotify'),
               controller: _spotify,
-              onChanged: (_) => setState(() => _dirty = true),
+              onChanged: (v) => setState(() {
+                _dirty = true;
+                // Sem busca não há música: "Encerrar" deixaria o despertar mudo.
+                if (v.trim().isEmpty && _draft!.afterMusic == AfterMusic.end) {
+                  _draft = _draft!.copyWith(afterMusic: AfterMusic.briefing);
+                }
+              }),
               decoration: const InputDecoration(
                 labelText: 'Buscar no Spotify (opcional)',
                 hintText: 'Ex.: playlist Bom Dia',
@@ -267,11 +273,20 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
                 showSelectedIcon: false,
                 segments: [
                   for (final a in AfterMusic.values)
-                    ButtonSegment(value: a, label: Text(a.label, key: Key('after-music-${a.name}'))),
+                    ButtonSegment(
+                      value: a,
+                      enabled: a != AfterMusic.end || hasMusic, // "Encerrar" só existe com música
+                      label: Text(a.label, key: Key('after-music-${a.name}')),
+                    ),
                 ],
                 selected: {d.afterMusic},
                 onSelectionChanged: (s) => _update((d) => d.copyWith(afterMusic: s.first)),
               ),
+              if (d.afterMusic == AfterMusic.end)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('Depois da música não haverá resumo falado.', key: Key('after-music-end-hint')),
+                ),
               if (stopping)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),

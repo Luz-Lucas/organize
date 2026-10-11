@@ -40,6 +40,25 @@ describe('fetchWeather', () => {
     expect(f.calls[0].init?.signal).toBeInstanceOf(AbortSignal);
   });
 
+  it('só coordenadas arredondadas a 2 casas (~1 km) saem para o Open-Meteo', async () => {
+    const f = fakeFetch(() => json(forecast()));
+    await fetchWeather(-19.9167, -43.9345, { fetch: f.fetch });
+    await fetchWeather(10.005, 0, { fetch: f.fetch });
+    const first = new URL(f.calls[0].url);
+    expect(first.searchParams.get('latitude')).toBe('-19.9167');
+    expect(first.searchParams.get('longitude')).toBe('-43.9345');
+    expect(f.calls[0].url).not.toMatch(/\d\.\d{3}/);
+    expect(new URL(f.calls[1].url).searchParams.get('longitude')).toBe('0.00');
+  });
+
+  it('usa o fuso informado; o padrão é America/Sao_Paulo', async () => {
+    const f = fakeFetch(() => json(forecast()));
+    await fetchWeather(-19.9167, -45.7, { fetch: f.fetch }, 'America/Manaus');
+    await fetchWeather(-19.9167, -45.7, { fetch: f.fetch });
+    expect(new URL(f.calls[0].url).searchParams.get('timezone')).toBe('America/Manaus');
+    expect(new URL(f.calls[1].url).searchParams.get('timezone')).toBe('America/Sao_Paulo');
+  });
+
   it('probabilidade de chuva ausente vira null', async () => {
     const f = fakeFetch(() => json(forecast({
       daily: { temperature_2m_max: [27.8], temperature_2m_min: [16.5], precipitation_probability_max: [null] },

@@ -239,6 +239,60 @@ void main() {
       expect(find.text('Parar a música após'), findsNothing);
     });
 
+    testWidgets('sem busca do Spotify a opção "Encerrar" fica desabilitada; com busca, habilitada', (tester) async {
+      final alexa = _alexa(plans: const []);
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/novo', now: _now, alexa: alexa, size: _tall);
+      bool endEnabled() => tester
+          .widget<SegmentedButton<AfterMusic>>(find.byType(SegmentedButton<AfterMusic>))
+          .segments
+          .firstWhere((s) => s.value == AfterMusic.end)
+          .enabled;
+      expect(find.byKey(const Key('after-music-headlines')), findsOneWidget);
+      expect(endEnabled(), isFalse);
+      await tester.enterText(find.byKey(const Key('wake-spotify')), 'rock');
+      await tester.pump();
+      expect(endEnabled(), isTrue);
+    });
+
+    testWidgets('escolher "Encerrar" mostra o aviso de que não haverá resumo falado', (tester) async {
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: _alexa(), size: _tall);
+      const hint = 'Depois da música não haverá resumo falado.';
+      expect(find.text(hint), findsNothing);
+      await tester.tap(find.byKey(const Key('after-music-end')));
+      await tester.pump();
+      expect(find.text(hint), findsOneWidget);
+      await tester.tap(find.byKey(const Key('after-music-headlines')));
+      await tester.pump();
+      expect(find.text(hint), findsNothing);
+    });
+
+    testWidgets('apagar a busca com "Encerrar" escolhido volta para o resumo do dia', (tester) async {
+      final alexa = _alexa();
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+      await tester.tap(find.byKey(const Key('after-music-end')));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('wake-spotify')), '');
+      await tester.pump();
+      expect(tester.widget<SegmentedButton<AfterMusic>>(find.byType(SegmentedButton<AfterMusic>)).selected, {AfterMusic.briefing});
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      expect((await alexa.watchWakePlans().first).single.afterMusic, AfterMusic.briefing);
+    });
+
+    testWidgets('despertar antigo com "Encerrar" e sem busca não salva e explica o motivo', (tester) async {
+      final alexa = _alexa(plans: const [
+        WakePlan(
+          id: 'p1', label: 'Aula cedo', days: [1, 2, 3, 4, 5], hour: 7, minute: 0,
+          echoDeviceId: 'ECHO', afterMusic: AfterMusic.end,
+        ),
+      ]);
+      await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);
+      await tester.tap(find.byKey(const Key('wake-save')));
+      await tester.pumpAndSettle();
+      expect(find.text('Para encerrar depois da música, escolha uma busca do Spotify.'), findsOneWidget);
+      expect((await alexa.watchWakePlans().first).single.afterMusic, AfterMusic.end);
+    });
+
     testWidgets('apagar a busca descarta o tempo de parada ao salvar', (tester) async {
       final alexa = _alexa();
       await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _tall);

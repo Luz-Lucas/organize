@@ -70,6 +70,15 @@ void main() {
     expect(icon.sets, ['cacto']);
   });
 
+  test('current() nulo (zero ou vários aliases ligados) faz o sync chamar set para reparar', () async {
+    final settings = MemorySettingsRepository(initial: UserSettings.fromMap({'theme': 'violeta'}));
+    final icon = FakeIconService(currentId: null);
+    _container(settings, icon);
+    await pumpEventQueue();
+    expect(icon.sets, ['violeta']);
+    expect(icon.currentId, 'violeta');
+  });
+
   test('set lançando exceção é ignorado e o app segue funcionando', () async {
     final settings = MemorySettingsRepository();
     final icon = FakeIconService(currentId: 'violeta', failSet: true);

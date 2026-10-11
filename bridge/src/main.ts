@@ -29,9 +29,9 @@ const db = createClient(cfg.supabaseUrl, cfg.serviceKey, { auth: { persistSessio
 const store = new SupabaseStore(db, cfg.userId, log);
 const briefingInput = () => store.briefingInput(new Date(), cfg.timeZone);
 
-/** Texto falado do clima para um ponto; falhas viram null (o despertar segue sem clima). Não registra coordenadas. */
+/** Texto falado do clima para um ponto; falhas viram null (o despertar segue sem clima). Não registra coordenadas; só coordenadas arredondadas (~1 km) saem da ponte. */
 async function weatherAt(at: { lat: number; lon: number }): Promise<string | null> {
-  const w = await fetchWeather(at.lat, at.lon, { fetch });
+  const w = await fetchWeather(at.lat, at.lon, { fetch }, cfg.timeZone);
   if (!w) return null;
   const city = await reverseCity(at.lat, at.lon, { fetch });
   return weatherText({ city, w });

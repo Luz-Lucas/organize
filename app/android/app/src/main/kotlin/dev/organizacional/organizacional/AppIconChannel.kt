@@ -9,8 +9,9 @@ import io.flutter.plugin.common.MethodChannel
 
 /**
  * Canal `dev.organizacional/app_icon`: um `activity-alias` por tema, só um habilitado.
- * `current` devolve o tema do alias habilitado; `set(theme)` habilita o alvo primeiro
- * e depois desabilita os demais (nunca fica sem nenhum ícone de lançamento).
+ * `current` devolve o tema do alias habilitado só quando EXATAMENTE um está habilitado (senão `null`,
+ * e o lado Dart chama `set` para reparar); `set(theme)` habilita o alvo primeiro e depois tenta
+ * desabilitar todos os demais, mesmo que uma chamada falhe (nunca fica sem nenhum ícone de lançamento).
  */
 class AppIconChannel(private val context: Context) : MethodChannel.MethodCallHandler {
 
@@ -43,7 +44,7 @@ class AppIconChannel(private val context: Context) : MethodChannel.MethodCallHan
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "current" -> result.success(THEME_IDS.firstOrNull { isEnabled(it) })
+            "current" -> result.success(THEME_IDS.filter { isEnabled(it) }.singleOrNull())
             "set" -> {
                 val theme = call.argument<String>("theme")
                 if (theme == null || theme !in THEME_IDS) {
@@ -56,15 +57,22 @@ class AppIconChannel(private val context: Context) : MethodChannel.MethodCallHan
                         PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                         PackageManager.DONT_KILL_APP,
                     )
+                    // Tenta desabilitar todos os outros; um erro não interrompe os demais e é reportado no fim.
+                    val errors = mutableListOf<String>()
                     for (other in THEME_IDS) {
                         if (other == theme) continue
-                        pm.setComponentEnabledSetting(
-                            component(other),
-                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                            PackageManager.DONT_KILL_APP,
-                        )
+                        try {
+                            pm.setComponentEnabledSetting(
+                                component(other),
+                                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                PackageManager.DONT_KILL_APP,
+                            )
+                        } catch (e: Exception) {
+                            errors.add("$other: ${e.message}")
+                        }
                     }
-                    result.success(null)
+                    if (errors.isEmpty()) result.success(null)
+                    else result.error("set_failed", errors.joinToString("; "), null)
                 } catch (e: Exception) {
                     result.error("set_failed", e.message, null)
                 }

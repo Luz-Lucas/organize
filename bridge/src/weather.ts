@@ -41,16 +41,25 @@ async function getJson(url: string, deps: WeatherDeps, headers?: Record<string, 
   return res.json();
 }
 
-/** Previsão atual + máxima/mínima/chuva do dia (Open-Meteo, sem chave). Qualquer falha -> null. */
-export async function fetchWeather(lat: number, lon: number, deps: WeatherDeps): Promise<Weather | null> {
+const round2 = (n: number) => { const r = Math.round(n * 100) / 100; return r === 0 ? 0 : r; };
+
+const DEFAULT_TIME_ZONE = 'America/Sao_Paulo';
+
+/**
+ * Previsão atual + máxima/mínima/chuva do dia (Open-Meteo, sem chave). Qualquer falha -> null.
+ * Só coordenadas arredondadas a 2 casas (~1 km, suficiente para o clima) saem da ponte; `timeZone` define o "dia".
+ */
+export async function fetchWeather(
+  lat: number, lon: number, deps: WeatherDeps, timeZone: string = DEFAULT_TIME_ZONE,
+): Promise<Weather | null> {
   if (!isNum(lat) || !isNum(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
   try {
     const url = new URL('https://api.open-meteo.com/v1/forecast');
-    url.searchParams.set('latitude', String(lat));
-    url.searchParams.set('longitude', String(lon));
+    url.searchParams.set('latitude', round2(lat).toFixed(2));
+    url.searchParams.set('longitude', round2(lon).toFixed(2));
     url.searchParams.set('current', 'temperature_2m,weather_code');
     url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,precipitation_probability_max');
-    url.searchParams.set('timezone', 'America/Sao_Paulo');
+    url.searchParams.set('timezone', timeZone || DEFAULT_TIME_ZONE);
     url.searchParams.set('forecast_days', '1');
 
     const body = await getJson(url.toString(), deps);
@@ -71,8 +80,6 @@ export async function fetchWeather(lat: number, lon: number, deps: WeatherDeps):
     return null;
   }
 }
-
-const round2 = (n: number) => { const r = Math.round(n * 100) / 100; return r === 0 ? 0 : r; };
 
 /**
  * Nome da cidade via Nominatim, com cache em memória por coordenada arredondada a 2 casas

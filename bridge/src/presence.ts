@@ -16,8 +16,12 @@ export interface PresenceInput {
 
 const EARTH_RADIUS_M = 6371000;
 const DEFAULT_MAX_AGE_MIN = 45;
-/** Margem máxima que a precisão do GPS pode abater da distância (cobre o erro dentro de casa). */
+/** Margem máxima que a precisão do GPS pode abater da distância para dizer "em casa" (cobre o erro dentro de casa). */
 const MAX_ACCURACY_MARGIN_M = 25;
+/** Tolerância a relógios desalinhados: carimbos mais de 2 min no futuro são suspeitos. */
+const MAX_FUTURE_SKEW_MS = 2 * 60000;
+/** Sem precisão informada, só vale "fora" quando a distância passa de 3x o raio. */
+const NO_ACCURACY_AWAY_FACTOR = 3;
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -32,7 +36,9 @@ export function haversineM(a: GeoPoint, b: GeoPoint): number {
 /**
  * Decide se o usuário está em casa na hora do despertar.
  * Só devolve `away` quando há certeza: sem casa/exigência -> `not_required`;
- * sem localização recente -> `unknown` (o chamador deve tocar mesmo assim).
+ * sem localização recente (ou com carimbo no futuro) -> `unknown` (o chamador toca mesmo assim).
+ * `away` exige distância menos a precisão COMPLETA do GPS acima do raio; sem precisão informada,
+ * exige distância acima de 3x o raio. Qualquer dúvida é `unknown`.
  */
 export function evaluatePresence(i: PresenceInput): PresenceResult {
   if (!i.home || !i.requireHome) return { state: 'not_required', distanceM: null };
@@ -40,9 +46,13 @@ export function evaluatePresence(i: PresenceInput): PresenceResult {
   const loc = i.location;
   const maxAgeMs = (i.maxAgeMin ?? DEFAULT_MAX_AGE_MIN) * 60000;
   const ageMs = loc ? i.now.getTime() - loc.reportedAt.getTime() : Number.NaN;
-  if (!loc || Number.isNaN(ageMs) || ageMs > maxAgeMs) return { state: 'unknown', distanceM: null };
+  if (!loc || Number.isNaN(ageMs) || ageMs > maxAgeMs || ageMs < -MAX_FUTURE_SKEW_MS) return { state: 'unknown', distanceM: null };
 
   const distanceM = haversineM(i.home, loc);
-  const margin = Math.min(Math.max(loc.accuracyM ?? 0, 0), MAX_ACCURACY_MARGIN_M);
-  return { state: distanceM - margin <= i.home.radiusM ? 'home' : 'away', distanceM };
+  const radius = i.home.radiusM;
+  const acc = typeof loc.accuracyM === 'number' && Number.isFinite(loc.accuracyM) ? Math.max(loc.accuracyM, 0) : null;
+
+  if (distanceM - Math.min(acc ?? 0, MAX_ACCURACY_MARGIN_M) <= radius) return { state: 'home', distanceM };
+  const away = acc === null ? distanceM > radius * NO_ACCURACY_AWAY_FACTOR : distanceM - acc > radius;
+  return { state: away ? 'away' : 'unknown', distanceM };
 }

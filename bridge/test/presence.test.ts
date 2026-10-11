@@ -78,19 +78,37 @@ describe('evaluatePresence', () => {
     expect(r.distanceM).toBeCloseTo(70, 0);
   });
 
-  it('a 80 m com precisão 30: fora (80 - 25 = 55)', () => {
-    const r = evaluatePresence({ home, requireHome: true, location: loc(80, 30), now });
-    expect(r.state).toBe('away');
-    expect(r.distanceM).toBeCloseTo(80, 0);
+  it('a 78 m com precisão 30: desconhecido (78 - 30 = 48 não passa de 50)', () => {
+    const r = evaluatePresence({ home, requireHome: true, location: loc(78, 30), now });
+    expect(r.state).toBe('unknown');
+    expect(r.distanceM!).toBeCloseTo(78, 0);
   });
 
-  it('a margem de precisão é limitada a 25 m', () => {
-    // precisão de 500 m não deixa ninguém a 80 m "em casa"
-    expect(evaluatePresence({ home, requireHome: true, location: loc(80, 500), now }).state).toBe('away');
+  it('a 90 m com precisão 30: fora (90 - 30 = 60 > 50)', () => {
+    expect(evaluatePresence({ home, requireHome: true, location: loc(90, 30), now }).state).toBe('away');
   });
 
-  it('sem precisão informada: sem margem', () => {
-    expect(evaluatePresence({ home, requireHome: true, location: loc(60, null), now }).state).toBe('away');
+  it('a regra de "em casa" continua limitada a 25 m de margem', () => {
+    expect(evaluatePresence({ home, requireHome: true, location: loc(80, 500), now }).state).not.toBe('home');
+  });
+
+  it('GPS fraco (precisão 300 m) a 120 m: não é fora', () => {
+    expect(evaluatePresence({ home, requireHome: true, location: loc(120, 300), now }).state).toBe('unknown');
+  });
+
+  it('GPS fraco (precisão acima de 100 m) só é fora se a distância supera raio + precisão', () => {
+    expect(evaluatePresence({ home, requireHome: true, location: loc(500, 150), now }).state).toBe('away');
+    expect(evaluatePresence({ home, requireHome: true, location: loc(190, 150), now }).state).toBe('unknown');
+  });
+
+  it('precisão 20 m a 200 m: fora', () => {
+    expect(evaluatePresence({ home, requireHome: true, location: loc(200, 20), now }).state).toBe('away');
+  });
+
+  it('sem precisão informada: perto da borda é desconhecido; longe (> 3x o raio) é fora; dentro é em casa', () => {
+    expect(evaluatePresence({ home, requireHome: true, location: loc(70, null), now }).state).toBe('unknown');
+    expect(evaluatePresence({ home, requireHome: true, location: loc(60, undefined as unknown as null), now }).state).toBe('unknown');
+    expect(evaluatePresence({ home, requireHome: true, location: loc(400, null), now }).state).toBe('away');
     expect(evaluatePresence({ home, requireHome: true, location: loc(40, null), now }).state).toBe('home');
   });
 
@@ -98,9 +116,16 @@ describe('evaluatePresence', () => {
     expect(evaluatePresence({ home, requireHome: true, location: loc(60, -10), now }).state).toBe('away');
   });
 
-  it('localização com carimbo no futuro (relógio desalinhado) vale como recente', () => {
+  it('localização com carimbo até 2 min no futuro (relógio desalinhado) vale como recente', () => {
     const r = evaluatePresence({ home, requireHome: true, location: loc(10, null, minutesAgo(-2)), now });
     expect(r.state).toBe('home');
+  });
+
+  it('carimbo mais de 2 min no futuro: desconhecido', () => {
+    const r = evaluatePresence({ home, requireHome: true, location: loc(5000, 10, minutesAgo(-3)), now });
+    expect(r).toEqual({ state: 'unknown', distanceM: null });
+    const far = evaluatePresence({ home, requireHome: true, location: loc(5000, 10, new Date(now.getTime() + 24 * 3600_000)), now });
+    expect(far.state).toBe('unknown');
   });
 
   it('Belo Horizonte� vs. São Paulo: fora, a cerca de 173 km', () => {

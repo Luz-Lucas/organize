@@ -163,6 +163,21 @@ void main() {
       expect(validateWakePlan(noQuery.copyWith(spotifyQuery: '   ')), stop);
       expect(validateWakePlan(noQuery.copyWith(clearMusicStop: true)), isNull);
     });
+
+    test('validateWakePlan: "Encerrar" exige busca do Spotify (senão ninguém fala nada ao despertar)', () {
+      const msg = 'Para encerrar depois da música, escolha uma busca do Spotify.';
+      const noQuery = WakePlan(
+        id: 'p2', label: 'x', days: [1], hour: 7, minute: 0, echoDeviceId: 'ECHO', afterMusic: AfterMusic.end,
+      );
+      expect(validateWakePlan(noQuery), msg);
+      expect(validateWakePlan(noQuery.copyWith(spotifyQuery: '   ')), msg);
+      expect(validateWakePlan(plan.copyWith(afterMusic: AfterMusic.end)), isNull);
+      // Música curta não é recusada: só há o aviso na tela.
+      expect(validateWakePlan(plan.copyWith(afterMusic: AfterMusic.end, musicStopAfterSec: 5)), isNull);
+      // As outras escolhas continuam livres sem busca.
+      expect(validateWakePlan(noQuery.copyWith(afterMusic: AfterMusic.headlines)), isNull);
+      expect(validateWakePlan(noQuery.copyWith(afterMusic: AfterMusic.briefing)), isNull);
+    });
   });
 
   test('commandOutcome', () {

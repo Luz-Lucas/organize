@@ -3,7 +3,12 @@ import { AlexaAuthError, type AlexaGateway } from './gateway.js';
 import { evaluatePresence, type GeoPoint, type PresenceInput } from './presence.js';
 import type { RunStatus, WakeAction, WakeDeviceAction, WakePlan } from './scheduler.js';
 
-export interface WakeResult { ok: boolean; notes: string[] }
+export interface WakeResult {
+  ok: boolean;
+  notes: string[];
+  /** Login expirado numa ação de dispositivo depois que o áudio já tocou: o despertar deu certo, mas o chamador deve tratar o login. */
+  authError?: AlexaAuthError;
+}
 
 export interface WakeTexts { briefing: string; headlines: string }
 
@@ -16,10 +21,11 @@ export const TEST_MAX_BRIEFING_WAIT_SEC = 10;
 /** Espera, em segundos, entre o início da música e o resumo (quando a música não é parada). */
 export const briefingWaitSec = (plan: WakePlan): number => plan.briefingDelaySec ?? plan.briefingDelayMin * 60;
 
-/** Plano usado por "Testar agora": espera do resumo limitada a 10 s e parada da música limitada. */
+/** Plano usado por "Testar agora": espera do resumo limitada a 10 s, parada da música limitada e dispositivos sem atraso. */
 export function testPlan(plan: WakePlan): WakePlan {
   return {
     ...plan,
+    deviceActions: plan.deviceActions.map((d) => ({ ...d, delayMin: 0 })),
     briefingDelayMin: 0,
     briefingDelaySec: Math.min(briefingWaitSec(plan), TEST_MAX_BRIEFING_WAIT_SEC),
     musicStopAfterSec: plan.musicStopAfterSec === null ? null : Math.min(plan.musicStopAfterSec, TEST_MAX_STOP_SEC),
@@ -31,10 +37,21 @@ export async function runWake(
   texts: WakeTexts,
   gateway: AlexaGateway,
   sleep: (ms: number) => Promise<void>,
+  /** Chamado uma única vez, assim que o primeiro áudio é confirmado (música iniciada ou fala entregue). Não bloqueia; erros são ignorados. */
+  onAudio?: () => Promise<void>,
 ): Promise<WakeResult> {
   const notes: string[] = [];
   let audio = false;
-  let authError: AlexaAuthError | null = null;
+  let audioHook: Promise<void> | null = null;
+  const deviceAuth: { error: AlexaAuthError | null } = { error: null };
+  const confirmAudio = () => {
+    if (audio) return;
+    audio = true;
+    if (!onAudio) return;
+    try {
+      audioHook = Promise.resolve(onAudio()).catch(() => {});
+    } catch { /* o gancho é só de melhor esforço */ }
+  };
   const attempt = async (label: string, fn: () => Promise<void>): Promise<boolean> => {
     try {
       await fn();
@@ -49,13 +66,13 @@ export async function runWake(
     const query = plan.spotifyQuery?.trim();
     if (!query) return false;
     const played = await attempt('spotify', () => gateway.playSpotify(plan.echoDeviceId, query));
-    audio ||= played;
+    if (played) confirmAudio();
     return played;
   };
   const speak = async (text: string) => {
     for (const chunk of chunkSpeech(text)) {
       if (!(await attempt('fala', () => gateway.speak(plan.echoDeviceId, chunk)))) return;
-      audio = true;
+      confirmAudio();
     }
   };
   /** Espera e para a música; falha vira nota e não impede o próximo passo. */
@@ -70,8 +87,8 @@ export async function runWake(
       if (d.delayMin > 0) await sleep(d.delayMin * 60_000);
       await attempt(`dispositivo ${d.name}`, () => gateway.deviceAction(d.entityId, d.action, d.brightness));
     } catch (e) {
-      if (e instanceof AlexaAuthError) authError ??= e;
-      else notes.push(`dispositivo ${d.name}: ${(e as Error).message}`);
+      if (e instanceof AlexaAuthError) deviceAuth.error ??= e;
+      notes.push(`dispositivo ${d.name}: ${(e as Error).message}`);
     }
   };
   // Em paralelo com a música e a fala (não as atrasam); nunca rejeitam, para não deixar rejeição solta.
@@ -79,19 +96,25 @@ export async function runWake(
 
   await attempt('volume', () => gateway.setVolume(plan.echoDeviceId, plan.volume));
   if (plan.musicFirst) {
-    if (await music()) {
+    const played = await music();
+    if (played) {
       if (plan.musicStopAfterSec !== null) await stopAfterWait(plan.musicStopAfterSec);
       else if (briefingWaitSec(plan) > 0) await sleep(briefingWaitSec(plan) * 1000);
     }
-    // Mesmo que a música tenha falhado, o próximo passo roda: o usuário precisa acordar.
-    if (plan.afterMusic === 'briefing') await speak(texts.briefing);
+    // 'end'/'headlines' só valem depois de uma música que de fato tocou; sem ela, o resumo completo é falado:
+    // o usuário precisa acordar.
+    if (!played || plan.afterMusic === 'briefing') await speak(texts.briefing);
     else if (plan.afterMusic === 'headlines') await speak(texts.headlines);
   } else {
     await speak(texts.briefing);
     if ((await music()) && plan.musicStopAfterSec !== null) await stopAfterWait(plan.musicStopAfterSec);
   }
   await Promise.all(devices); // espera as ações pendentes (atrasadas) terminarem
-  if (authError) throw authError;
+  await audioHook;
+  if (deviceAuth.error) {
+    if (!audio) throw deviceAuth.error;
+    return { ok: true, notes, authError: deviceAuth.error }; // o áudio tocou: não vira falha
+  }
   return { ok: audio, notes };
 }
 
@@ -149,6 +172,7 @@ export async function weatherSpeech(
 type FireAction = Extract<WakeAction, { type: 'fire' }>;
 
 async function fireWake(a: FireAction, deps: WakeDeps): Promise<void> {
+  let authAfterAudio: AlexaAuthError | undefined;
   try {
     const handle = a.run?.fallbackHandle;
     // Presença primeiro, antes de qualquer efeito. Sem dados ou com erro: toca (só pula com certeza).
@@ -169,16 +193,20 @@ async function fireWake(a: FireAction, deps: WakeDeps): Promise<void> {
       }
     }
     const weather = await weatherSpeech(a.plan, source, deps);
-    const result = await runWake(a.plan, await deps.briefing(weather), deps.gateway, deps.sleep);
-    if (result.ok && handle) {
-      await deps.gateway.deleteAlarm(handle).catch((e: Error) => deps.log(`não apagou o alarme reserva: ${e.message}`));
-    }
+    // O alarme reserva sai assim que o áudio é confirmado, sem esperar as ações de dispositivos atrasadas.
+    const dropFallback = handle
+      ? () => deps.gateway.deleteAlarm(handle).catch((e: Error) => deps.log(`não apagou o alarme reserva: ${e.message}`))
+      : undefined;
+    const result = await runWake(a.plan, await deps.briefing(weather), deps.gateway, deps.sleep, dropFallback);
+    authAfterAudio = result.authError;
     await deps.store.finishRun(a.plan.id, a.runDate, result.ok ? 'done' : 'failed', result.notes.join('; '));
   } catch (e) {
     deps.log(`despertar ${a.plan.label} falhou: ${(e as Error).message}`);
     await deps.store.finishRun(a.plan.id, a.runDate, 'failed', (e as Error).message).catch(() => {});
     if (e instanceof AlexaAuthError) throw e;
   }
+  // Login expirado só numa ação de dispositivo, depois do áudio: o run já terminou 'done'; o chamador trata o login.
+  if (authAfterAudio) throw authAfterAudio;
 }
 
 export async function applyWakeActions(

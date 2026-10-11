@@ -153,9 +153,12 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
       { user_id: a, lat: -22.2, lon: -45.6, accuracy_m: 12, reported_at: '2026-10-13T10:00:00Z' },
       { user_id: b, lat: 1, lon: 1, accuracy_m: null, reported_at: '2026-10-13T10:00:00Z' },
     ]));
-    expect(await sa.loadPresenceInput()).toEqual({
+    const got = await sa.loadPresenceInput();
+    // O horário vem do servidor (gatilho da tabela), não do valor enviado.
+    expect(Math.abs(Date.now() - got.location!.reportedAt.getTime())).toBeLessThan(60_000);
+    expect(got).toEqual({
       home: { lat: -19.9167, lon: -45.7, radiusM: 80 }, requireHome: false,
-      location: { lat: -22.2, lon: -45.6, accuracyM: 12, reportedAt: new Date('2026-10-13T10:00:00Z') },
+      location: { lat: -22.2, lon: -45.6, accuracyM: 12, reportedAt: got.location!.reportedAt },
     });
   });
 });

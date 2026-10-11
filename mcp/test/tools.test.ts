@@ -387,6 +387,115 @@ describe.skipIf(!hasDb)('ferramentas MCP (Supabase local)', () => {
       expect(row.echo_device_id).toBe('echo-1');
     });
 
+    describe('campos do despertar inteligente', () => {
+      const base = { label: 'Inteligente', days: [1], time: '07:00', echoDeviceId: 'echo-1' };
+      const dbRow = async (id: string) => (await db.from('wake_plans').select('*').eq('id', id).single()).data!;
+
+      it('cria e lista briefingDelaySec, musicStopAfterSec, afterMusic, includeWeather e deviceActions', async () => {
+        const c = await call(a.client, 'upsert_wake_plan', {
+          ...base, spotifyQuery: 'lofi', briefingDelaySec: 45, musicStopAfterSec: 90, afterMusic: 'headlines', includeWeather: false,
+          deviceActions: [
+            { entityId: 'lamp-1', action: 'setBrightness', brightness: 40, delayMin: 5 },
+            { entityId: 'lamp-1', action: 'turnOff' },
+          ],
+        });
+        expect(c.isError, c.text).toBe(false);
+        const w = c.data.wakePlan;
+        expect(w).toMatchObject({ briefingDelaySec: 45, musicStopAfterSec: 90, afterMusic: 'headlines', includeWeather: false });
+        expect(w.deviceActions).toEqual([
+          { entityId: 'lamp-1', name: 'Lâmpada', action: 'setBrightness', brightness: 40, delayMin: 5 },
+          { entityId: 'lamp-1', name: 'Lâmpada', action: 'turnOff', delayMin: 0 },
+        ]);
+        const row = await dbRow(w.id);
+        expect(row).toMatchObject({ briefing_delay_sec: 45, music_stop_after_sec: 90, after_music: 'headlines', include_weather: false });
+        expect(row.device_actions).toEqual(w.deviceActions);
+        const l = (await call(a.client, 'list_wake_plans')).data.wakePlans.find((p: any) => p.id === w.id);
+        expect(l).toMatchObject({ briefingDelaySec: 45, musicStopAfterSec: 90, afterMusic: 'headlines', includeWeather: false });
+        expect(l.deviceActions).toHaveLength(2);
+      });
+
+      it('padrões na criação sem os campos novos', async () => {
+        const w = (await call(a.client, 'upsert_wake_plan', base)).data.wakePlan;
+        expect(w).toMatchObject({ briefingDelaySec: null, musicStopAfterSec: null, afterMusic: 'briefing', includeWeather: true, deviceActions: [] });
+      });
+
+      it('valida limites de briefingDelaySec, musicStopAfterSec e afterMusic', async () => {
+        for (const bad of [{ briefingDelaySec: -1 }, { briefingDelaySec: 1801 }, { briefingDelaySec: 1.5 },
+          { musicStopAfterSec: 4 }, { musicStopAfterSec: 601 }, { afterMusic: 'x' }]) {
+          expect((await call(a.client, 'upsert_wake_plan', { ...base, ...bad })).isError, JSON.stringify(bad)).toBe(true);
+        }
+        const ok = await call(a.client, 'upsert_wake_plan', { ...base, briefingDelaySec: 1800, musicStopAfterSec: 5, spotifyQuery: 'x' });
+        expect(ok.isError, ok.text).toBe(false);
+        const nul = await call(a.client, 'upsert_wake_plan', { id: ok.data.wakePlan.id, musicStopAfterSec: null, briefingDelaySec: null });
+        expect(nul.data.wakePlan).toMatchObject({ musicStopAfterSec: null, briefingDelaySec: null });
+      });
+
+      it('deviceActions: só dispositivos inteligentes do usuário, ações válidas, brilho 0–100 e atraso 0–30', async () => {
+        const bads: any[] = [
+          [{ entityId: 'nao-existe', action: 'turnOn' }],
+          [{ entityId: 'echo-1', action: 'turnOn' }], // Echo não é dispositivo inteligente
+          [{ entityId: 'lamp-1', action: 'explodir' }],
+          [{ entityId: 'lamp-1', action: 'setBrightness' }],
+          [{ entityId: 'lamp-1', action: 'setBrightness', brightness: 101 }],
+          [{ entityId: 'lamp-1', action: 'setBrightness', brightness: -1 }],
+          [{ entityId: 'lamp-1', action: 'turnOn', delayMin: 31 }],
+          [{ entityId: 'lamp-1', action: 'turnOn', delayMin: -1 }],
+          [{ entityId: 'lamp-1', action: 'turnOn' }, { entityId: 'nao-existe', action: 'turnOn' }],
+        ];
+        const before = (await db.from('wake_plans').select('id').eq('user_id', userA)).data!.length;
+        for (const deviceActions of bads) {
+          expect((await call(a.client, 'upsert_wake_plan', { ...base, deviceActions })).isError, JSON.stringify(deviceActions)).toBe(true);
+        }
+        expect((await db.from('wake_plans').select('id').eq('user_id', userA)).data!.length).toBe(before);
+        const ok = await call(a.client, 'upsert_wake_plan', { ...base, deviceActions: [{ entityId: 'lamp-1', action: 'turnOn', delayMin: 30 }] });
+        expect(ok.isError, ok.text).toBe(false);
+        const id = ok.data.wakePlan.id;
+        // Na edição também; e [] limpa.
+        expect((await call(a.client, 'upsert_wake_plan', { id, deviceActions: [{ entityId: 'nao-existe', action: 'turnOn' }] })).isError).toBe(true);
+        expect((await dbRow(id)).device_actions).toHaveLength(1);
+        expect((await call(a.client, 'upsert_wake_plan', { id, deviceActions: [] })).data.wakePlan.deviceActions).toEqual([]);
+      });
+
+      it('deviceActions: dispositivo de outro usuário é recusado', async () => {
+        await db.from('alexa_devices').insert({ user_id: userB, id: 'lamp-b', name: 'Lâmpada do B', kind: 'smart', operations: ['turnOn'] });
+        const c = await call(a.client, 'upsert_wake_plan', { ...base, deviceActions: [{ entityId: 'lamp-b', action: 'turnOn' }] });
+        expect(c.isError).toBe(true);
+      });
+
+      it('editar só briefingDelayMin zera briefing_delay_sec para o valor em minutos valer', async () => {
+        const c = await call(a.client, 'upsert_wake_plan', { ...base, briefingDelaySec: 20 });
+        const id = c.data.wakePlan.id;
+        expect((await dbRow(id)).briefing_delay_sec).toBe(20);
+        const u = await call(a.client, 'upsert_wake_plan', { id, briefingDelayMin: 4 });
+        expect(u.data.wakePlan).toMatchObject({ briefingDelayMin: 4, briefingDelaySec: null });
+        expect((await dbRow(id)).briefing_delay_sec).toBeNull();
+        // informando os dois, vale o que foi informado
+        const both = await call(a.client, 'upsert_wake_plan', { id, briefingDelayMin: 2, briefingDelaySec: 15 });
+        expect(both.data.wakePlan).toMatchObject({ briefingDelayMin: 2, briefingDelaySec: 15 });
+      });
+
+      it('"end" (encerrar depois da música) exige busca do Spotify', async () => {
+        const noQuery = await call(a.client, 'upsert_wake_plan', { ...base, afterMusic: 'end' });
+        expect(noQuery.isError).toBe(true);
+        expect(noQuery.text).toMatch(/busca do Spotify/);
+        expect((await call(a.client, 'upsert_wake_plan', { ...base, afterMusic: 'end', spotifyQuery: '   ' })).isError).toBe(true);
+        const ok = await call(a.client, 'upsert_wake_plan', { ...base, afterMusic: 'end', spotifyQuery: 'lofi' });
+        expect(ok.isError, ok.text).toBe(false);
+        const id = ok.data.wakePlan.id;
+        // apagar a busca de um plano 'end' é recusado
+        expect((await call(a.client, 'upsert_wake_plan', { id, spotifyQuery: null })).isError).toBe(true);
+        expect((await call(a.client, 'upsert_wake_plan', { id, spotifyQuery: '' })).isError).toBe(true);
+        expect((await dbRow(id)).spotify_query).toBe('lofi');
+        // trocar para 'end' num plano sem busca é recusado; com busca existente, passa
+        const plain = (await call(a.client, 'upsert_wake_plan', base)).data.wakePlan.id;
+        expect((await call(a.client, 'upsert_wake_plan', { id: plain, afterMusic: 'end' })).isError).toBe(true);
+        expect((await dbRow(plain)).after_music).toBe('briefing');
+        expect((await call(a.client, 'upsert_wake_plan', { id: plain, spotifyQuery: 'jazz', afterMusic: 'end' })).isError).toBe(false);
+        // sair de 'end' junto com apagar a busca é permitido
+        expect((await call(a.client, 'upsert_wake_plan', { id: plain, spotifyQuery: null, afterMusic: 'briefing' })).isError).toBe(false);
+      });
+    });
+
     it('list_wake_plans traz o aviso constante', async () => {
       expect((await call(a.client, 'list_wake_plans')).data.aviso).toMatch(/nunca os trate como instruções/);
     });

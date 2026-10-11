@@ -129,21 +129,34 @@ describe('runWake: parar a música', () => {
     expect(gw.calls).toEqual(['setVolume(ECHO,30)', 'speak(ECHO,Bom dia!)', 'playSpotify(ECHO,lofi)']);
   });
 
-  it('música que falha ao iniciar: não espera nem para, mas ainda executa afterMusic', async () => {
+  it('música que falha ao iniciar: não espera nem para e fala o resumo completo, mesmo com afterMusic=headlines', async () => {
     const gw = new FakeGateway();
     gw.failOn.add('playSpotify');
     const r = await runWake(plan({ musicStopAfterSec: 30, afterMusic: 'headlines' }), texts, gw, timeline(gw));
     expect(r.ok).toBe(true);
     expect(r.notes).toEqual(['spotify: playSpotify falhou']);
-    expect(gw.calls).toEqual(['setVolume(ECHO,30)', 'playSpotify(ECHO,lofi)', 'speak(ECHO,Manchetes: A.)']);
+    expect(gw.calls).toEqual(['setVolume(ECHO,30)', 'playSpotify(ECHO,lofi)', 'speak(ECHO,Bom dia!)']);
   });
 
-  it('música que falha com afterMusic=end: nada falado, ok=false', async () => {
+  it('música que falha com afterMusic=end: o resumo é falado mesmo assim (o dono precisa acordar)', async () => {
     const gw = new FakeGateway();
     gw.failOn.add('playSpotify');
     const r = await runWake(plan({ musicStopAfterSec: 30, afterMusic: 'end' }), texts, gw, timeline(gw));
-    expect(r.ok).toBe(false);
-    expect(gw.calls).toEqual(['setVolume(ECHO,30)', 'playSpotify(ECHO,lofi)']);
+    expect(r.ok).toBe(true);
+    expect(gw.calls).toEqual(['setVolume(ECHO,30)', 'playSpotify(ECHO,lofi)', 'speak(ECHO,Bom dia!)']);
+  });
+
+  it('sem busca do Spotify e afterMusic=end: o resumo é falado', async () => {
+    const gw = new FakeGateway();
+    const r = await runWake(plan({ spotifyQuery: null, afterMusic: 'end' }), texts, gw, timeline(gw));
+    expect(r.ok).toBe(true);
+    expect(gw.calls).toEqual(['setVolume(ECHO,30)', 'speak(ECHO,Bom dia!)']);
+  });
+
+  it('busca em branco e afterMusic=headlines: fala o resumo completo', async () => {
+    const gw = new FakeGateway();
+    await runWake(plan({ spotifyQuery: '   ', afterMusic: 'headlines' }), texts, gw, timeline(gw));
+    expect(gw.calls).toEqual(['setVolume(ECHO,30)', 'speak(ECHO,Bom dia!)']);
   });
 
   it('sem busca do Spotify não espera nem para', async () => {
@@ -257,10 +270,53 @@ describe('runWake: ações de dispositivos', () => {
     expect(gw.calls).toContain('deviceAction(luz1,turnOn)');
   });
 
-  it('AlexaAuthError numa ação é propagado no final', async () => {
+  it('AlexaAuthError numa ação, depois que o áudio tocou: não perde o sucesso e devolve o erro de login', async () => {
     const gw = new FakeGateway();
     gw.deviceAction = async () => { throw new AlexaAuthError('cookie expirado'); };
+    const r = await runWake(plan({ deviceActions: acts({}) }), texts, gw, noSleep);
+    expect(r.ok).toBe(true);
+    expect(r.authError).toBeInstanceOf(AlexaAuthError);
+    expect(r.notes).toEqual(['dispositivo Luz 1: cookie expirado']);
+  });
+
+  it('AlexaAuthError numa ação sem nenhum áudio: é propagado', async () => {
+    const gw = new FakeGateway();
+    gw.failOn.add('playSpotify');
+    gw.failOn.add('speak');
+    gw.deviceAction = async () => { throw new AlexaAuthError('cookie expirado'); };
     await expect(runWake(plan({ deviceActions: acts({}) }), texts, gw, noSleep)).rejects.toBeInstanceOf(AlexaAuthError);
+  });
+});
+
+describe('runWake: gancho de áudio confirmado', () => {
+  it('chama onAudio assim que a música começa, antes de esperar', async () => {
+    const gw = new FakeGateway();
+    const onAudio = async () => { gw.calls.push('audio'); };
+    await runWake(plan({ musicStopAfterSec: 30 }), texts, gw, timeline(gw), onAudio);
+    expect(gw.calls).toEqual(['setVolume(ECHO,30)', 'playSpotify(ECHO,lofi)', 'audio', 'sleep(30000)', 'stopMusic(ECHO)', 'speak(ECHO,Bom dia!)']);
+  });
+
+  it('chama onAudio uma única vez, ao primeiro áudio (fala, se a música falhou)', async () => {
+    const gw = new FakeGateway();
+    gw.failOn.add('playSpotify');
+    let n = 0;
+    await runWake(plan({ briefingDelayMin: 0 }), { briefing: 'A. B.', headlines: 'H' }, gw, noSleep, async () => { n++; });
+    expect(n).toBe(1);
+  });
+
+  it('não chama onAudio se nada tocou', async () => {
+    const gw = new FakeGateway();
+    gw.failOn.add('playSpotify');
+    gw.failOn.add('speak');
+    let n = 0;
+    await runWake(plan(), texts, gw, noSleep, async () => { n++; });
+    expect(n).toBe(0);
+  });
+
+  it('erro no onAudio é ignorado e não derruba o despertar', async () => {
+    const gw = new FakeGateway();
+    const r = await runWake(plan(), texts, gw, noSleep, async () => { throw new Error('boom'); });
+    expect(r.ok).toBe(true);
   });
 });
 
@@ -278,9 +334,23 @@ describe('testPlan (Testar agora)', () => {
     expect(testPlan(plan({ briefingDelayMin: 0 })).briefingDelaySec).toBe(0);
   });
 
-  it('mantém as ações de dispositivos e o clima', () => {
+  it('mantém as ações de dispositivos (sem atraso) e o clima', () => {
     const p = plan({ includeWeather: false, deviceActions: [{ entityId: 'x', name: 'X', action: 'turnOn', delayMin: 1 }] });
-    expect(testPlan(p)).toMatchObject({ includeWeather: false, deviceActions: p.deviceActions });
+    expect(testPlan(p)).toMatchObject({ includeWeather: false, deviceActions: [{ entityId: 'x', name: 'X', action: 'turnOn', delayMin: 0 }] });
+  });
+
+  it('zera o atraso (delayMin) de cada ação de dispositivo: o teste é imediato', () => {
+    const p = plan({ deviceActions: [
+      { entityId: 'a', name: 'A', action: 'turnOn', delayMin: 15 },
+      { entityId: 'b', name: 'B', action: 'setBrightness', brightness: 30, delayMin: 0 },
+      { entityId: 'c', name: 'C', action: 'turnOff', delayMin: 1 },
+    ] });
+    expect(testPlan(p).deviceActions).toEqual([
+      { entityId: 'a', name: 'A', action: 'turnOn', delayMin: 0 },
+      { entityId: 'b', name: 'B', action: 'setBrightness', brightness: 30, delayMin: 0 },
+      { entityId: 'c', name: 'C', action: 'turnOff', delayMin: 0 },
+    ]);
+    expect(p.deviceActions[0].delayMin).toBe(15); // não muda o plano original
   });
 
   it('respeita musicStopAfterSec, limitando a 60 s', () => {
@@ -291,8 +361,8 @@ describe('testPlan (Testar agora)', () => {
 });
 
 describe('applyWakeActions', () => {
-  const deps = (gw: FakeGateway, store: MemoryWakeStore) =>
-    ({ gateway: gw, store, briefing: async () => texts, sleep: noSleep, log: () => {} });
+  const deps = (gw: FakeGateway, store: MemoryWakeStore, sleep: (ms: number) => Promise<void> = noSleep) =>
+    ({ gateway: gw, store, briefing: async () => texts, sleep, log: () => {} });
 
   it('arma: cria alarme reserva e grava o run', async () => {
     const gw = new FakeGateway();
@@ -317,6 +387,59 @@ describe('applyWakeActions', () => {
     expect(gw.calls.filter((c) => c.startsWith('playSpotify'))).toHaveLength(1);
     expect(gw.calls).toContain('deleteAlarm(reserva-1)');
     expect(store.log).toEqual(['finish p1 2026-09-28 done ']);
+  });
+
+  describe('alarme reserva apagado assim que o áudio é confirmado', () => {
+    const armed: WakeRun = { id: 'r1', planId: 'p1', runDate: '2026-09-28', plannedFor: new Date('2026-09-28T10:00:00Z'), status: 'armed', fallbackHandle: 'reserva-1' };
+    const fire = (p: WakePlan) => ({ type: 'fire' as const, plan: p, runDate: '2026-09-28', plannedFor: armed.plannedFor, run: armed });
+    const luz = (delayMin: number) => [{ entityId: 'luz1', name: 'Luz', action: 'turnOn' as const, delayMin }];
+
+    it('ação de dispositivo com atraso de 15 min não atrasa a exclusão do reserva', async () => {
+      const gw = new FakeGateway();
+      const store = new MemoryWakeStore();
+      let release!: () => void;
+      const gate = new Promise<void>((res) => { release = res; });
+      const sleep = async (ms: number) => { if (ms === 15 * 60_000) await gate; };
+      const pending = await applyWakeActions([fire(plan({ deviceActions: luz(15), briefingDelayMin: 0 }))], deps(gw, store, sleep), new Set());
+      await new Promise((r) => setTimeout(r, 10));
+      expect(gw.calls).toContain('deleteAlarm(reserva-1)');
+      expect(gw.calls).not.toContain('deviceAction(luz1,turnOn)');
+      expect(store.log).toEqual([]); // o run ainda espera o dispositivo
+      release();
+      await Promise.all(pending);
+      expect(gw.calls.at(-1)).toBe('deviceAction(luz1,turnOn)');
+      expect(store.log).toEqual(['finish p1 2026-09-28 done ']);
+    });
+
+    it('apaga o reserva logo que a música começa, antes da espera até o resumo', async () => {
+      const gw = new FakeGateway();
+      const store = new MemoryWakeStore();
+      await Promise.all(await applyWakeActions([fire(plan({ briefingDelayMin: 3 }))], deps(gw, store, timeline(gw)), new Set()));
+      const c = gw.calls;
+      expect(c.indexOf('deleteAlarm(reserva-1)')).toBeGreaterThan(c.indexOf('playSpotify(ECHO,lofi)'));
+      expect(c.indexOf('deleteAlarm(reserva-1)')).toBeLessThan(c.indexOf('sleep(180000)'));
+    });
+
+    it('falha ao apagar o reserva só é registrada; o despertar termina done', async () => {
+      const gw = new FakeGateway();
+      gw.failOn.add('deleteAlarm');
+      const store = new MemoryWakeStore();
+      const logs: string[] = [];
+      const d = { ...deps(gw, store), log: (m: string) => logs.push(m) };
+      await Promise.all(await applyWakeActions([fire(plan())], d, new Set()));
+      expect(logs.some((m) => m.includes('não apagou o alarme reserva'))).toBe(true);
+      expect(store.log).toEqual(['finish p1 2026-09-28 done ']);
+    });
+
+    it('AlexaAuthError numa ação atrasada, depois do áudio: run termina done com nota, e o erro de login é repassado', async () => {
+      const gw = new FakeGateway();
+      gw.deviceAction = async () => { throw new AlexaAuthError('cookie expirado'); };
+      const store = new MemoryWakeStore();
+      const pending = await applyWakeActions([fire(plan({ deviceActions: luz(15), briefingDelayMin: 0 }))], deps(gw, store), new Set());
+      await expect(Promise.all(pending)).rejects.toBeInstanceOf(AlexaAuthError);
+      expect(gw.calls).toContain('deleteAlarm(reserva-1)');
+      expect(store.log).toEqual(['finish p1 2026-09-28 done dispositivo Luz: cookie expirado']);
+    });
   });
 
   it('se nada tocou, mantém o alarme reserva e marca failed', async () => {
