@@ -127,3 +127,15 @@ String documentToNoteMarkdown(Document d) {
   });
   return text.replaceAll('\r\n', '\n').trimRight();
 }
+
+/// O editor visual consegue abrir e salvar [markdown] sem alterar nada?
+/// Quando não (tabela, HTML, citação com várias linhas…), a nota deve ser
+/// editada como Markdown puro para não perder conteúdo.
+bool canRoundTripMarkdown(String markdown) {
+  final expected = markdown.replaceAll('\r\n', '\n').trimRight();
+  try {
+    return documentToNoteMarkdown(noteMarkdownToDocument(markdown)) == expected;
+  } catch (_) {
+    return false;
+  }
+}

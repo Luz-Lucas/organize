@@ -62,3 +62,15 @@ describe('executeCommand', () => {
     expect(isExpired(c, new Date('2026-09-28T10:02:01Z'))).toBe(true);
   });
 });
+
+describe('delete_device com sync falhando', () => {
+  it('continua sendo sucesso: o dispositivo já foi apagado na Alexa', async () => {
+    const gateway = new FakeGateway();
+    const r = await executeCommand(
+      { id: '1', kind: 'delete_device', payload: { entityId: 'ent-1' }, createdAt: new Date() },
+      { gateway, sync: async () => { throw new Error('rede'); }, wakeTest: async () => 'ok' },
+    );
+    expect(r.startsWith('ok')).toBe(true);
+    expect(gateway.deleted).toEqual(['ent-1']);
+  });
+});

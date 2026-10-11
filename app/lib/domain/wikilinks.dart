@@ -41,7 +41,7 @@ String wikiLinksToMarkdown(String body) => body.replaceAllMapped(_wikiLink, (m) 
       final target = m.group(1)!.trim();
       if (target.isEmpty) return m.group(0)!;
       final label = (m.group(2) ?? m.group(1)!).trim();
-      return '[$label](wiki:${Uri.encodeComponent(target)})';
+      return '[$label](wiki:${encodeWikiTarget(target)})';
     });
 
 String uniqueTitle(String base, Iterable<Note> notes) {
@@ -53,3 +53,8 @@ String uniqueTitle(String base, Iterable<Note> notes) {
   }
   return '$base $i';
 }
+
+/// `Uri.encodeComponent` deixa `(` e `)` intactos, o que quebra o link
+/// Markdown `[x](wiki:...)`; aqui eles também são codificados.
+String encodeWikiTarget(String target) =>
+    Uri.encodeComponent(target).replaceAll('(', '%28').replaceAll(')', '%29');

@@ -76,6 +76,28 @@ class _WeekViewState extends State<WeekView> {
                             fontWeight: d == today ? FontWeight.w700 : FontWeight.w500,
                           ),
                         ),
+                        for (final e in eventsOnDay(widget.events, d).where((e) => e.allDay))
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                            child: GestureDetector(
+                              key: ValueKey('allday-${e.id}'),
+                              onTap: () => widget.onOpen(e),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: eventColor(org, e.spaceId),
+                                  borderRadius: BorderRadius.circular(org.radiusSm),
+                                ),
+                                child: Text(
+                                  e.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(color: org.onAccent),
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),

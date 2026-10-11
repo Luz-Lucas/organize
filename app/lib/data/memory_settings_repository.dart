@@ -32,10 +32,19 @@ class MemorySettingsRepository implements SettingsRepository {
     return controller.stream;
   }
 
-  @override
+  /// Substitui todos os ajustes (apoio para os testes).
   Future<void> saveSettings(UserSettings settings) async {
     if (failWrites) throw const RepositoryException('Sem conexão (simulado)');
     _current = settings;
     _changes.add(null);
   }
+
+  @override
+  Future<void> setTheme(String themeId) =>
+      saveSettings(_current.copyWith(theme: themeId));
+
+  @override
+  Future<void> setDeviceHidden(String deviceId, bool hidden) => saveSettings(_current.copyWith(
+        hiddenAlexaDevices: [..._current.hiddenAlexaDevices.where((x) => x != deviceId), if (hidden) deviceId],
+      ));
 }

@@ -50,10 +50,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _setHidden(String id, bool hide) async {
-    final current = ref.read(settingsProvider).value ?? const UserSettings();
-    final ids = [...current.hiddenAlexaDevices.where((x) => x != id), if (hide) id];
     try {
-      await ref.read(settingsRepositoryProvider).saveSettings(current.copyWith(hiddenAlexaDevices: ids));
+      await ref.read(settingsRepositoryProvider).setDeviceHidden(id, hide);
     } on RepositoryException {
       if (mounted) {
         showError(

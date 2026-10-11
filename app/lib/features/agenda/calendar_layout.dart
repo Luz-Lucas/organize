@@ -20,13 +20,14 @@ class PlacedEvent {
 
 const minEventMinutes = 20;
 
-/// Posiciona os eventos que tocam [day]. Eventos que atravessam a meia-noite
+/// Posiciona os eventos com horário que tocam [day] (os de dia inteiro ficam
+/// numa faixa à parte, não na grade de horas). Eventos que atravessam a meia-noite
 /// são recortados ao dia; sobrepostos dividem a largura em colunas.
 List<PlacedEvent> layoutDay(Iterable<CalendarEvent> events, DateTime day) {
   final dayStart = DateTime(day.year, day.month, day.day);
   final dayEnd = DateTime(day.year, day.month, day.day + 1);
   final items = <({CalendarEvent event, int top, int height})>[];
-  for (final e in eventsOnDay(events, day)) {
+  for (final e in eventsOnDay(events, day).where((e) => !e.allDay)) {
     final start = e.startsAt.isBefore(dayStart) ? dayStart : e.startsAt;
     final end = e.endsAt.isAfter(dayEnd) ? dayEnd : e.endsAt;
     final top = start.isBefore(dayStart) ? 0 : start.hour * 60 + start.minute;

@@ -32,4 +32,21 @@ void main() {
         '- [ ] a\n- [x] b\n\nFim.';
     expect(documentToNoteMarkdown(noteMarkdownToDocument(md)), md);
   });
+
+  group('canRoundTripMarkdown', () {
+    test('conteúdo que o editor preserva passa', () {
+      for (final md in corpus) {
+        expect(canRoundTripMarkdown(md), isTrue, reason: md);
+      }
+    });
+    test('tabela, HTML e citação com listas não passam', () {
+      expect(canRoundTripMarkdown('| a | b |\n|---|---|\n| 1 | 2 |'), isFalse);
+      expect(canRoundTripMarkdown('<details>oculto</details>'), isFalse);
+      expect(canRoundTripMarkdown('> - item'), isFalse);
+    });
+  });
+  test('link wiki com parênteses sobrevive à ida e volta', () {
+    const md = 'Veja [[Reunião (2026)]].';
+    expect(documentToNoteMarkdown(noteMarkdownToDocument(md)), md);
+  });
 }

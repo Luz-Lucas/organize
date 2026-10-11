@@ -54,7 +54,7 @@ class OrgBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final (bg, fg) = switch (tone) {
       OrgBadgeTone.accent => (org.accentSoft, org.accentText),
-      OrgBadgeTone.secondary => (org.secondarySoft, org.secondary),
+      OrgBadgeTone.secondary => (org.secondarySoft, org.ink),
       OrgBadgeTone.neutral => (org.surface, org.inkMuted),
       OrgBadgeTone.danger => (scheme.errorContainer, scheme.error),
     };

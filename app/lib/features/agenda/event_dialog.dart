@@ -39,7 +39,19 @@ class _EventDialogState extends State<EventDialog> {
   late final TextEditingController _location =
       TextEditingController(text: widget.existing?.location ?? '');
   late DateTime _startDay = startOfDay(widget.initialStart);
-  late DateTime _endDay = startOfDay(widget.initialEnd);
+  late DateTime _endDay = _initialEndDay();
+
+  /// Evento noturno já salvo (ex.: 23:30 → 00:15 do dia seguinte): o dia de
+  /// término volta a ser o do início, e a "virada" é recalculada por
+  /// [resolveEventEnd]. Assim, mudar só o horário de início não deixa o evento
+  /// com 24 h de duração sem querer.
+  DateTime _initialEndDay() {
+    final s = widget.initialStart, e = widget.initialEnd;
+    final sd = startOfDay(s);
+    final next = DateTime(sd.year, sd.month, sd.day + 1);
+    final overnight = startOfDay(e) == next && e.hour * 60 + e.minute <= s.hour * 60 + s.minute;
+    return overnight ? sd : startOfDay(e);
+  }
   late TimeOfDay _start = TimeOfDay.fromDateTime(widget.initialStart);
   late TimeOfDay _end = TimeOfDay.fromDateTime(widget.initialEnd);
   late String? _spaceId = widget.existing?.spaceId;

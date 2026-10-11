@@ -135,4 +135,32 @@ void main() {
     expect(saved!.source, 'ics');
     expect(saved!.externalId, 'ext-1');
   });
+
+  testWidgets('editar evento noturno salvo mantém 23:30 → 00:15 e o dia de término segue o início', (tester) async {
+    CalendarEvent? saved;
+    final old = CalendarEvent(
+        id: 'n1', title: 'Plantão', startsAt: DateTime(2026, 10, 10, 23, 30), endsAt: DateTime(2026, 10, 11, 0, 15));
+    await initializeDateFormatting('pt_BR');
+    await tester.pumpWidget(MaterialApp(
+      theme: buildOrgTheme(orgThemeById('violeta'), googleFonts: false),
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async => saved = await showDialog<CalendarEvent>(
+            context: context,
+            builder: (_) => EventDialog(
+                initialStart: old.startsAt, initialEnd: old.endsAt, spaces: const [], existing: old),
+          ),
+          child: const Text('abrir'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Termina no dia seguinte'), findsOneWidget);
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(saved!.id, 'n1');
+    expect(saved!.startsAt, DateTime(2026, 10, 10, 23, 30));
+    expect(saved!.endsAt, DateTime(2026, 10, 11, 0, 15));
+  });
 }

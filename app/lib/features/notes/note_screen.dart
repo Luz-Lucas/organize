@@ -11,6 +11,8 @@ import '../../domain/ids.dart';
 import '../../domain/note.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
+import '../../ui/org_theme.dart';
+import 'markdown_bridge.dart';
 import 'rich_note_editor.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
@@ -36,6 +38,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool _preview = false;
   // Mostra o Markdown cru (TextField) em vez do editor rico.
   bool _markdownMode = false;
+  // A nota tem conteúdo que o editor visual não preserva (tabela, HTML…).
+  bool _richUnsafe = false;
   // Muda para recriar o editor rico a partir de `_body` (volta do modo
   // Markdown ou atualização remota).
   int _editorEpoch = 0;
@@ -211,7 +215,16 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           child: Text(
             _remoteNotice!,
             key: const Key('remote-notice'),
-            style: TextStyle(color: theme.colorScheme.tertiary),
+            style: TextStyle(color: context.org.accentText),
+          ),
+        ),
+      if (_richUnsafe && _markdownMode)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            'Esta nota tem formatação que o editor visual não preserva (tabelas, HTML…); ela é editada como Markdown.',
+            key: const Key('rich-unsafe-notice'),
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ),
       const SizedBox(height: 16),
@@ -248,7 +261,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                     _changed();
                   },
                   onWikiLink: (title) =>
-                      _openLink('wiki:${Uri.encodeComponent(title)}', all),
+                      _openLink('wiki:${encodeWikiTarget(title)}', all),
                   footer: backlinkTiles.isEmpty
                       ? const SizedBox(height: 48)
                       : Column(children: [...backlinkTiles, const SizedBox(height: 48)]),
@@ -298,6 +311,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           final content = draft ?? current;
           _title.text = content.title;
           _body.text = content.body;
+          _richUnsafe = !canRoundTripMarkdown(content.body);
+          _markdownMode = _richUnsafe;
           if (draft != null) {
             _saveError =
                 'Alterações não salvas foram recuperadas. Edite para tentar salvar de novo.';
@@ -312,6 +327,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             _lastSaved = current;
             _title.text = current.title;
             _body.text = current.body;
+            _richUnsafe = !canRoundTripMarkdown(current.body);
+            if (_richUnsafe) _markdownMode = true;
             _editorEpoch++;
             _remoteNotice = null;
           }
@@ -333,11 +350,18 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
               key: const Key('toggle-markdown'),
               tooltip: _markdownMode ? 'Ver editor' : 'Ver como Markdown',
               icon: Icon(_markdownMode ? Icons.edit_note : Icons.code),
-              onPressed: () => setState(() {
+              onPressed: () {
+                if (_markdownMode && !canRoundTripMarkdown(_body.text)) {
+                  showError(context,
+                      'Esta nota tem formatação (como tabelas ou HTML) que o editor visual não preserva. Edite como Markdown.');
+                  return;
+                }
+                setState(() {
                 if (_markdownMode) _editorEpoch++;
                 _markdownMode = !_markdownMode;
                 _preview = false;
-              }),
+              });
+              },
             ),
             IconButton(
               key: const Key('toggle-preview'),

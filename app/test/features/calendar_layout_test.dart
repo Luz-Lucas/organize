@@ -41,4 +41,14 @@ void main() {
     expect(snapMinutes(8), 15);
     expect(snapMinutes(22 * 60 + 37), 22 * 60 + 30);
   });
+
+  test('evento de dia inteiro fica fora da grade de horas', () {
+    final allDay = CalendarEvent(
+        id: 'd', title: 'Feriado', startsAt: DateTime(2026, 10, 12), endsAt: DateTime(2026, 10, 13), allDay: true);
+    final timed = CalendarEvent(
+        id: 't', title: 'Aula', startsAt: DateTime(2026, 10, 12, 8), endsAt: DateTime(2026, 10, 12, 9));
+    final p = layoutDay([allDay, timed], DateTime(2026, 10, 12));
+    expect(p.map((x) => x.event.id), ['t']);
+    expect((p.single.column, p.single.columns), (0, 1));
+  });
 }

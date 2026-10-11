@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/repository.dart';
-import '../../domain/user_settings.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
@@ -13,9 +12,8 @@ class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   Future<void> _pick(BuildContext context, WidgetRef ref, String id) async {
-    final current = ref.read(settingsProvider).value ?? const UserSettings();
     try {
-      await ref.read(settingsRepositoryProvider).saveSettings(current.copyWith(theme: id));
+      await ref.read(settingsRepositoryProvider).setTheme(id);
     } on RepositoryException {
       if (context.mounted) showError(context, 'Não foi possível salvar o tema.');
     }

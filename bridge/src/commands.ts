@@ -60,7 +60,13 @@ export async function executeCommand(cmd: Command, deps: CommandDeps): Promise<s
       return 'ok';
     case 'delete_device':
       await deps.gateway.deleteSmartDevice(str(p, 'entityId'));
-      await deps.sync();
+      // O dispositivo já saiu da Amazon (irreversível): uma falha só na
+      // ressincronização não pode fazer o comando parecer que falhou.
+      try {
+        await deps.sync();
+      } catch {
+        return 'ok (removido; a lista será atualizada na próxima sincronização)';
+      }
       return 'ok';
     case 'sync':
       await deps.sync();

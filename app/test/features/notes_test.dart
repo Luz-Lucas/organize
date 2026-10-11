@@ -31,6 +31,24 @@ void main() {
   const mixed = '# Título\n\nVeja [[Cálculo — Resumo]] e [[Redes]].\n\n'
       '- [ ] aberta\n- [x] feita\n\n1. um\n2. dois\n\n> citação\n\n```\ncódigo\n```';
 
+  testWidgets('nota com tabela abre em Markdown, avisa e não é reescrita', (tester) async {
+    const table = '| a | b |\n|---|---|\n| 1 | 2 |';
+    final repo = _CountingRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Tabela', body: table));
+    repo.upserts = 0;
+    await pumpApp(tester, repo, location: '/nota/n1');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rich-editor')), findsNothing);
+    expect(find.byKey(const Key('note-body')), findsOneWidget);
+    expect(find.byKey(const Key('rich-unsafe-notice')), findsOneWidget);
+    // Tentar voltar ao editor visual é recusado.
+    await tester.tap(find.byKey(const Key('toggle-markdown')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rich-editor')), findsNothing);
+    expect(repo.upserts, 0);
+    expect((await repo.watchNotes().first).single.body, table);
+  });
+
   testWidgets('abrir e sair sem editar não grava (Markdown intacto)', (tester) async {
     final repo = _CountingRepository();
     await repo.upsertNote(const Note(id: 'n1', title: 'Misto', body: mixed));

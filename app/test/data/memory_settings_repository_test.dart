@@ -21,4 +21,17 @@ void main() {
         repo.saveSettings(const UserSettings(theme: 'coral')), throwsA(isA<RepositoryException>()));
     expect((await repo.watchSettings().first).theme, 'violeta');
   });
+
+  test('ocultar dois dispositivos seguidos mantém os dois e não mexe no tema', () async {
+    final repo = MemorySettingsRepository(initial: const UserSettings(theme: 'coral'));
+    await Future.wait([repo.setDeviceHidden('a', true), repo.setDeviceHidden('b', true)]);
+    final s = await repo.watchSettings().first;
+    expect(s.hiddenAlexaDevices.toSet(), {'a', 'b'});
+    expect(s.theme, 'coral');
+    await repo.setDeviceHidden('a', false);
+    expect((await repo.watchSettings().first).hiddenAlexaDevices, ['b']);
+    await repo.setTheme('musgo');
+    final t = await repo.watchSettings().first;
+    expect([t.theme, t.hiddenAlexaDevices], ['musgo', ['b']]);
+  });
 }
