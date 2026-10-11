@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './index.js';
-import { READ, UserError, WRITE, check, ok, safe } from './util.js';
+import { ACT, READ, UserError, check, ok, okData, requireEcho, safe } from './util.js';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -24,14 +24,15 @@ export function registerWake(server: McpServer, ctx: ToolContext): void {
     annotations: READ,
   }, safe(async () => {
     const rows = check(await ctx.db.from('wake_plans').select('*').eq('user_id', ctx.userId).order('time', { ascending: true })) as Row[];
-    return ok({ wakePlans: rows.map(planOut) });
+    return okData({ wakePlans: rows.map(planOut) });
   }));
 
   server.registerTool('upsert_wake_plan', {
     title: 'Criar ou editar despertar',
     description:
       'Sem `id`, cria um despertar (exige label, days, time e echoDeviceId). Com `id`, altera só os campos informados. ' +
-      '`days`: 1 = segunda … 7 = domingo; `time`: HH:MM no fuso do usuário; `volume` 0–100; `briefingDelayMin` 0–30.',
+      '`days`: 1 = segunda … 7 = domingo; `time`: HH:MM no fuso do usuário; `volume` 0–100; `briefingDelayMin` 0–30. ' +
+      'Age na casa (o Echo vai falar/tocar no horário): confirme com o usuário. `echoDeviceId` precisa ser um Echo de list_alexa_devices.',
     inputSchema: {
       id: z.string().uuid().optional(), label: z.string().trim().min(1).max(100).optional(), days: days.optional(),
       time: time.optional(), echoDeviceId: z.string().min(1).max(200).optional(),
@@ -39,8 +40,9 @@ export function registerWake(server: McpServer, ctx: ToolContext): void {
       briefingDelayMin: z.number().int().min(0).max(30).optional(), volume: z.number().int().min(0).max(100).optional(),
       fallbackAlarm: z.boolean().optional(), enabled: z.boolean().optional(),
     },
-    annotations: { ...WRITE, idempotentHint: true },
+    annotations: { ...ACT, idempotentHint: true },
   }, safe(async (a) => {
+    if (a.echoDeviceId !== undefined) await requireEcho(ctx, a.echoDeviceId);
     const f: Row = {};
     if (a.label !== undefined) f.label = a.label;
     if (a.days !== undefined) f.days = [...new Set(a.days)].sort();

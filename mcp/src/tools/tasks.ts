@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './index.js';
 import {
-  DESTRUCTIVE, READ, UserError, WRITE, assertOwned, check, clampLimit, ok, parseWhen, safe, toIso,
+  DESTRUCTIVE, READ, UserError, WRITE, assertOwned, check, clampLimit, ok, okData, parseWhen, safe, toIso,
 } from './util.js';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -48,7 +48,7 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
       const dy = y.due_at ? Date.parse(y.due_at) : far;
       return dx - dy || String(x.title).localeCompare(String(y.title));
     });
-    return ok({ tasks: rows.slice(0, clampLimit(a.limit)).map((r) => taskOut(r, tz)) });
+    return okData({ tasks: rows.slice(0, clampLimit(a.limit)).map((r) => taskOut(r, tz)) });
   }));
 
   server.registerTool('create_task', {

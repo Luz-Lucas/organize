@@ -1,17 +1,26 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { jwtVerify, SignJWT } from 'jose';
 import type { McpConfig } from '../config.js';
 
 export const ACCESS_TTL_SECONDS = 3600;
 
-type TokenCfg = Pick<McpConfig, 'jwtSecret' | 'publicUrl' | 'userId'>;
+type TokenCfg = Pick<McpConfig, 'jwtSecret' | 'publicUrl' | 'userId' | 'passphraseHash'>;
+
+/**
+ * "Geração" das credenciais: 16 primeiros hex de sha256(passphraseHash + jwtSecret). Todo access/refresh token
+ * carrega a geração em que nasceu; trocar a senha ou o segredo muda a geração e invalida tudo.
+ */
+export function generation(cfg: Pick<McpConfig, 'passphraseHash' | 'jwtSecret'>): string {
+  return createHash('sha256').update(cfg.passphraseHash + cfg.jwtSecret).digest('hex').slice(0, 16);
+}
 
 const key = (cfg: TokenCfg) => new TextEncoder().encode(cfg.jwtSecret);
 export const audience = (cfg: Pick<McpConfig, 'publicUrl'>) => `${cfg.publicUrl}/mcp`;
 
-export async function signAccessToken(cfg: TokenCfg, now: Date): Promise<string> {
+/** `familyId` entra no claim `fid`, para a revogação de uma família barrar também os access tokens dela. */
+export async function signAccessToken(cfg: TokenCfg, now: Date, familyId: string): Promise<string> {
   const iat = Math.floor(now.getTime() / 1000);
-  return new SignJWT({})
+  return new SignJWT({ gen: generation(cfg), fid: familyId })
     .setProtectedHeader({ alg: 'HS256', typ: 'at+jwt' })
     .setIssuer(cfg.publicUrl)
     .setAudience(audience(cfg))
@@ -22,19 +31,20 @@ export async function signAccessToken(cfg: TokenCfg, now: Date): Promise<string>
     .sign(key(cfg));
 }
 
-/** true somente se assinatura, exp, iss, aud e sub conferem. Nunca lança. */
-export async function verifyAccessToken(cfg: TokenCfg, token: string, now: Date): Promise<boolean> {
+/** Devolve o `fid` somente se assinatura, exp, iss, aud, sub e geração conferem. Nunca lança. */
+export async function verifyAccessToken(cfg: TokenCfg, token: string, now: Date): Promise<{ fid: string } | null> {
   try {
-    await jwtVerify(token, key(cfg), {
+    const { payload } = await jwtVerify(token, key(cfg), {
       algorithms: ['HS256'],
       issuer: cfg.publicUrl,
       audience: audience(cfg),
       subject: cfg.userId,
-      requiredClaims: ['exp', 'iss', 'aud', 'sub'],
+      requiredClaims: ['exp', 'iss', 'aud', 'sub', 'gen', 'fid'],
       currentDate: now,
     });
-    return true;
+    if (payload.gen !== generation(cfg) || typeof payload.fid !== 'string' || !payload.fid) return null;
+    return { fid: payload.fid };
   } catch {
-    return false;
+    return null;
   }
 }

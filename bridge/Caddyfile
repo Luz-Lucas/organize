@@ -1,4 +1,5 @@
 {$DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000"
 	@mcp path /mcp /mcp/* /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/* /.well-known/oauth-authorization-server /.well-known/oauth-authorization-server/* /authorize /token /register /revoke
 	handle @mcp {
 		reverse_proxy mcp:8081

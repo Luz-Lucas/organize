@@ -33,12 +33,13 @@ describe('/mcp com o cliente MCP do SDK', () => {
     expect(await r.text()).not.toMatch(/SyntaxError|at /);
   });
 
-  it('corpo acima de 1 MB é recusado', async () => {
+  it('corpo JSON de /mcp acima de 256 KB é recusado (413); abaixo disso passa do limite', async () => {
     const { tokens } = await fullLogin(app);
-    const r = await fetch(`${app.url}/mcp`, {
+    const post = (n: number) => fetch(`${app.url}/mcp`, {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens.access_token}` },
-      body: JSON.stringify({ x: 'a'.repeat(1_100_000) }),
+      body: JSON.stringify({ x: 'a'.repeat(n) }),
     });
-    expect(r.status).toBe(413);
+    expect((await post(300_000)).status).toBe(413);
+    expect((await post(200_000)).status).not.toBe(413);
   });
 });

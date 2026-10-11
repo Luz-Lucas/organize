@@ -1,14 +1,17 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import express, { type Request, type Response } from 'express';
 import type { McpConfig } from '../config.js';
 import { CHALLENGE_RE, verifyS256 } from './pkce.js';
 import { verifyPassphrase } from './passphrase.js';
-import { HitLimiter, LoginLimiter } from './ratelimit.js';
+import { HitLimiter, LoginLimiter, clientKey } from './ratelimit.js';
 import { ACCESS_TTL_SECONDS, audience, signAccessToken } from './tokens.js';
 import { OAuthStore, type OAuthClient } from './store.js';
 
 const CSRF_TTL_MS = 15 * 60_000;
-const MAX_CSRF = 500;
+const MAX_REDIRECT_URIS = 3;
+const MAX_REDIRECT_URIS_CHARS = 512;
+/** Só nestes hosts o `client_name` informado pelo app é exibido na página de consentimento. */
+const TRUSTED_NAME_HOSTS = new Set(['claude.ai', 'claude.com']);
 const GRANTS = ['authorization_code', 'refresh_token'];
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
@@ -42,13 +45,19 @@ function redirectUriAllowed(cfg: McpConfig, uri: string): boolean {
 }
 
 export function createOAuthRouter(
-  cfg: McpConfig, store: OAuthStore, now: () => Date, opts: { registerPerHour?: number } = {},
+  cfg: McpConfig, store: OAuthStore, now: () => Date,
+  opts: { registerPerHour?: number; registerGlobalPerHour?: number; authorizeGetPer10Min?: number } = {},
 ): express.Router {
   const router = express.Router();
   const secureCookie = cfg.publicUrl.startsWith('https://');
   const loginLimiter = new LoginLimiter(now);
   const registerLimiter = new HitLimiter(now, opts.registerPerHour ?? 20, 60 * 60_000);
-  const csrfTokens = new Map<string, number>(); // token -> expiração
+  const registerGlobalLimiter = new HitLimiter(now, opts.registerGlobalPerHour ?? 50, 60 * 60_000);
+  const authorizeGetLimiter = new HitLimiter(now, opts.authorizeGetPer10Min ?? 60, 10 * 60_000);
+  // Token CSRF sem estado: HMAC(chave derivada do jwtSecret, valor do cookie + expiração).
+  const csrfKey = createHmac('sha256', cfg.jwtSecret).update('organizacional-mcp/csrf/v1').digest();
+  const csrfMac = (cookieValue: string, exp: number) =>
+    createHmac('sha256', csrfKey).update(`${cookieValue}.${exp}`).digest('base64url');
 
   // ---------- metadados ----------
   const protectedResource = (_req: Request, res: Response) => {
@@ -81,13 +90,16 @@ export function createOAuthRouter(
   // ---------- registro dinâmico (RFC 7591) ----------
   router.post('/register', (req, res) => {
     noStore(res);
-    if (!registerLimiter.allow(req.ip ?? 'unknown')) {
+    if (!registerLimiter.allow(clientKey(req.ip)) || !registerGlobalLimiter.allow('global')) {
       return oauthError(res, 429, 'temporarily_unavailable', 'Muitos registros. Tente mais tarde.');
     }
     const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
     const uris = body.redirect_uris;
-    if (!Array.isArray(uris) || uris.length < 1 || uris.length > 5 || !uris.every((u) => typeof u === 'string')) {
-      return oauthError(res, 400, 'invalid_redirect_uri', 'redirect_uris deve ser uma lista de 1 a 5 URLs.');
+    if (!Array.isArray(uris) || uris.length < 1 || uris.length > MAX_REDIRECT_URIS || !uris.every((u) => typeof u === 'string')) {
+      return oauthError(res, 400, 'invalid_redirect_uri', `redirect_uris deve ser uma lista de 1 a ${MAX_REDIRECT_URIS} URLs.`);
+    }
+    if ((uris as string[]).reduce((n, u) => n + u.length, 0) > MAX_REDIRECT_URIS_CHARS) {
+      return oauthError(res, 400, 'invalid_redirect_uri', `O total de caracteres dos redirect_uris passa de ${MAX_REDIRECT_URIS_CHARS}.`);
     }
     if (!uris.every((u: string) => redirectUriAllowed(cfg, u))) {
       return oauthError(res, 400, 'invalid_redirect_uri', 'redirect_uri não permitido.');
@@ -102,7 +114,7 @@ export function createOAuthRouter(
     }
     const name = typeof body.client_name === 'string' ? body.client_name.slice(0, 100) : undefined;
     const client = store.registerClient([...new Set(uris as string[])], name);
-    if (!client) return oauthError(res, 400, 'invalid_client_metadata', 'Limite de clientes atingido.');
+    if (!client) return oauthError(res, 429, 'temporarily_unavailable', 'Limite de clientes atingido. Tente mais tarde.');
     res.status(201).json({
       client_id: client.clientId,
       client_id_issued_at: Math.floor(client.createdAt / 1000),
@@ -171,7 +183,7 @@ export function createOAuthRouter(
 body{font:16px system-ui,sans-serif;background:#f4f4f6;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}
 main{background:#fff;padding:2rem;border-radius:12px;max-width:380px;width:calc(100% - 2rem);box-shadow:0 2px 12px #0002}
 h1{font-size:1.2rem;margin-top:0}input[type=password]{width:100%;box-sizing:border-box;padding:.7rem;font-size:1rem;margin:.5rem 0 1rem}
-button{width:100%;padding:.7rem;font-size:1rem;border:0;border-radius:8px;background:#3d5afe;color:#fff}.err{color:#b00020}
+.dest{font-size:1.25rem;word-break:break-all;margin:.2rem 0 1rem}button{width:100%;padding:.7rem;font-size:1rem;border:0;border-radius:8px;background:#3d5afe;color:#fff}.err{color:#b00020}
 </style></head><body><main>${body}</main></body></html>`;
 
   function errorPage(res: Response, status: number, message: string, extra?: (r: Response) => void): void {
@@ -180,14 +192,20 @@ button{width:100%;padding:.7rem;font-size:1rem;border:0;border-radius:8px;backgr
     res.status(status).send(layout(`<h1>Não foi possível continuar</h1><p>${esc(message)}</p>`));
   }
 
+  /** Emite o cookie CSRF (valor aleatório) e devolve o token do formulário: `<exp>.<HMAC(cookie, exp)>`. */
   function newCsrf(res: Response): string {
-    const t = now().getTime();
-    for (const [k, exp] of csrfTokens) if (exp < t) csrfTokens.delete(k);
-    while (csrfTokens.size >= MAX_CSRF) csrfTokens.delete(csrfTokens.keys().next().value as string);
-    const token = randomBytes(24).toString('base64url');
-    csrfTokens.set(token, t + CSRF_TTL_MS);
-    res.append('Set-Cookie', `mcp_csrf=${token}; Path=/authorize; HttpOnly; SameSite=Strict; Max-Age=${CSRF_TTL_MS / 1000}${secureCookie ? '; Secure' : ''}`);
-    return token;
+    const cookieValue = randomBytes(24).toString('base64url');
+    const exp = now().getTime() + CSRF_TTL_MS;
+    res.append('Set-Cookie', `mcp_csrf=${cookieValue}; Path=/authorize; HttpOnly; SameSite=Strict; Max-Age=${CSRF_TTL_MS / 1000}${secureCookie ? '; Secure' : ''}`);
+    return `${exp}.${csrfMac(cookieValue, exp)}`;
+  }
+
+  function csrfValid(token: string | undefined, cookieValue: string | undefined): boolean {
+    if (!token || !cookieValue) return false;
+    const m = /^(\d{1,16})\.([A-Za-z0-9_-]{43})$/.exec(token);
+    if (!m) return false;
+    const exp = Number(m[1]);
+    return exp > now().getTime() && safeEqual(m[2], csrfMac(cookieValue, exp));
   }
 
   function cookie(req: Request, name: string): string | undefined {
@@ -202,9 +220,12 @@ button{width:100%;padding:.7rem;font-size:1rem;border:0;border-radius:8px;backgr
     pageHeaders(res, new URL(p.redirectUri).origin);
     const csrf = newCsrf(res);
     const hidden = (n: string, v: string | undefined) => (v === undefined ? '' : `<input type="hidden" name="${n}" value="${esc(v)}">`);
-    const who = p.client.clientName ? ` O aplicativo <b>${esc(p.client.clientName)}</b> pede` : ' Um aplicativo pede';
+    const dest = new URL(p.redirectUri); // já validado (igual ao registrado); IDN aparece em punycode
+    const appName = TRUSTED_NAME_HOSTS.has(dest.hostname) && p.client.clientName ? esc(p.client.clientName) : 'App desconhecido';
     res.status(status).send(layout(`<h1>Organizacional</h1>
-<p>${who} acesso à sua agenda, tarefas, notas e casa. Digite sua senha de acesso para autorizar.</p>
+<p>Você está autorizando um app que enviará o acesso para:</p>
+<p class="dest"><b>${esc(dest.host)}</b></p>
+<p><b>${appName}</b> pede acesso à sua agenda, tarefas, notas e casa. Só continue se reconhecer esse endereço. Digite sua senha de acesso para autorizar.</p>
 ${error ? `<p class="err" role="alert">${esc(error)}</p>` : ''}
 <form method="post" action="/authorize" autocomplete="off">
 ${hidden('response_type', 'code')}${hidden('client_id', p.client.clientId)}${hidden('redirect_uri', p.redirectUri)}
@@ -215,6 +236,9 @@ ${hidden('code_challenge', p.codeChallenge)}${hidden('code_challenge_method', 'S
   }
 
   router.get('/authorize', (req, res) => {
+    if (!authorizeGetLimiter.allow(clientKey(req.ip))) {
+      return errorPage(res, 429, 'Muitas requisições. Aguarde alguns minutos e tente de novo.', (r) => r.setHeader('Retry-After', '600'));
+    }
     const v = validateAuth(req.query as Record<string, unknown>);
     if (v.kind === 'page') return errorPage(res, 400, v.message);
     if (v.kind === 'redirect') return redirectWith(res, v.redirectUri, { error: v.error, error_description: v.description, state: v.state });
@@ -227,7 +251,7 @@ ${hidden('code_challenge', p.codeChallenge)}${hidden('code_challenge_method', 'S
     if (v.kind === 'page') return errorPage(res, 400, v.message);
     if (v.kind === 'redirect') return redirectWith(res, v.redirectUri, { error: v.error, error_description: v.description, state: v.state });
 
-    const ip = req.ip ?? 'unknown';
+    const ip = clientKey(req.ip);
     const wait = loginLimiter.blockedFor(ip);
     if (wait > 0) {
       return errorPage(res, 429, 'Muitas tentativas. Aguarde alguns minutos e tente de novo.', (r) => r.setHeader('Retry-After', String(wait)));
@@ -235,11 +259,9 @@ ${hidden('code_challenge', p.codeChallenge)}${hidden('code_challenge_method', 'S
 
     const csrf = str(body.csrf);
     const cookieCsrf = cookie(req, 'mcp_csrf');
-    const exp = csrf ? csrfTokens.get(csrf) : undefined;
-    if (!csrf || !cookieCsrf || !safeEqual(csrf, cookieCsrf) || exp === undefined || exp < now().getTime()) {
+    if (!csrfValid(csrf, cookieCsrf)) {
       return renderForm(res, v.p, 'A página expirou. Tente novamente.', 403);
     }
-    csrfTokens.delete(csrf);
 
     const password = str(body.password);
     if (!password || password.length > 1024 || !verifyPassphrase(password, cfg.passphraseHash)) {
@@ -261,9 +283,9 @@ ${hidden('code_challenge', p.codeChallenge)}${hidden('code_challenge_method', 'S
     const client = store.getClient(clientId);
     if (!client) return oauthError(res, 401, 'invalid_client');
 
-    const issue = async (family: string) => {
-      const accessToken = await signAccessToken(cfg, now());
-      const refreshToken = store.issueRefresh(family, client.clientId);
+    const issue = async (family: string, familyExpiresAt: number) => {
+      const accessToken = await signAccessToken(cfg, now(), family);
+      const refreshToken = store.issueRefresh(family, client.clientId, familyExpiresAt);
       res.json({ access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_TTL_SECONDS, refresh_token: refreshToken });
     };
 
@@ -279,15 +301,15 @@ ${hidden('code_challenge', p.codeChallenge)}${hidden('code_challenge_method', 'S
         || !verifyS256(verifier, entry.codeChallenge)) {
         return oauthError(res, 400, 'invalid_grant');
       }
-      return issue(entry.family);
+      return issue(entry.family, entry.familyExpiresAt);
     }
 
     if (grant === 'refresh_token') {
       const token = str(body.refresh_token);
       if (!token) return oauthError(res, 400, 'invalid_request', 'refresh_token ausente.');
-      const family = store.rotateRefresh(token, client.clientId);
-      if (!family) return oauthError(res, 400, 'invalid_grant');
-      return issue(family);
+      const rotated = store.rotateRefresh(token, client.clientId);
+      if (!rotated) return oauthError(res, 400, 'invalid_grant');
+      return issue(rotated.family, rotated.familyExpiresAt);
     }
 
     oauthError(res, 400, 'unsupported_grant_type');

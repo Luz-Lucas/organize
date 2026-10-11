@@ -33,12 +33,14 @@ claude.ai → Configurações → Conectores → **Adicionar conector personaliz
 
 - Um aplicativo/dispositivo: o Claude chama `/revoke` ao desconectar o conector.
 - Todos os refresh tokens: apague `bridge/mcp-data/refresh.json` e reinicie o serviço.
-- Tudo, inclusive tokens de acesso em uso (1 h): troque `MCP_JWT_SECRET` e reinicie.
-- Trocar a senha: gere outro hash e reinicie; sessões existentes continuam até revogar como acima.
+- Tudo, inclusive tokens de acesso em uso: trocar a senha (novo `MCP_PASSPHRASE_HASH`) **ou** o `MCP_JWT_SECRET` e reiniciar. Cada token carrega a "geração" (16 hex de sha256(hash da senha + segredo)); ao mudar, todos os access e refresh tokens deixam de valer e é preciso entrar de novo.
+- `/revoke` de um refresh token também bloqueia, por 1 h (`bridge/mcp-data/revoked.json`), os access tokens da mesma família.
+- Uma família de refresh tokens vale no máximo 30 dias desde o login; a rotação não prorroga.
+- Padrões extras em `MCP_ALLOWED_REDIRECTS` são usados como escritos: ancore-os com `^…$`.
 
 ## Segurança (resumo)
 
-PKCE S256 obrigatório; `redirect_uri` com comparação exata contra o registrado, e o registro só aceita padrões da lista permitida; códigos de uso único, 5 min; refresh com rotação e revogação da família no reuso; senha com scrypt e comparação em tempo constante; no máximo 5 senhas erradas por IP em 15 min e 20 por hora no total; CORS só para `https://claude.ai` e `https://claude.com`; nada de senha/token/código em logs.
+PKCE S256 obrigatório; `redirect_uri` com comparação exata contra o registrado, e o registro só aceita padrões da lista permitida; códigos de uso único, 5 min; refresh com rotação e revogação da família no reuso; senha com scrypt e comparação em tempo constante; no máximo 5 senhas erradas por IP (prefixo /64 no IPv6) em 15 min e 200 por hora no total (só contra inundação distribuída); CSRF sem estado (HMAC do cookie + validade) e 60 aberturas de `/authorize` por IP em 10 min; registro de clientes limitado (3 URIs, 512 caracteres, 20/h por IP, 50/h no total, cliente recente nunca é despejado); a página de login mostra o host de retorno e só exibe o nome do app para claude.ai/claude.com; corpo de `/mcp` limitado a 256 KB; CORS só para `https://claude.ai` e `https://claude.com`; nada de senha/token/código em logs.
 
 ## Ferramentas
 

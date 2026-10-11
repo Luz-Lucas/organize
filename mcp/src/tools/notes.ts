@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './index.js';
 import {
-  READ, UserError, WRITE, assertOwned, check, clampLimit, fold, normalizeTitle, ok, safe, toIso,
+  READ, UserError, WRITE, assertOwned, check, clampLimit, fold, normalizeTitle, ok, okData, safe, toIso,
 } from './util.js';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -81,7 +81,7 @@ export function registerNotes(server: McpServer, ctx: ToolContext): void {
   }, safe(async (a) => {
     if (a.id || a.title) {
       const n = await findNote(ctx, a);
-      return ok({ note: { ...noteSummary(n, tz), parentId: n.parent_id, body: n.body } });
+      return okData({ note: { ...noteSummary(n, tz), parentId: n.parent_id, body: n.body } });
     }
     let q = ctx.db.from('notes').select('*').eq('user_id', ctx.userId);
     if (a.spaceId) q = q.eq('space_id', a.spaceId);
@@ -90,7 +90,7 @@ export function registerNotes(server: McpServer, ctx: ToolContext): void {
     const hits = needle
       ? rows.filter((n) => fold(n.title).includes(needle) || fold(n.body ?? '').includes(needle))
       : rows;
-    return ok({
+    return okData({
       notes: hits.slice(0, clampLimit(a.limit, 20)).map((n) => ({ ...noteSummary(n, tz), snippet: snippet(n.body ?? '', a.query ?? '') })),
     });
   }));

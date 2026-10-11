@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './index.js';
 import {
-  DESTRUCTIVE, READ, UserError, WRITE, assertOwned, check, clampLimit, isDateOnly, ok, parseWhen, safe,
+  DESTRUCTIVE, READ, UserError, WRITE, assertOwned, check, clampLimit, isDateOnly, ok, okData, parseWhen, safe,
   startOfLocalDay, toIso,
 } from './util.js';
 import { taskOut } from './tasks.js';
@@ -62,7 +62,7 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
         .order('due_at', { ascending: true }).limit(limit));
       out.tasks = (tasks as Row[]).map((t) => ({ ...taskOut(t, tz), overdue: new Date(t.due_at) < from }));
     }
-    return ok(out);
+    return okData(out);
   }));
 
   server.registerTool('create_event', {
@@ -100,7 +100,7 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
       allDay: z.boolean().optional(), location: z.string().trim().max(200).nullable().optional(),
       spaceId: z.string().uuid().nullable().optional(),
     },
-    annotations: { ...WRITE, idempotentHint: true },
+    annotations: { ...DESTRUCTIVE, idempotentHint: true },
   }, safe(async (a) => {
     const cur = check(await ctx.db.from('events').select('*').eq('id', a.id).eq('user_id', ctx.userId).maybeSingle()) as Row | null;
     if (!cur) throw new UserError('Evento não encontrado.');

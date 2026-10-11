@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { McpConfig } from './config.js';
 import { createOAuthRouter } from './oauth/router.js';
 import { OAuthStore } from './oauth/store.js';
-import { verifyAccessToken } from './oauth/tokens.js';
+import { generation, verifyAccessToken } from './oauth/tokens.js';
 
 export const ALLOWED_ORIGINS = ['https://claude.ai', 'https://claude.com'];
 
@@ -13,13 +13,17 @@ const CORS_PATHS = /^\/(mcp(\/.*)?|\.well-known\/.*|register|token|revoke)$/;
 export interface HttpDeps {
   makeServer: () => McpServer;
   now?: () => Date;
-  /** Limite de POST /register por IP por hora (padrão 20; testes elevam). */
+  /** Limite de POST /register por IP (/64 no IPv6) por hora (padrão 20; testes elevam). */
   registerPerHour?: number;
+  /** Teto global de POST /register por hora (padrão 50; testes elevam). */
+  registerGlobalPerHour?: number;
+  /** Limite de GET /authorize por IP (/64 no IPv6) em 10 min (padrão 60; testes elevam). */
+  authorizeGetPer10Min?: number;
 }
 
 export function buildApp(cfg: McpConfig, deps: HttpDeps): express.Express {
   const now = deps.now ?? (() => new Date());
-  const store = new OAuthStore(cfg.dataDir, now);
+  const store = new OAuthStore(cfg.dataDir, now, generation(cfg));
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -51,10 +55,16 @@ export function buildApp(cfg: McpConfig, deps: HttpDeps): express.Express {
     next();
   });
 
-  app.use(express.json({ limit: '1mb' }));
+  // /mcp: JSON de até 256 KB; nas demais rotas (registro, revogação) 64 KB bastam.
+  app.use('/mcp', express.json({ limit: '256kb' }));
+  app.use(express.json({ limit: '64kb' }));
   app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
-  app.use(createOAuthRouter(cfg, store, now, { registerPerHour: deps.registerPerHour }));
+  app.use(createOAuthRouter(cfg, store, now, {
+    registerPerHour: deps.registerPerHour,
+    registerGlobalPerHour: deps.registerGlobalPerHour,
+    authorizeGetPer10Min: deps.authorizeGetPer10Min,
+  }));
 
   const metadataUrl = `${cfg.publicUrl}/.well-known/oauth-protected-resource`;
   const unauthorized = (res: Response, hadToken: boolean) => {
@@ -65,7 +75,8 @@ export function buildApp(cfg: McpConfig, deps: HttpDeps): express.Express {
 
   const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
     const m = /^Bearer ([A-Za-z0-9\-._~+/]+=*)$/i.exec(req.headers.authorization ?? '');
-    if (!m || !(await verifyAccessToken(cfg, m[1], now()))) return unauthorized(res, Boolean(m));
+    const claims = m ? await verifyAccessToken(cfg, m[1], now()) : null;
+    if (!m || !claims || store.isFamilyRevoked(claims.fid)) return unauthorized(res, Boolean(m));
     next();
   };
 

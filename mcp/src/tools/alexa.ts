@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolContext } from './index.js';
-import { ACT, READ, UserError, check, fail, ok, safe } from './util.js';
+import { ACT, READ, UserError, check, fail, ok, requireEcho, requireRow, safe } from './util.js';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -15,12 +15,6 @@ export interface AlexaOptions {
 
 const FINAL = new Set(['done', 'failed', 'expired']);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function requireRow(ctx: ToolContext, table: 'alexa_devices' | 'alexa_routines', id: string, what: string): Promise<Row> {
-  const r = check(await ctx.db.from(table).select('*').eq('user_id', ctx.userId).eq('id', id).maybeSingle()) as Row | null;
-  if (!r) throw new UserError(`${what} "${id}" não encontrado(a). Consulte a lista (list_alexa_devices / list_alexa_routines) para ver os ids válidos.`);
-  return r;
-}
 
 export function registerAlexa(server: McpServer, ctx: ToolContext, opts: AlexaOptions = {}): void {
   const waitMs = opts.waitMs ?? 20_000;
@@ -79,8 +73,7 @@ export function registerAlexa(server: McpServer, ctx: ToolContext, opts: AlexaOp
     inputSchema: { echoDeviceId: z.string().min(1).max(200), text: z.string().trim().min(1).max(2000) },
     annotations: ACT,
   }, safe(async (a) => {
-    const dev = await requireRow(ctx, 'alexa_devices', a.echoDeviceId, 'Dispositivo');
-    if (dev.kind !== 'echo') throw new UserError(`"${dev.name}" não é um Echo; escolha um dispositivo do tipo echo.`);
+    await requireEcho(ctx, a.echoDeviceId);
     return send('speak', { echoDeviceId: a.echoDeviceId, text: a.text });
   }));
 
@@ -91,8 +84,7 @@ export function registerAlexa(server: McpServer, ctx: ToolContext, opts: AlexaOp
     annotations: ACT,
   }, safe(async (a) => {
     await requireRow(ctx, 'alexa_routines', a.routineId, 'Rotina');
-    const dev = await requireRow(ctx, 'alexa_devices', a.echoDeviceId, 'Dispositivo');
-    if (dev.kind !== 'echo') throw new UserError(`"${dev.name}" não é um Echo; escolha um dispositivo do tipo echo.`);
+    await requireEcho(ctx, a.echoDeviceId);
     return send('routine', { routineId: a.routineId, echoDeviceId: a.echoDeviceId });
   }));
 

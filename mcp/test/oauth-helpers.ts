@@ -31,25 +31,43 @@ export interface TestApp {
   dataDir: string;
   clock: { t: number };
   close: () => Promise<void>;
-  restart: () => Promise<TestApp>;
+  restart: (overrides?: StartOpts) => Promise<TestApp>;
 }
 
-export async function startApp(opts: { dataDir?: string; clock?: { t: number }; registerPerHour?: number } = {}): Promise<TestApp> {
+export interface StartOpts {
+  dataDir?: string;
+  clock?: { t: number };
+  registerPerHour?: number;
+  registerGlobalPerHour?: number;
+  authorizeGetPer10Min?: number;
+  /** Troca a senha de acesso (hash) / o segredo JWT, para testar a revogação por "geração". */
+  passphraseHash?: string;
+  secret?: string;
+  /** Porta fixa (o restart reaproveita a anterior para a URL pública, iss e aud não mudarem). */
+  port?: number;
+}
+
+export async function startApp(opts: StartOpts = {}): Promise<TestApp> {
   const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), 'mcp-test-'));
   const clock = opts.clock ?? { t: Date.parse('2026-10-12T12:00:00Z') };
   const server = http.createServer();
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  await new Promise<void>((r) => server.listen(opts.port ?? 0, '127.0.0.1', r));
   const port = (server.address() as { port: number }).port;
   const url = `http://127.0.0.1:${port}`;
   const cfg = loadConfig({
-    MCP_PUBLIC_URL: url, MCP_JWT_SECRET: SECRET, MCP_PASSPHRASE_HASH: passHash(), MCP_DATA_DIR: dataDir,
+    MCP_PUBLIC_URL: url, MCP_JWT_SECRET: opts.secret ?? SECRET, MCP_PASSPHRASE_HASH: opts.passphraseHash ?? passHash(), MCP_DATA_DIR: dataDir,
     SUPABASE_URL: 'http://x', SUPABASE_SERVICE_ROLE_KEY: 'k', ORGANIZACIONAL_USER_ID: USER_ID,
   });
-  server.on('request', buildApp(cfg, { makeServer: pingServer, now: () => new Date(clock.t), registerPerHour: opts.registerPerHour ?? 10_000 }));
+  const handler = buildApp(cfg, {
+    makeServer: pingServer, now: () => new Date(clock.t), registerPerHour: opts.registerPerHour ?? 10_000,
+    registerGlobalPerHour: opts.registerGlobalPerHour ?? 10_000, authorizeGetPer10Min: opts.authorizeGetPer10Min ?? 10_000,
+  });
+  // Sem keep-alive: o restart reaproveita a porta e uma conexão reutilizada do pool falharia.
+  server.on('request', (req, res) => { res.setHeader('Connection', 'close'); handler(req, res); });
   const app: TestApp = {
     url, cfg, dataDir, clock,
     close: () => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()); }),
-    restart: async () => { await app.close(); return startApp({ dataDir, clock, registerPerHour: opts.registerPerHour }); },
+    restart: async (overrides = {}) => { await app.close(); return startApp({ ...opts, dataDir, clock, port, ...overrides }); },
   };
   return app;
 }
@@ -63,10 +81,10 @@ export function makePkce() {
   return { verifier, challenge: createHash('sha256').update(verifier).digest('base64url') };
 }
 
-export async function register(app: TestApp, redirect = REDIRECT): Promise<string> {
+export async function register(app: TestApp, redirect = REDIRECT, name = 'Teste'): Promise<string> {
   const r = await fetch(`${app.url}/register`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ redirect_uris: [redirect], token_endpoint_auth_method: 'none', client_name: 'Teste' }),
+    body: JSON.stringify({ redirect_uris: [redirect], token_endpoint_auth_method: 'none', client_name: name }),
   });
   return (await r.json()).client_id;
 }
@@ -79,21 +97,23 @@ export function authQuery(clientId: string, challenge: string, extra: Record<str
 }
 
 /** GET /authorize e devolve o CSRF (campo + cookie). */
-export async function getForm(app: TestApp, q: URLSearchParams) {
-  const r = await fetch(`${app.url}/authorize?${q}`, { redirect: 'manual' });
+export async function getForm(app: TestApp, q: URLSearchParams, headers: Record<string, string> = {}) {
+  const r = await fetch(`${app.url}/authorize?${q}`, { redirect: 'manual', headers });
   const html = await r.text();
   const csrf = /name="csrf" value="([^"]+)"/.exec(html)?.[1] ?? '';
   const cookie = (r.headers.get('set-cookie') ?? '').split(';')[0];
   return { res: r, html, csrf, cookie };
 }
 
-export async function postAuthorize(app: TestApp, q: URLSearchParams, password: string, csrf: string, cookie: string) {
+export async function postAuthorize(
+  app: TestApp, q: URLSearchParams, password: string, csrf: string, cookie: string, headers: Record<string, string> = {},
+) {
   const body = new URLSearchParams(q);
   body.set('password', password);
   body.set('csrf', csrf);
   return fetch(`${app.url}/authorize`, {
     method: 'POST', redirect: 'manual',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie, ...headers },
     body,
   });
 }

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './index.js';
-import { READ, UserError, WRITE, check, clampLimit, ok, parseWhen, safe, toIso } from './util.js';
+import { READ, UserError, WRITE, check, clampLimit, ok, okData, parseWhen, safe, toIso } from './util.js';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -29,7 +29,7 @@ export function registerNotices(server: McpServer, ctx: ToolContext): void {
       if (x.priority !== y.priority) return x.priority === 'alta' ? -1 : 1;
       return Date.parse(y.created_at) - Date.parse(x.created_at);
     });
-    return ok({ notices: rows.slice(0, clampLimit(a.limit)).map((r) => noticeOut(r, tz)) });
+    return okData({ notices: rows.slice(0, clampLimit(a.limit)).map((r) => noticeOut(r, tz)) });
   }));
 
   server.registerTool('create_notice', {
