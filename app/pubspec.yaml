@@ -52,7 +52,7 @@ dependencies:
   home_widget: ^0.10.0
   workmanager: ^0.10.10
   geolocator: ^14.0.2
-  permission_handler: ^13.0.2
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:
