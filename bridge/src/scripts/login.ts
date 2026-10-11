@@ -19,6 +19,7 @@ alexa.init({
   amazonPage: cfg.amazonPage,
   alexaServiceHost: cfg.alexaServiceHost,
   acceptLanguage: 'pt-BR',
+  amazonPageProxyLanguage: 'pt_BR',
   useWsMqtt: false,
   logger: (msg: string) => console.log(msg),
 } as Record<string, unknown>, (err: unknown) => {
