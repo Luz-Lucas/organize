@@ -29,6 +29,14 @@ android {
         versionName = flutter.versionName
     }
 
+    // Comprime as bibliotecas nativas dentro do APK (o Android as extrai na
+    // instalação): o APK fica bem menor e passa do limite de envio.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
