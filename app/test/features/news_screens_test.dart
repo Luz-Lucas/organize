@@ -136,7 +136,8 @@ void main() {
 
   testWidgets('Hoje mostra manchetes e o ícone abre Notícias', (tester) async {
     await pumpApp(tester, MemoryRepository(), now: _now, news: _news());
-    expect(find.text('Manchetes'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('card-news')), matching: find.text('Notícias')),
+        findsOneWidget);
     expect(find.text('Nova IA brasileira'), findsOneWidget);
     await tester.tap(find.byKey(const Key('open-news')));
     await tester.pumpAndSettle();

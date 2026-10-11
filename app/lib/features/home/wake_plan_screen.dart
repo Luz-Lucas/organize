@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../data/alexa_repository.dart';
@@ -9,7 +8,10 @@ import '../../domain/alexa.dart';
 import '../../domain/ids.dart';
 import '../../domain/user_settings.dart';
 import '../../ui/common.dart';
+import '../../ui/org_theme.dart';
 import 'wake_device_actions.dart';
+import 'wake_next.dart';
+import '../../app/back_navigation.dart';
 
 const _stopOptions = [
   (sec: 15, label: '15 s'),
@@ -47,6 +49,9 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
   WakePlan? _draft;
   String? _error;
   bool _dirty = false; // alterações ainda não salvas
+  final _advanced = ExpansibleController();
+  // "Avançado" nasce aberto quando o plano já tem algum valor fora do padrão.
+  bool _advancedOpen = false;
 
   bool get _isNew => widget.planId == 'novo';
 
@@ -78,6 +83,16 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
         _dirty = true;
       });
 
+  /// Algum valor da seção "Avançado" difere do padrão de um despertar novo?
+  bool _hasAdvancedValues(WakePlan p) =>
+      p.musicStopAfterSec != null ||
+      p.afterMusic != AfterMusic.briefing ||
+      p.effectiveBriefingDelaySec != 10 ||
+      p.volume != 30 ||
+      !p.fallbackAlarm ||
+      !p.includeWeather ||
+      p.deviceActions.isNotEmpty;
+
   Future<void> _pickTime() async {
     final d = _draft!;
     final picked = await showTimePicker(context: context, initialTime: TimeOfDay(hour: d.hour, minute: d.minute));
@@ -95,11 +110,17 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
     final problem = validateWakePlan(plan);
     if (problem != null) {
       setState(() => _error = problem);
+      // Nome, dias e Echo ficam no topo; qualquer outro erro mora em "Avançado".
+      final basic = plan.label.isEmpty || plan.days.isEmpty || plan.echoDeviceId.isEmpty;
+      if (!basic && !_advancedOpen) {
+        _advancedOpen = true;
+        _advanced.expand();
+      }
       return;
     }
     try {
       await ref.read(alexaRepositoryProvider).upsertWakePlan(plan);
-      if (mounted) context.go('/casa');
+      if (mounted) context.popOrGo('/casa');
     } on RepositoryException {
       if (mounted) setState(() => _error = 'Não foi possível salvar.');
     }
@@ -136,7 +157,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
     if (confirmed != true) return;
     try {
       await ref.read(alexaRepositoryProvider).deleteWakePlan(widget.planId);
-      if (mounted) context.go('/casa');
+      if (mounted) context.popOrGo('/casa');
     } on RepositoryException {
       if (mounted) setState(() => _error = 'Não foi possível excluir.');
     }
@@ -156,6 +177,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
         _draft = _initial(plans, echos);
         _label.text = _draft!.label;
         _spotify.text = _draft!.spotifyQuery ?? '';
+        _advancedOpen = _hasAdvancedValues(_draft!);
       }
       if (_draft!.echoDeviceId.isEmpty && echos.isNotEmpty) {
         _draft = _draft!.copyWith(echoDeviceId: echos.first.id); // dispositivos chegaram depois dos planos
@@ -164,6 +186,8 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
       final hasMusic = _spotify.text.trim().isNotEmpty;
       final stopping = hasMusic && d.musicStopAfterSec != null;
       final theme = Theme.of(context);
+      final mobile = MediaQuery.sizeOf(context).width < 720;
+      final next = wakeInLabel(d.days, d.hour, d.minute, ref.watch(clockProvider)());
       return Scaffold(
         appBar: AppBar(
           title: Text(_isNew ? 'Novo despertar' : 'Despertar'),
@@ -183,6 +207,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
             TextField(
               key: const Key('wake-label'),
               controller: _label,
+              textCapitalization: TextCapitalization.sentences,
               onChanged: (_) => setState(() => _dirty = true),
               decoration: const InputDecoration(labelText: 'Nome'),
             ),
@@ -190,7 +215,13 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
               key: const Key('wake-time'),
               leading: const Icon(Icons.alarm),
               title: Text('${twoDigits(d.hour)}:${twoDigits(d.minute)}'),
-              subtitle: const Text('Horário'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Horário'),
+                  if (next != null) Text(next, key: const Key('wake-next')),
+                ],
+              ),
               onTap: _pickTime,
             ),
             const SectionHeader('Dias'),
@@ -247,125 +278,176 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
               value: d.musicFirst,
               onChanged: (v) => _update((d) => d.copyWith(musicFirst: v)),
             ),
-            if (hasMusic) ...[
-              const SectionHeader('Parar a música após'),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+            Theme(
+              data: theme.copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                key: const Key('wake-advanced'),
+                controller: _advanced,
+                initiallyExpanded: _advancedOpen,
+                onExpansionChanged: (open) => _advancedOpen = open,
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                title: Text('Avançado', style: theme.textTheme.titleMedium),
                 children: [
-                  ChoiceChip(
-                    key: const Key('music-stop-none'),
-                    label: const Text('Não parar'),
-                    selected: d.musicStopAfterSec == null,
-                    onSelected: (_) => _update((d) => d.copyWith(clearMusicStop: true)),
-                  ),
-                  for (final o in _stopOptions)
-                    ChoiceChip(
-                      key: Key('music-stop-${o.sec}'),
-                      label: Text(o.label),
-                      selected: d.musicStopAfterSec == o.sec,
-                      onSelected: (_) => _update((d) => d.copyWith(musicStopAfterSec: o.sec)),
+                  if (hasMusic) ...[
+                    const SectionHeader('Parar a música após'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          key: const Key('music-stop-none'),
+                          label: const Text('Não parar'),
+                          selected: d.musicStopAfterSec == null,
+                          onSelected: (_) => _update((d) => d.copyWith(clearMusicStop: true)),
+                        ),
+                        for (final o in _stopOptions)
+                          ChoiceChip(
+                            key: Key('music-stop-${o.sec}'),
+                            label: Text(o.label),
+                            selected: d.musicStopAfterSec == o.sec,
+                            onSelected: (_) => _update((d) => d.copyWith(musicStopAfterSec: o.sec)),
+                          ),
+                      ],
                     ),
-                ],
-              ),
-            ],
-            if (d.musicFirst) ...[
-              const SectionHeader('Depois da música'),
-              SegmentedButton<AfterMusic>(
-                showSelectedIcon: false,
-                segments: [
-                  for (final a in AfterMusic.values)
-                    ButtonSegment(
-                      value: a,
-                      enabled: a != AfterMusic.end || hasMusic, // "Encerrar" só existe com música
-                      label: Text(a.label, key: Key('after-music-${a.name}')),
-                    ),
-                ],
-                selected: {d.afterMusic},
-                onSelectionChanged: (s) => _update((d) => d.copyWith(afterMusic: s.first)),
-              ),
-              if (d.afterMusic == AfterMusic.end)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('Depois da música não haverá resumo falado.', key: Key('after-music-end-hint')),
-                ),
-              if (stopping)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('O resumo começa assim que a música parar.'),
-                )
-              else ...[
-                const SectionHeader('Falar o resumo após'),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final o in _delayOptions)
-                      ChoiceChip(
-                        key: Key('briefing-delay-${o.sec}'),
-                        label: Text(o.label),
-                        selected: d.effectiveBriefingDelaySec == o.sec,
-                        onSelected: (_) => _update((d) => d.copyWith(briefingDelaySec: o.sec)),
-                      ),
-                    if (!_delayOptions.any((o) => o.sec == d.effectiveBriefingDelaySec))
-                      ChoiceChip(
-                        key: const Key('briefing-delay-custom'),
-                        label: Text('Personalizado (${_customDelayLabel(d.effectiveBriefingDelaySec)})'),
-                        selected: true,
-                        onSelected: (_) {},
-                      ),
                   ],
+                  if (d.musicFirst) ...[
+                    const SectionHeader('Depois da música'),
+                    SegmentedButton<AfterMusic>(
+                      showSelectedIcon: false,
+                      segments: [
+                        for (final a in AfterMusic.values)
+                          ButtonSegment(
+                            value: a,
+                            enabled: a != AfterMusic.end || hasMusic, // "Encerrar" só existe com música
+                            label: Text(
+                              a.label,
+                              key: Key('after-music-${a.name}'),
+                              textAlign: TextAlign.center,
+                              softWrap: true,
+                            ),
+                          ),
+                      ],
+                      selected: {d.afterMusic},
+                      onSelectionChanged: (s) => _update((d) => d.copyWith(afterMusic: s.first)),
+                    ),
+                    if (d.afterMusic == AfterMusic.end)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text('Depois da música não haverá resumo falado.', key: Key('after-music-end-hint')),
+                      ),
+                    if (stopping)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text('O resumo começa assim que a música parar.'),
+                      )
+                    else ...[
+                      const SectionHeader('Falar o resumo após'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final o in _delayOptions)
+                            ChoiceChip(
+                              key: Key('briefing-delay-${o.sec}'),
+                              label: Text(o.label),
+                              selected: d.effectiveBriefingDelaySec == o.sec,
+                              onSelected: (_) => _update((d) => d.copyWith(briefingDelaySec: o.sec)),
+                            ),
+                          if (!_delayOptions.any((o) => o.sec == d.effectiveBriefingDelaySec))
+                            ChoiceChip(
+                              key: const Key('briefing-delay-custom'),
+                              label: Text('Personalizado (${_customDelayLabel(d.effectiveBriefingDelaySec)})'),
+                              selected: true,
+                              onSelected: (_) {},
+                            ),
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text('A música toca primeiro para você acordar de verdade.'),
+                      ),
+                    ],
+                  ],
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('Volume ${d.volume}%'),
+                    subtitle: Slider(
+                      value: d.volume.toDouble(),
+                      max: 100,
+                      divisions: 10,
+                      onChanged: (v) => _update((d) => d.copyWith(volume: v.round())),
+                    ),
+                  ),
+                  SwitchListTile(
+                    key: const Key('wake-fallback'),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Alarme reserva'),
+                    subtitle: const Text('Se a ponte falhar, um alarme comum toca 10 minutos depois.'),
+                    value: d.fallbackAlarm,
+                    onChanged: (v) => _update((d) => d.copyWith(fallbackAlarm: v)),
+                  ),
+                  SwitchListTile(
+                    key: const Key('weather-switch'),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Falar o clima'),
+                    subtitle: const Text('Temperatura, máxima, mínima e chance de chuva logo depois do cumprimento.'),
+                    value: d.includeWeather,
+                    onChanged: (v) => _update((d) => d.copyWith(includeWeather: v)),
+                  ),
+                  WakeDeviceActionsSection(
+                    actions: d.deviceActions,
+                    devices: ref.watch(alexaDevicesProvider).value ?? const <AlexaDevice>[],
+                    hiddenIds: (ref.watch(settingsProvider).value ?? const UserSettings()).hiddenAlexaDevices.toSet(),
+                    onChanged: (list) => _update((d) => d.copyWith(deviceActions: list)),
+                  ),
+                ],
+              ),
+            ),
+            if (!_isNew) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton(
+                  key: const Key('wake-test'),
+                  onPressed: _dirty ? null : _test,
+                  child: const Text('Testar agora'),
                 ),
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('A música toca primeiro para você acordar de verdade.'),
+              ),
+              if (_dirty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Salve para testar',
+                    key: const Key('wake-test-hint'),
+                    style: theme.textTheme.bodySmall?.copyWith(color: context.org.inkMuted),
+                  ),
                 ),
-              ],
             ],
-            ListTile(
-              title: Text('Volume ${d.volume}%'),
-              subtitle: Slider(
-                value: d.volume.toDouble(),
-                max: 100,
-                divisions: 10,
-                onChanged: (v) => _update((d) => d.copyWith(volume: v.round())),
-              ),
-            ),
-            SwitchListTile(
-              key: const Key('wake-fallback'),
-              title: const Text('Alarme reserva'),
-              subtitle: const Text('Se a ponte falhar, um alarme comum toca 10 minutos depois.'),
-              value: d.fallbackAlarm,
-              onChanged: (v) => _update((d) => d.copyWith(fallbackAlarm: v)),
-            ),
-            SwitchListTile(
-              key: const Key('weather-switch'),
-              title: const Text('Falar o clima'),
-              subtitle: const Text('Temperatura, máxima, mínima e chance de chuva logo depois do cumprimento.'),
-              value: d.includeWeather,
-              onChanged: (v) => _update((d) => d.copyWith(includeWeather: v)),
-            ),
-            WakeDeviceActionsSection(
-              actions: d.deviceActions,
-              devices: ref.watch(alexaDevicesProvider).value ?? const <AlexaDevice>[],
-              hiddenIds: (ref.watch(settingsProvider).value ?? const UserSettings()).hiddenAlexaDevices.toSet(),
-              onChanged: (list) => _update((d) => d.copyWith(deviceActions: list)),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(_error!, key: const Key('wake-error'), style: TextStyle(color: theme.colorScheme.error)),
-              ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              children: [
-                FilledButton(key: const Key('wake-save'), onPressed: _save, child: const Text('Salvar')),
-                if (!_isNew)
-                  OutlinedButton(key: const Key('wake-test'), onPressed: _dirty ? null : _test, child: const Text('Testar agora')),
-              ],
-            ),
           ],
+        ),
+        bottomNavigationBar: Material(
+          color: context.org.surfaceRaised,
+          elevation: 3,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(mobile ? 16 : 24, 8, mobile ? 16 : 24, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(_error!, key: const Key('wake-error'), style: TextStyle(color: theme.colorScheme.error)),
+                    ),
+                  FilledButton(key: const Key('wake-save'), onPressed: _save, child: const Text('Salvar')),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     });

@@ -12,7 +12,9 @@ import 'app/providers.dart';
 import 'app/router.dart';
 import 'app_icon/app_icon.dart';
 import 'data/supabase_alexa_repository.dart';
+import 'data/email_repository.dart';
 import 'data/location_repository.dart';
+import 'data/supabase_email_repository.dart';
 import 'data/supabase_location_repository.dart';
 import 'data/supabase_news_repository.dart';
 import 'data/supabase_repository.dart';
@@ -66,6 +68,7 @@ Future<void> main() async {
       alexaRepositoryProvider.overrideWithValue(SupabaseAlexaRepository(client)),
       settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
       locationRepositoryProvider.overrideWithValue(SupabaseLocationRepository(client)),
+      emailRepositoryProvider.overrideWithValue(SupabaseEmailRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
       if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
       if (isAndroid) locationServiceProvider.overrideWithValue(const GeolocatorLocationService()),

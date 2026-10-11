@@ -14,6 +14,7 @@ import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 import 'spaces_screen.dart' show iconForKind;
 import '../../ui/task_tile.dart';
+import '../../app/back_navigation.dart';
 
 class SpaceScreen extends ConsumerWidget {
   const SpaceScreen({super.key, required this.spaceId});
@@ -56,7 +57,7 @@ class SpaceScreen extends ConsumerWidget {
     if (confirmed != true) return;
     try {
       await ref.read(repositoryProvider).deleteSpace(space.id);
-      if (context.mounted) context.go('/espacos');
+      if (context.mounted) context.popOrGo('/espacos');
     } on RepositoryException {
       if (context.mounted) showError(context, 'Não foi possível excluir o espaço.');
     }

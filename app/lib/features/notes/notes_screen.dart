@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../ui/org_widgets.dart';
 import '../spaces/spaces_screen.dart';
@@ -17,9 +18,19 @@ class NotesScreen extends StatelessWidget {
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.only(bottom: 24),
-          children: const [
-            PageHeader(title: 'Notas'),
-            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: NotesTree()),
+          children: [
+            PageHeader(
+              title: 'Notas',
+              actions: [
+                IconButton(
+                  key: const Key('open-spaces'),
+                  tooltip: 'Espaços',
+                  icon: const Icon(Icons.folder_outlined),
+                  onPressed: () => context.push('/espacos'),
+                ),
+              ],
+            ),
+            const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: NotesTree()),
           ],
         ),
       ),

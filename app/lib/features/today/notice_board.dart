@@ -52,8 +52,10 @@ class NoticeBoard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Text('Quadro de avisos', style: theme.textTheme.titleMedium),
-              const Spacer(),
+              Expanded(
+                child: Text('Quadro de avisos',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium),
+              ),
               IconButton(
                 key: const Key('new-notice'),
                 tooltip: 'Novo aviso',

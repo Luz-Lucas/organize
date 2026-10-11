@@ -7,6 +7,7 @@ import '../../data/repository.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
+import 'gmail_card.dart';
 import 'home_location_card.dart';
 
 /// Ajustes: escolha do tema (10 sistemas de design) e conta.
@@ -35,17 +36,25 @@ class SettingsScreen extends ConsumerWidget {
             const SectionHeader('Tema'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final t in orgThemes)
-                    _ThemeCard(
-                      spec: t,
-                      selected: t.id == selected,
-                      onTap: () => _pick(context, ref, t.id),
-                    ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  // Celular: duas colunas que preenchem a largura; computador: 212 fixos.
+                  final mobile = MediaQuery.sizeOf(context).width < 720;
+                  final cardWidth = mobile ? (c.maxWidth - 12) / 2 : 212.0;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final t in orgThemes)
+                        _ThemeCard(
+                          spec: t,
+                          width: cardWidth,
+                          selected: t.id == selected,
+                          onTap: () => _pick(context, ref, t.id),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
             if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
@@ -62,6 +71,11 @@ class SettingsScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: HomeLocationCard(),
+            ),
+            const SectionHeader('E-mail'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: GmailCard(),
             ),
             const SectionHeader('Conta'),
             Padding(
@@ -93,9 +107,15 @@ class SettingsScreen extends ConsumerWidget {
 
 /// Amostra de um tema, pintada com as cores do próprio tema.
 class _ThemeCard extends StatelessWidget {
-  const _ThemeCard({required this.spec, required this.selected, required this.onTap});
+  const _ThemeCard({
+    required this.spec,
+    required this.width,
+    required this.selected,
+    required this.onTap,
+  });
 
   final OrgThemeSpec spec;
+  final double width;
   final bool selected;
   final VoidCallback onTap;
 
@@ -105,7 +125,7 @@ class _ThemeCard extends StatelessWidget {
     final tagline = s.tagline.split('—').first.trim();
     final textTheme = Theme.of(context).textTheme;
     return SizedBox(
-      width: 212,
+      width: width,
       child: Material(
         key: ValueKey('theme-${s.id}'),
         color: s.surface,

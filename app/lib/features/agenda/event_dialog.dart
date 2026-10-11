@@ -217,6 +217,7 @@ class _EventDialogState extends State<EventDialog> {
                 key: const Key('event-title'),
                 controller: _title,
                 autofocus: !editing,
+                textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(labelText: 'Título'),
               ),
               const SizedBox(height: 12),

@@ -85,8 +85,10 @@ class PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Celular: margens de 16 para sobrar espaço ao conteúdo.
+    final gutter = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [

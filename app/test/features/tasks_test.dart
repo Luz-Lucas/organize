@@ -150,7 +150,7 @@ void main() {
       ),
     );
     await pumpApp(tester, repo, location: '/tarefas');
-    expect(find.textContaining('27'), findsOneWidget);
+    expect(find.text('atrasada · 1 d'), findsOneWidget);
     final done = tester.widget<Text>(find.text('Antiga'));
     expect(done.style?.decoration, TextDecoration.lineThrough);
   });
@@ -194,6 +194,8 @@ void main() {
 Future<void> _pickDay(WidgetTester tester, String key, int day) async {
   await tester.tap(find.byKey(Key(key)));
   await tester.pumpAndSettle();
+  await tester.tap(find.byKey(Key('$key-pick')));
+  await tester.pumpAndSettle();
   await tester.tap(find.descendant(of: find.byType(DatePickerDialog), matching: find.text('$day')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('OK'));
@@ -227,7 +229,7 @@ void _tasksPriorityTests() {
       await _pickPriority(tester, 'todo', TaskPriority.alta);
       expect(_in('quick-priority-todo', 'Alta'), findsOneWidget);
       await _pickDay(tester, 'quick-due-todo', 30);
-      expect(_in('quick-due-todo', '30/09'), findsOneWidget);
+      expect(_in('quick-due-todo', 'qua'), findsOneWidget);
 
       await tester.enterText(find.byKey(const Key('quick-add-todo')), 'Prova de cálculo');
       await tester.testTextInput.receiveAction(TextInputAction.done);
@@ -288,7 +290,7 @@ void _tasksPriorityTests() {
       expect(find.text('Não foi possível adicionar. O texto continua no campo.'), findsOneWidget);
       expect(find.text('Resumo'), findsOneWidget);
       expect(_in('quick-priority-todo', 'Alta'), findsOneWidget);
-      expect(_in('quick-due-todo', '30/09'), findsOneWidget);
+      expect(_in('quick-due-todo', 'qua'), findsOneWidget);
     });
 
     testWidgets('celular: chips cabem na tela e criam com prioridade e prazo', (tester) async {
@@ -342,7 +344,7 @@ void _tasksPriorityTests() {
         tester.widget<TextField>(find.byKey(const Key('task-title'))).controller!.text,
         'Rascunho',
       );
-      expect(find.textContaining('Prazo: 30'), findsOneWidget);
+      expect(find.text('Prazo: qua'), findsOneWidget);
       expect(
         tester
             .widget<SegmentedButton<TaskPriority>>(find.byType(SegmentedButton<TaskPriority>))

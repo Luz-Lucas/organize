@@ -31,7 +31,8 @@ void main() {
     await repo.upsertTask(TaskItem(id: 't2', title: 'Resumo atrasado', dueAt: DateTime(2026, 9, 26, 23, 59)));
     await repo.upsertTask(TaskItem(id: 't3', title: 'Prova semana que vem', dueAt: DateTime(2026, 10, 5, 23, 59)));
 
-    await pumpApp(tester, repo, now: DateTime(2026, 9, 28, 10));
+    // 08:30: a aula está em andamento (às 10:00 ela já teria acabado e sairia de "Agora e a seguir").
+    await pumpApp(tester, repo, now: DateTime(2026, 9, 28, 8, 30));
 
     expect(find.text('segunda-feira, 28 de setembro'), findsOneWidget);
     expect(find.text('Cálculo I'), findsOneWidget);
@@ -45,7 +46,7 @@ void main() {
 
   testWidgets('Hoje vazio mostra dicas', (tester) async {
     await pumpApp(tester, MemoryRepository());
-    expect(find.text('Nada na agenda hoje.'), findsOneWidget);
+    expect(find.text('Agenda livre hoje'), findsOneWidget);
     expect(find.text('Nenhuma tarefa para hoje.'), findsOneWidget);
   });
 

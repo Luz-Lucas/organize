@@ -14,6 +14,7 @@ import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import 'markdown_bridge.dart';
 import 'rich_note_editor.dart';
+import '../../app/back_navigation.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   const NoteScreen({super.key, required this.noteId});
@@ -49,6 +50,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool _saveAgain = false;
   bool _disposed = false;
   bool _deleted = false;
+  // Nota recém-criada ("Sem título…" e vazia): foca o título com tudo selecionado.
+  bool _focusTitle = false;
 
   @override
   void initState() {
@@ -149,6 +152,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Future<void> _delete(BuildContext context) async {
     final note = _note;
     if (note == null) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -162,11 +166,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     );
     if (confirmed != true) return;
     _debounce?.cancel();
+    final restore = _draftNote(note);
     _deleted = true;
     try {
       await _repo.deleteNote(note.id);
       _drafts.take(note.id);
-      if (context.mounted) context.pop();
+      if (context.mounted) context.popOrGo('/notas');
+      showUndo(messenger, 'Nota excluída', () => _repo.upsertNote(restore));
     } on RepositoryException {
       _deleted = false;
       if (context.mounted) showError(context, 'Não foi possível excluir a nota.');
@@ -196,6 +202,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
       TextField(
         key: const Key('note-title'),
         controller: _title,
+        autofocus: _focusTitle,
+        textCapitalization: TextCapitalization.sentences,
         onChanged: (_) => _changed(),
         style: theme.textTheme.headlineMedium,
         decoration: const InputDecoration.collapsed(hintText: 'Título'),
@@ -311,6 +319,10 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           final content = draft ?? current;
           _title.text = content.title;
           _body.text = content.body;
+          if (draft == null && content.title.startsWith('Sem título') && content.body.isEmpty) {
+            _focusTitle = true;
+            _title.selection = TextSelection(baseOffset: 0, extentOffset: content.title.length);
+          }
           _richUnsafe = !canRoundTripMarkdown(content.body);
           _markdownMode = _richUnsafe;
           if (draft != null) {

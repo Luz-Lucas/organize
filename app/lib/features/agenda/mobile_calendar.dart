@@ -90,7 +90,12 @@ class MobileCalendar extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(e.title, style: theme.textTheme.titleSmall),
+                        Text(
+                          e.title,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall,
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           [

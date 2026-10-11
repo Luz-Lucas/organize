@@ -74,7 +74,7 @@ class SpacesScreen extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: OrgCard(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      onTap: () => context.go('/espacos/${s.id}'),
+                      onTap: () => context.push('/espacos/${s.id}'),
                       child: Row(
                         children: [
                           Icon(iconForKind(kind), color: context.org.accentText),
@@ -123,6 +123,7 @@ class _SpaceDialogState extends State<SpaceDialog> {
             key: const Key('space-name'),
             controller: _name,
             autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(labelText: 'Nome'),
           ),

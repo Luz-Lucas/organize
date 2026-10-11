@@ -160,7 +160,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const Expanded(child: SectionHeader('Despertar')),
                 TextButton.icon(
                   key: const Key('new-wake'),
-                  onPressed: () => context.go('/casa/despertar/novo'),
+                  onPressed: () => context.push('/casa/despertar/novo'),
                   icon: const Icon(Icons.add),
                   label: const Text('Novo'),
                 ),
@@ -182,7 +182,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           value: p.enabled,
                           onChanged: (v) => _toggle(p, v),
                         ),
-                        onTap: () => context.go('/casa/despertar/${p.id}'),
+                        onTap: () => context.push('/casa/despertar/${p.id}'),
                       ),
                   ],
                 ),

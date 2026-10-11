@@ -40,6 +40,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
   Future<void> _edit(List<Space> spaces, {CalendarEvent? existing, DateTime? start, DateTime? end}) async {
     final repo = ref.read(repositoryProvider);
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final now = ref.read(clockProvider)();
     final inWeek = !now.isBefore(_weekStart) && now.isBefore(addDays(_weekStart, 7));
     final weekMode = MediaQuery.sizeOf(context).width >= 720 && _view == _AgendaView.week;
@@ -66,6 +67,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             : () async {
                 try {
                   await repo.deleteEvent(existing.id);
+                  showUndo(messenger, 'Evento excluído', () => repo.upsertEvent(existing));
                   return null;
                 } on RepositoryException {
                   return 'Não foi possível excluir o evento.';

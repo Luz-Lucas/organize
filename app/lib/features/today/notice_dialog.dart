@@ -117,6 +117,7 @@ class _NoticeDialogState extends ConsumerState<NoticeDialog> {
                 key: const Key('notice-title'),
                 controller: _title,
                 autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(labelText: 'Título'),
               ),
               const SizedBox(height: 12),
@@ -135,17 +136,18 @@ class _NoticeDialogState extends ConsumerState<NoticeDialog> {
                 value: _pinned,
                 onChanged: (v) => setState(() => _pinned = v),
               ),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text('Prioridade', style: theme.textTheme.bodyMedium),
-                  const SizedBox(width: 12),
                   ChoiceChip(
                     key: const Key('notice-priority-normal'),
                     label: const Text('Normal'),
                     selected: !alta,
                     onSelected: (_) => setState(() => _priority = NoticePriority.normal),
                   ),
-                  const SizedBox(width: 8),
                   ChoiceChip(
                     key: const Key('notice-priority-alta'),
                     label: const Text('Alta'),
@@ -155,7 +157,8 @@ class _NoticeDialogState extends ConsumerState<NoticeDialog> {
                 ],
               ),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton.icon(
                     key: const Key('notice-expires'),

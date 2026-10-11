@@ -416,3 +416,18 @@ enabled = true
 
 [functions.news-fetch]
 verify_jwt = false
+
+# Gmail (somente leitura). connect/disconnect exigem JWT do usuário (padrão).
+# callback: redirecionamento do Google, sem JWT (a segurança é o `state` assinado).
+# sync: o cron envia x-cron-secret sem JWT; a função autoriza sozinha (segredo ou JWT).
+[functions.gmail-connect]
+verify_jwt = true
+
+[functions.gmail-callback]
+verify_jwt = false
+
+[functions.gmail-sync]
+verify_jwt = false
+
+[functions.gmail-disconnect]
+verify_jwt = true

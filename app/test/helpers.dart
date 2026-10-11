@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/app/app.dart';
+import 'package:organizacional/app/back_navigation.dart';
 import 'package:organizacional/app/providers.dart';
 import 'package:organizacional/app/router.dart';
 import 'package:organizacional/data/alexa_repository.dart';
+import 'package:organizacional/data/email_repository.dart';
+import 'package:organizacional/data/memory_email_repository.dart';
 import 'package:organizacional/data/location_repository.dart';
 import 'package:organizacional/data/memory_location_repository.dart';
 import 'package:organizacional/location/location_service.dart';
@@ -28,7 +31,9 @@ Future<void> pumpApp(
   AlexaRepository? alexa,
   SettingsRepository? settings,
   LocationRepository? locationRepo,
+  EmailRepository? emailRepo,
   LocationService? locationService,
+  void Function()? exitApp,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -42,8 +47,10 @@ Future<void> pumpApp(
       alexaRepositoryProvider.overrideWithValue(alexa ?? MemoryAlexaRepository()),
       settingsRepositoryProvider.overrideWithValue(settings ?? MemorySettingsRepository()),
       locationRepositoryProvider.overrideWithValue(locationRepo ?? MemoryLocationRepository()),
+      emailRepositoryProvider.overrideWithValue(emailRepo ?? MemoryEmailRepository()),
       if (locationService != null) locationServiceProvider.overrideWithValue(locationService),
       googleFontsEnabledProvider.overrideWithValue(false),
+      if (exitApp != null) exitAppProvider.overrideWithValue(exitApp),
     ],
     child: OrganizacionalApp(
       router: buildRouter(initialLocation: location, isSignedIn: () => true),

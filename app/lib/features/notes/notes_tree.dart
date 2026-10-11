@@ -57,7 +57,14 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
   }
 
   void _open(Note note) {
-    context.push('/nota/${note.id}');
+    final path = '/nota/${note.id}';
+    // Já dentro de uma nota (barra lateral): troca a nota em vez de empilhar,
+    // para o histórico não crescer a cada toque; voltar leva à lista/página anterior.
+    if (widget.activeNoteId != null) {
+      context.pushReplacement(path);
+    } else {
+      context.push(path);
+    }
     widget.onOpen?.call();
   }
 
@@ -78,10 +85,19 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
     final notes = ref.watch(notesProvider).value ?? const <Note>[];
     final q = _fold(_query);
     final searching = q.isNotEmpty;
+    // Busca no título e no corpo; quem casa pelo título vem primeiro.
+    bool titleHit(Note n) => _fold(n.title).contains(q);
     final visible = [
       for (final n in notes)
-        if (!searching || _fold(n.title).contains(q)) n,
-    ]..sort((a, b) => _fold(a.title).compareTo(_fold(b.title)));
+        if (!searching || titleHit(n) || _fold(n.body).contains(q)) n,
+    ]..sort((a, b) {
+        if (searching) {
+          final byHit = (titleHit(a) ? 0 : 1).compareTo(titleHit(b) ? 0 : 1);
+          if (byHit != 0) return byHit;
+        }
+        return _fold(a.title).compareTo(_fold(b.title));
+      });
+    final mobile = MediaQuery.sizeOf(context).width < 720;
 
     final spaceIds = {for (final s in spaces) s.id};
     List<Note> inSpace(String id) => [for (final n in visible) if (n.spaceId == id) n];
@@ -98,7 +114,7 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 36,
+                  height: mobile ? 48 : 36,
                   child: TextField(
                     key: const Key('notes-search'),
                     controller: _search,
@@ -106,10 +122,10 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                     onChanged: (v) => setState(() => _query = v),
                     decoration: InputDecoration(
                       hintText: 'Buscar nota',
-                      isDense: true,
+                      isDense: !mobile,
                       prefixIcon: const Icon(Icons.search, size: 18),
                       prefixIconConstraints: const BoxConstraints(minWidth: 36),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(vertical: mobile ? 12 : 8),
                     ),
                   ),
                 ),
@@ -118,7 +134,7 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
               IconButton(
                 key: const Key('tree-new-note'),
                 tooltip: 'Nova nota',
-                visualDensity: VisualDensity.compact,
+                visualDensity: mobile ? null : VisualDensity.compact,
                 icon: const Icon(Icons.add, size: 20),
                 onPressed: () => _create(notes),
               ),
@@ -182,13 +198,14 @@ class _SpaceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final org = context.org;
     final theme = Theme.of(context);
+    final mobile = MediaQuery.sizeOf(context).width < 720;
     return Theme(
       data: theme.copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         key: ValueKey('tree-space-${space.id}'),
         initiallyExpanded: expanded,
         dense: true,
-        minTileHeight: 34,
+        minTileHeight: mobile ? 48 : 34,
         tilePadding: const EdgeInsets.symmetric(horizontal: 12),
         childrenPadding: EdgeInsets.zero,
         shape: const Border(),
@@ -196,7 +213,20 @@ class _SpaceTile extends StatelessWidget {
         iconColor: org.inkMuted,
         collapsedIconColor: org.inkMuted,
         leading: Icon(iconForKind(space.kind), size: 18, color: org.inkMuted),
-        title: Text(space.name, style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(space.name, style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
+            ),
+            IconButton(
+              key: ValueKey('tree-space-open-${space.id}'),
+              tooltip: 'Abrir espaço',
+              visualDensity: mobile ? null : VisualDensity.compact,
+              icon: Icon(Icons.open_in_new, size: 18, color: org.inkMuted),
+              onPressed: () => context.push('/espacos/${space.id}'),
+            ),
+          ],
+        ),
         children: [
           if (notes.isEmpty)
             Padding(
@@ -233,8 +263,10 @@ class _NoteRow extends StatelessWidget {
         child: InkWell(
           key: ValueKey('tree-note-${note.id}'),
           onTap: () => onOpen(note),
-          child: Padding(
+          child: Container(
+            constraints: BoxConstraints(minHeight: MediaQuery.sizeOf(context).width < 720 ? 48 : 0),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            alignment: Alignment.centerLeft,
             child: Row(
               children: [
                 Icon(Icons.description_outlined,

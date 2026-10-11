@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/notes/notes_tree.dart';
+import 'back_navigation.dart';
 import '../ui/org_theme.dart';
 
 typedef _Dest = ({String path, IconData icon, String label});
@@ -59,6 +60,10 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final active = _activePath(widget.location);
+    return BackHandler(location: widget.location, child: _scaffold(context, active));
+  }
+
+  Widget _scaffold(BuildContext context, String? active) {
     if (MediaQuery.sizeOf(context).width >= AppShell.wideBreakpoint) {
       return Scaffold(
         body: Row(
