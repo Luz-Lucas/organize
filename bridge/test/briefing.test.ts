@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBriefing, chunkSpeech, escapeSsml, headlinesText, splitTasks, type BriefingInput } from '../src/briefing.js';
+import { buildBriefing, chunkSpeech, escapeSsml, headlinesText, splitTasks, wakeTexts, type BriefingInput } from '../src/briefing.js';
 
 const SP = 'America/Sao_Paulo';
 const now = new Date('2026-09-28T10:00:00Z'); // 07:00 em SP, segunda
@@ -54,6 +54,12 @@ describe('buildBriefing', () => {
 describe('auxiliares', () => {
   it('headlinesText sem manchetes', () => {
     expect(headlinesText([])).toBe('Não encontrei manchetes das suas fontes agora.');
+  });
+
+  it('wakeTexts devolve o resumo e as manchetes', () => {
+    const i = input({ news: [{ source: 'G1', title: 'Chuva forte em BH.' }] });
+    expect(wakeTexts(i)).toEqual({ briefing: buildBriefing(i), headlines: headlinesText(i.news) });
+    expect(wakeTexts(input()).headlines).toBe('Não encontrei manchetes das suas fontes agora.');
   });
 
   it('splitTasks separa atrasadas de hoje', () => {

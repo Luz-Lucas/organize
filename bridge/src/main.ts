@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import expressAdapter from 'ask-sdk-express-adapter';
 import express from 'express';
 import { AlexaRemoteGateway } from './alexa-remote-gateway.js';
-import { buildBriefing } from './briefing.js';
+import { wakeTexts } from './briefing.js';
 import { CommandError, executeCommand, isExpired, type Command } from './commands.js';
 import { loadConfig } from './config.js';
 import { AlexaAuthError, type AlexaGateway } from './gateway.js';
@@ -10,7 +10,7 @@ import { planWakeActions } from './scheduler.js';
 import { buildSkill } from './skill.js';
 import { SupabaseStore } from './supabase-store.js';
 import { addDays, localParts, timeZoneMatches } from './time.js';
-import { applyWakeActions, runWake } from './wake.js';
+import { applyWakeActions, runWake, testPlan } from './wake.js';
 
 const { ExpressAdapter } = expressAdapter;
 const cfg = loadConfig(process.env);
@@ -85,8 +85,7 @@ async function wakeTest(planId: string): Promise<string> {
   const plan = (await store.listWakePlans()).find((p) => p.id === planId);
   if (!plan) throw new CommandError('despertar não encontrado');
   if (!gateway) throw new CommandError('ponte sem login na Alexa');
-  const text = buildBriefing(await briefingInput());
-  const result = await runWake({ ...plan, briefingDelayMin: 0 }, text, gateway, sleep);
+  const result = await runWake(testPlan(plan), wakeTexts(await briefingInput()), gateway, sleep);
   return result.ok ? 'ok' : `falhou: ${result.notes.join('; ')}`;
 }
 
@@ -128,7 +127,7 @@ async function wakeTick(): Promise<void> {
     if (!gw) return; // sem login: o alarme reserva já armado toca sozinho
     const running = await applyWakeActions(actions, {
       gateway: gw, store, sleep, log,
-      briefing: async () => buildBriefing(await briefingInput()),
+      briefing: async () => wakeTexts(await briefingInput()),
     }, inFlight);
     // Cada despertar roda em segundo plano; AlexaAuthError vira status auth_required, sem rejeição solta.
     void Promise.allSettled(running).then(async (results) => {

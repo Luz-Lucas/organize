@@ -4,7 +4,7 @@ import { planWakeActions, type WakePlan, type WakeRun } from '../src/scheduler.j
 const SP = 'America/Sao_Paulo';
 const plan = (over: Partial<WakePlan> = {}): WakePlan => ({
   id: 'p1', label: 'Aula', days: [1, 2, 3, 4, 5], time: '07:00:00', echoDeviceId: 'ECHO',
-  spotifyQuery: 'lofi', musicFirst: true, briefingDelayMin: 3, volume: 30,
+  spotifyQuery: 'lofi', musicFirst: true, briefingDelayMin: 3, musicStopAfterSec: null, afterMusic: 'briefing', volume: 30,
   fallbackAlarm: true, enabled: true, ...over,
 });
 const run = (over: Partial<WakeRun> = {}): WakeRun => ({

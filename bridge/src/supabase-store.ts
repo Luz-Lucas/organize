@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { splitTasks, type BriefingInput } from './briefing.js';
 import type { Command, CommandKind } from './commands.js';
 import type { EchoDevice, Routine, SmartDevice } from './gateway.js';
-import type { RunStatus, WakePlan, WakeRun } from './scheduler.js';
+import type { AfterMusic, RunStatus, WakePlan, WakeRun } from './scheduler.js';
 import { zonedDayRange } from './time.js';
 import type { WakeStore } from './wake.js';
 
@@ -17,7 +17,9 @@ const toCommand = (r: Row): Command => ({
   createdAt: new Date(r.created_at),
 });
 
-const toPlan = (r: Row): WakePlan => ({
+const AFTER_MUSIC: readonly AfterMusic[] = ['briefing', 'headlines', 'end'];
+
+export const toPlan = (r: Row): WakePlan => ({
   id: r.id,
   label: r.label,
   days: r.days,
@@ -26,6 +28,8 @@ const toPlan = (r: Row): WakePlan => ({
   spotifyQuery: r.spotify_query,
   musicFirst: r.music_first,
   briefingDelayMin: r.briefing_delay_min,
+  musicStopAfterSec: r.music_stop_after_sec ?? null,
+  afterMusic: AFTER_MUSIC.includes(r.after_music) ? r.after_music : 'briefing',
   volume: r.volume,
   fallbackAlarm: r.fallback_alarm,
   enabled: r.enabled,

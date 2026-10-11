@@ -4,6 +4,7 @@ export class FakeGateway implements AlexaGateway {
   calls: string[] = [];
   failOn = new Set<string>();
   deleted: string[] = [];
+  stopped: string[] = [];
   alarms = new Map<string, { echo: string; at: Date; label: string }>();
   private next = 1;
 
@@ -26,6 +27,10 @@ export class FakeGateway implements AlexaGateway {
   async speak(echo: string, text: string) { await this.record('speak', `${echo},${text}`); }
   async setVolume(echo: string, volume: number) { await this.record('setVolume', `${echo},${volume}`); }
   async playSpotify(echo: string, query: string) { await this.record('playSpotify', `${echo},${query}`); }
+  async stopMusic(echo: string) {
+    await this.record('stopMusic', echo);
+    this.stopped.push(echo);
+  }
   async createAlarm(echo: string, at: Date, label: string) {
     await this.record('createAlarm', `${echo},${at.toISOString()},${label}`);
     const handle = `alarme-${this.next++}`;

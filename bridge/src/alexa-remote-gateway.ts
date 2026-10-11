@@ -150,6 +150,11 @@ export class AlexaRemoteGateway implements AlexaGateway {
     if (failed) throw new Error(`Spotify não encontrou ou não tocou "${query}"`);
   }
 
+  async stopMusic(echoDeviceId: string): Promise<void> {
+    // sendCommand(serialOrName, command, value, callback): 'pause' ignora o valor.
+    await this.call('sendCommand', echoDeviceId, 'pause', null);
+  }
+
   async createAlarm(echoDeviceId: string, at: Date, label: string): Promise<string> {
     const notification = this.alexa.createNotificationObject(echoDeviceId, 'Alarm', label, at, 'ON');
     const created = await this.call<Any>('createNotification', notification);

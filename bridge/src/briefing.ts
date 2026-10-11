@@ -63,6 +63,11 @@ export function buildBriefing(i: BriefingInput): string {
   return parts.join(' ');
 }
 
+/** Os dois textos que o despertar pode falar: o resumo completo e só as manchetes. */
+export function wakeTexts(i: BriefingInput): { briefing: string; headlines: string } {
+  return { briefing: buildBriefing(i), headlines: headlinesText(i.news) };
+}
+
 export function splitTasks(
   tasks: { title: string; dueAt: Date }[],
   dayStart: Date,

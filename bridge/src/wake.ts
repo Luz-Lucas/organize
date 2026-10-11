@@ -4,9 +4,23 @@ import type { RunStatus, WakeAction, WakePlan } from './scheduler.js';
 
 export interface WakeResult { ok: boolean; notes: string[] }
 
+export interface WakeTexts { briefing: string; headlines: string }
+
+/** Teto da espera da música no "Testar agora", para o teste não ser eterno. */
+export const TEST_MAX_STOP_SEC = 60;
+
+/** Plano usado por "Testar agora": sem atraso do resumo e com a parada da música limitada. */
+export function testPlan(plan: WakePlan): WakePlan {
+  return {
+    ...plan,
+    briefingDelayMin: 0,
+    musicStopAfterSec: plan.musicStopAfterSec === null ? null : Math.min(plan.musicStopAfterSec, TEST_MAX_STOP_SEC),
+  };
+}
+
 export async function runWake(
   plan: WakePlan,
-  briefing: string,
+  texts: WakeTexts,
   gateway: AlexaGateway,
   sleep: (ms: number) => Promise<void>,
 ): Promise<WakeResult> {
@@ -29,20 +43,30 @@ export async function runWake(
     audio ||= played;
     return played;
   };
-  const speak = async () => {
-    for (const chunk of chunkSpeech(briefing)) {
+  const speak = async (text: string) => {
+    for (const chunk of chunkSpeech(text)) {
       if (!(await attempt('fala', () => gateway.speak(plan.echoDeviceId, chunk)))) return;
       audio = true;
     }
   };
+  /** Espera e para a música; falha vira nota e não impede o próximo passo. */
+  const stopAfterWait = async (sec: number) => {
+    await sleep(sec * 1000);
+    await attempt('parar música', () => gateway.stopMusic(plan.echoDeviceId));
+  };
 
   await attempt('volume', () => gateway.setVolume(plan.echoDeviceId, plan.volume));
   if (plan.musicFirst) {
-    if (await music()) await sleep(plan.briefingDelayMin * 60_000);
-    await speak();
+    if (await music()) {
+      if (plan.musicStopAfterSec !== null) await stopAfterWait(plan.musicStopAfterSec);
+      else await sleep(plan.briefingDelayMin * 60_000);
+    }
+    // Mesmo que a música tenha falhado, o próximo passo roda: o usuário precisa acordar.
+    if (plan.afterMusic === 'briefing') await speak(texts.briefing);
+    else if (plan.afterMusic === 'headlines') await speak(texts.headlines);
   } else {
-    await speak();
-    await music();
+    await speak(texts.briefing);
+    if ((await music()) && plan.musicStopAfterSec !== null) await stopAfterWait(plan.musicStopAfterSec);
   }
   return { ok: audio, notes };
 }
@@ -57,7 +81,7 @@ export interface WakeStore {
 export interface WakeDeps {
   gateway: AlexaGateway;
   store: WakeStore;
-  briefing: () => Promise<string>;
+  briefing: () => Promise<WakeTexts>;
   sleep: (ms: number) => Promise<void>;
   log: (msg: string) => void;
 }

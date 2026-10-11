@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { findApplianceId, mapRoutines, mapSmartEntities } from '../src/alexa-remote-gateway.js';
+import { toPlan } from '../src/supabase-store.js';
+
+describe('toPlan', () => {
+  const row = {
+    id: 'p1', label: 'Aula', days: [1], time: '07:00:00', echo_device_id: 'ECHO', spotify_query: 'lofi',
+    music_first: true, briefing_delay_min: 3, volume: 30, fallback_alarm: true, enabled: true,
+    music_stop_after_sec: 30, after_music: 'headlines',
+  };
+
+  it('mapeia music_stop_after_sec e after_music', () => {
+    expect(toPlan(row)).toMatchObject({ musicStopAfterSec: 30, afterMusic: 'headlines' });
+    expect(toPlan({ ...row, after_music: 'end' }).afterMusic).toBe('end');
+  });
+
+  it('ausente ou desconhecido vira "não parar" e briefing', () => {
+    expect(toPlan({ ...row, music_stop_after_sec: null }).musicStopAfterSec).toBeNull();
+    expect(toPlan({ ...row, music_stop_after_sec: undefined }).musicStopAfterSec).toBeNull();
+    expect(toPlan({ ...row, after_music: 'x' }).afterMusic).toBe('briefing');
+    expect(toPlan({ ...row, after_music: undefined }).afterMusic).toBe('briefing');
+  });
+});
 
 describe('mapSmartEntities', () => {
   it('mantém só dispositivos controláveis e as operações conhecidas', () => {

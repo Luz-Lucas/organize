@@ -18,6 +18,8 @@ export interface AlexaGateway {
   speak(echoDeviceId: string, text: string): Promise<void>;
   setVolume(echoDeviceId: string, volume: number): Promise<void>;
   playSpotify(echoDeviceId: string, query: string): Promise<void>;
+  /** Para (pausa) o que estiver tocando no Echo. */
+  stopMusic(echoDeviceId: string): Promise<void>;
   /** Devolve um identificador opaco para apagar o alarme depois. */
   createAlarm(echoDeviceId: string, at: Date, label: string): Promise<string>;
   deleteAlarm(handle: string): Promise<void>;

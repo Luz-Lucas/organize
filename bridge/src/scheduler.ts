@@ -1,5 +1,7 @@
 import { addDays, localParts, zonedTime } from './time.js';
 
+export type AfterMusic = 'briefing' | 'headlines' | 'end';
+
 export interface WakePlan {
   id: string;
   label: string;
@@ -9,6 +11,10 @@ export interface WakePlan {
   spotifyQuery: string | null;
   musicFirst: boolean;
   briefingDelayMin: number;
+  /** Segundos de música antes de parar; null = não para. */
+  musicStopAfterSec: number | null;
+  /** O que vem depois da música (só com musicFirst). */
+  afterMusic: AfterMusic;
   volume: number;
   fallbackAlarm: boolean;
   enabled: boolean;
