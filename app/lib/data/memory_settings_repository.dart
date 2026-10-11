@@ -47,4 +47,14 @@ class MemorySettingsRepository implements SettingsRepository {
   Future<void> setDeviceHidden(String deviceId, bool hidden) => saveSettings(_current.copyWith(
         hiddenAlexaDevices: [..._current.hiddenAlexaDevices.where((x) => x != deviceId), if (hidden) deviceId],
       ));
+
+  @override
+  Future<void> setHome(double lat, double lon) =>
+      saveSettings(_current.copyWith(homeLat: lat, homeLon: lon));
+
+  @override
+  Future<void> clearHome() => saveSettings(_current.copyWith(clearHome: true));
+
+  @override
+  Future<void> setRequireHome(bool value) => saveSettings(_current.copyWith(requireHome: value));
 }

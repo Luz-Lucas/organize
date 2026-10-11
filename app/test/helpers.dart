@@ -5,6 +5,9 @@ import 'package:organizacional/app/app.dart';
 import 'package:organizacional/app/providers.dart';
 import 'package:organizacional/app/router.dart';
 import 'package:organizacional/data/alexa_repository.dart';
+import 'package:organizacional/data/location_repository.dart';
+import 'package:organizacional/data/memory_location_repository.dart';
+import 'package:organizacional/location/location_service.dart';
 import 'package:organizacional/data/memory_alexa_repository.dart';
 import 'package:organizacional/data/memory_news_repository.dart';
 import 'package:organizacional/data/news_repository.dart';
@@ -24,6 +27,8 @@ Future<void> pumpApp(
   Future<bool> Function(Uri)? openLink,
   AlexaRepository? alexa,
   SettingsRepository? settings,
+  LocationRepository? locationRepo,
+  LocationService? locationService,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -36,6 +41,8 @@ Future<void> pumpApp(
       linkOpenerProvider.overrideWithValue(openLink ?? (_) async => true),
       alexaRepositoryProvider.overrideWithValue(alexa ?? MemoryAlexaRepository()),
       settingsRepositoryProvider.overrideWithValue(settings ?? MemorySettingsRepository()),
+      locationRepositoryProvider.overrideWithValue(locationRepo ?? MemoryLocationRepository()),
+      if (locationService != null) locationServiceProvider.overrideWithValue(locationService),
       googleFontsEnabledProvider.overrideWithValue(false),
     ],
     child: OrganizacionalApp(

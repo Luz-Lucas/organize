@@ -12,9 +12,14 @@ import 'app/providers.dart';
 import 'app/router.dart';
 import 'app_icon/app_icon.dart';
 import 'data/supabase_alexa_repository.dart';
+import 'data/location_repository.dart';
+import 'data/supabase_location_repository.dart';
 import 'data/supabase_news_repository.dart';
 import 'data/supabase_repository.dart';
 import 'data/supabase_settings_repository.dart';
+import 'location/geolocator_location_service.dart';
+import 'location/location_report_sync.dart';
+import 'location/location_service.dart';
 import 'widgets/widget_background.dart';
 import 'widgets/widget_links.dart';
 import 'widgets/widget_sink.dart';
@@ -52,6 +57,7 @@ Future<void> main() async {
     HomeWidget.initiallyLaunchedFromHomeWidget().then(handle).catchError((_) {});
     HomeWidget.widgetClicked.listen(handle, onError: (_) {});
     registerWidgetBackgroundRefresh().catchError((_) {});
+    registerLocationBackgroundReport().catchError((_) {});
   }
   runApp(ProviderScope(
     overrides: [
@@ -59,8 +65,11 @@ Future<void> main() async {
       newsRepositoryProvider.overrideWithValue(SupabaseNewsRepository(client)),
       alexaRepositoryProvider.overrideWithValue(SupabaseAlexaRepository(client)),
       settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
+      locationRepositoryProvider.overrideWithValue(SupabaseLocationRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
       if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
+      if (isAndroid) locationServiceProvider.overrideWithValue(const GeolocatorLocationService()),
+      locationSignedInProvider.overrideWithValue(() => client.auth.currentSession != null),
       if (isAndroid) appIconServiceProvider.overrideWithValue(const MethodChannelAppIconService()),
       currentEmailProvider.overrideWithValue(client.auth.currentUser?.email),
     ],

@@ -110,6 +110,103 @@ const briefingDelayMaxSec = 1800;
 
 String _formatSeconds(int sec) => sec >= 60 && sec % 60 == 0 ? '${sec ~/ 60} min' : '$sec s';
 
+/// O que fazer com um dispositivo no despertar.
+enum WakeActionType {
+  turnOn('Ligar'),
+  turnOff('Desligar'),
+  setBrightness('Brilho');
+
+  const WakeActionType(this.label);
+
+  final String label;
+
+  static WakeActionType? parse(Object? value) => WakeActionType.values.where((a) => a.name == value).firstOrNull;
+}
+
+const maxWakeDeviceActions = 20;
+const wakeDeviceDelayMaxMin = 30;
+
+int _clampInt(num n, int min, int max) => n.toInt().clamp(min, max);
+
+/// Uma ação sobre um dispositivo inteligente, executada [delayMin] minutos
+/// depois do despertar começar.
+class WakeDeviceAction {
+  const WakeDeviceAction({
+    required this.entityId,
+    required this.name,
+    required this.action,
+    this.brightness,
+    this.delayMin = 0,
+  });
+
+  final String entityId;
+  final String name;
+  final WakeActionType action;
+
+  /// 0 a 100; só vale com [WakeActionType.setBrightness].
+  final int? brightness;
+
+  /// 0 a 30 minutos.
+  final int delayMin;
+
+  /// Lê uma ação do JSON do banco; devolve null para entradas inválidas
+  /// (o restante da lista continua valendo).
+  static WakeDeviceAction? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['entityId'];
+    final action = WakeActionType.parse(raw['action']);
+    if (id is! String || id.isEmpty || action == null) return null;
+    final name = raw['name'];
+    final brightness = raw['brightness'];
+    final delay = raw['delayMin'];
+    return WakeDeviceAction(
+      entityId: id,
+      name: name is String && name.isNotEmpty ? name : id,
+      action: action,
+      brightness: action == WakeActionType.setBrightness ? (brightness is num ? _clampInt(brightness, 0, 100) : 100) : null,
+      delayMin: delay is num ? _clampInt(delay, 0, wakeDeviceDelayMaxMin) : 0,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'entityId': entityId,
+        'name': name,
+        'action': action.name,
+        if (action == WakeActionType.setBrightness) 'brightness': brightness,
+        'delayMin': delayMin,
+      };
+
+  WakeDeviceAction copyWith({String? entityId, WakeActionType? action, int? brightness, int? delayMin}) =>
+      WakeDeviceAction(
+        entityId: entityId ?? this.entityId,
+        name: name,
+        action: action ?? this.action,
+        brightness: brightness ?? this.brightness,
+        delayMin: delayMin ?? this.delayMin,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is WakeDeviceAction &&
+      other.entityId == entityId &&
+      other.name == name &&
+      other.action == action &&
+      other.brightness == brightness &&
+      other.delayMin == delayMin;
+
+  @override
+  int get hashCode => Object.hash(entityId, name, action, brightness, delayMin);
+}
+
+/// Quando o celular toca um alarme próprio (Fase 2; ainda sem tela).
+enum PhoneAlarm {
+  never,
+  fallback,
+  always;
+
+  static PhoneAlarm parse(Object? value) => PhoneAlarm.values.where((a) => a.name == value).firstOrNull ?? fallback;
+}
+
 class WakePlan {
   const WakePlan({
     required this.id,
@@ -127,6 +224,9 @@ class WakePlan {
     this.volume = 30,
     this.fallbackAlarm = true,
     this.enabled = true,
+    this.includeWeather = true,
+    this.deviceActions = const [],
+    this.phoneAlarm = PhoneAlarm.fallback,
   });
 
   final String id;
@@ -155,6 +255,15 @@ class WakePlan {
   final bool fallbackAlarm;
   final bool enabled;
 
+  /// Fala a previsão do tempo no despertar.
+  final bool includeWeather;
+
+  /// Dispositivos a ligar/desligar/ajustar durante o despertar.
+  final List<WakeDeviceAction> deviceActions;
+
+  /// Alarme no celular (Fase 2; sem tela ainda).
+  final PhoneAlarm phoneAlarm;
+
   factory WakePlan.fromMap(Map<String, dynamic> m) {
     final time = (m['time'] as String).split(':');
     return WakePlan(
@@ -173,6 +282,13 @@ class WakePlan {
       volume: (m['volume'] as num?)?.toInt() ?? 30,
       fallbackAlarm: (m['fallback_alarm'] as bool?) ?? true,
       enabled: (m['enabled'] as bool?) ?? true,
+      includeWeather: (m['include_weather'] as bool?) ?? true,
+      deviceActions: [
+        if (m['device_actions'] case final List raw)
+          for (final entry in raw)
+            ?WakeDeviceAction.tryParse(entry),
+      ],
+      phoneAlarm: PhoneAlarm.parse(m['phone_alarm']),
     );
   }
 
@@ -193,6 +309,9 @@ class WakePlan {
       'volume': volume,
       'fallback_alarm': fallbackAlarm,
       'enabled': enabled,
+      'include_weather': includeWeather,
+      'device_actions': [for (final a in deviceActions) a.toMap()],
+      'phone_alarm': phoneAlarm.name,
     };
   }
 
@@ -213,6 +332,9 @@ class WakePlan {
     int? volume,
     bool? fallbackAlarm,
     bool? enabled,
+    bool? includeWeather,
+    List<WakeDeviceAction>? deviceActions,
+    PhoneAlarm? phoneAlarm,
   }) =>
       WakePlan(
         id: id,
@@ -230,6 +352,9 @@ class WakePlan {
         volume: volume ?? this.volume,
         fallbackAlarm: fallbackAlarm ?? this.fallbackAlarm,
         enabled: enabled ?? this.enabled,
+        includeWeather: includeWeather ?? this.includeWeather,
+        deviceActions: deviceActions ?? this.deviceActions,
+        phoneAlarm: phoneAlarm ?? this.phoneAlarm,
       );
 
   @override
@@ -249,11 +374,15 @@ class WakePlan {
       other.afterMusic == afterMusic &&
       other.volume == volume &&
       other.fallbackAlarm == fallbackAlarm &&
-      other.enabled == enabled;
+      other.enabled == enabled &&
+      other.includeWeather == includeWeather &&
+      listEquals(other.deviceActions, deviceActions) &&
+      other.phoneAlarm == phoneAlarm;
 
   @override
   int get hashCode => Object.hash(id, label, Object.hashAll(days), hour, minute, echoDeviceId,
-      spotifyQuery, musicFirst, briefingDelayMin, briefingDelaySec, musicStopAfterSec, afterMusic, volume, fallbackAlarm, enabled);
+      spotifyQuery, musicFirst, briefingDelayMin, briefingDelaySec, musicStopAfterSec, afterMusic, volume, fallbackAlarm, enabled,
+      includeWeather, Object.hashAll(deviceActions), phoneAlarm);
 }
 
 String? validateWakePlan(WakePlan p) {
@@ -274,6 +403,18 @@ String? validateWakePlan(WakePlan p) {
   // "Encerrar" só vale depois de uma música que tocou; sem busca ninguém falaria nada ao despertar.
   if (p.afterMusic == AfterMusic.end && (p.spotifyQuery?.trim() ?? '').isEmpty) {
     return 'Para encerrar depois da música, escolha uma busca do Spotify.';
+  }
+  final actions = p.deviceActions;
+  if (actions.length > maxWakeDeviceActions) return 'No máximo $maxWakeDeviceActions dispositivos por despertar.';
+  if (actions.any((a) => a.entityId.isEmpty)) return 'Escolha o dispositivo de cada ação.';
+  if (actions.map((a) => a.entityId).toSet().length != actions.length) {
+    return 'Cada dispositivo só pode aparecer uma vez no despertar.';
+  }
+  if (actions.any((a) => a.delayMin < 0 || a.delayMin > wakeDeviceDelayMaxMin)) {
+    return 'O atraso de cada dispositivo deve ficar entre 0 e $wakeDeviceDelayMaxMin min.';
+  }
+  if (actions.any((a) => a.action == WakeActionType.setBrightness && (a.brightness == null || a.brightness! < 0 || a.brightness! > 100))) {
+    return 'O brilho deve ficar entre 0 e 100%.';
   }
   return null;
 }

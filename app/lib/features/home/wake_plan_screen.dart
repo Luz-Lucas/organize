@@ -7,7 +7,9 @@ import '../../data/alexa_repository.dart';
 import '../../data/repository.dart';
 import '../../domain/alexa.dart';
 import '../../domain/ids.dart';
+import '../../domain/user_settings.dart';
 import '../../ui/common.dart';
+import 'wake_device_actions.dart';
 
 const _stopOptions = [
   (sec: 15, label: '15 s'),
@@ -335,6 +337,19 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
               subtitle: const Text('Se a ponte falhar, um alarme comum toca 10 minutos depois.'),
               value: d.fallbackAlarm,
               onChanged: (v) => _update((d) => d.copyWith(fallbackAlarm: v)),
+            ),
+            SwitchListTile(
+              key: const Key('weather-switch'),
+              title: const Text('Falar o clima'),
+              subtitle: const Text('Temperatura, máxima, mínima e chance de chuva logo depois do cumprimento.'),
+              value: d.includeWeather,
+              onChanged: (v) => _update((d) => d.copyWith(includeWeather: v)),
+            ),
+            WakeDeviceActionsSection(
+              actions: d.deviceActions,
+              devices: ref.watch(alexaDevicesProvider).value ?? const <AlexaDevice>[],
+              hiddenIds: (ref.watch(settingsProvider).value ?? const UserSettings()).hiddenAlexaDevices.toSet(),
+              onChanged: (list) => _update((d) => d.copyWith(deviceActions: list)),
             ),
             if (_error != null)
               Padding(

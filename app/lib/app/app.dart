@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../app_icon/app_icon.dart';
+import '../location/location_report_sync.dart';
 import '../ui/org_theme.dart';
 import '../widgets/widget_sync.dart';
 import 'providers.dart';
@@ -19,6 +20,7 @@ class OrganizacionalApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(widgetSyncProvider);
     ref.watch(appIconSyncProvider);
+    ref.watch(locationReportSyncProvider);
     final id = ref.watch(settingsProvider).value?.theme ?? 'violeta';
     final theme = buildOrgTheme(
       orgThemeById(id),

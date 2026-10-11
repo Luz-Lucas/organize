@@ -5,9 +5,10 @@ import 'repository.dart';
 import 'settings_repository.dart';
 
 class SupabaseSettingsRepository implements SettingsRepository {
-  SupabaseSettingsRepository(this._db);
+  SupabaseSettingsRepository(this._db, {String Function()? userId}) : _userIdOverride = userId;
 
   final SupabaseClient _db;
+  final String Function()? _userIdOverride;
 
   @override
   Stream<UserSettings> watchSettings() => _db
@@ -27,7 +28,7 @@ class SupabaseSettingsRepository implements SettingsRepository {
     }
   }
 
-  String get _userId => _db.auth.currentUser!.id;
+  String get _userId => _userIdOverride != null ? _userIdOverride() : _db.auth.currentUser!.id;
 
   @override
   Future<void> setTheme(String themeId) => _guard(() async {
@@ -45,5 +46,20 @@ class SupabaseSettingsRepository implements SettingsRepository {
         final current = ((row?['hidden_alexa_devices'] as List?) ?? const []).cast<String>();
         final ids = [...current.where((x) => x != deviceId), if (hidden) deviceId];
         await _db.from('user_settings').upsert({'user_id': _userId, 'hidden_alexa_devices': ids});
+      });
+
+  @override
+  Future<void> setHome(double lat, double lon) => _guard(() async {
+        await _db.from('user_settings').upsert({'user_id': _userId, 'home_lat': lat, 'home_lon': lon});
+      });
+
+  @override
+  Future<void> clearHome() => _guard(() async {
+        await _db.from('user_settings').upsert({'user_id': _userId, 'home_lat': null, 'home_lon': null});
+      });
+
+  @override
+  Future<void> setRequireHome(bool value) => _guard(() async {
+        await _db.from('user_settings').upsert({'user_id': _userId, 'require_home': value});
       });
 }

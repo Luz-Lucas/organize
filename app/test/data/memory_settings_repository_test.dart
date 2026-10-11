@@ -34,4 +34,26 @@ void main() {
     final t = await repo.watchSettings().first;
     expect([t.theme, t.hiddenAlexaDevices], ['musgo', ['b']]);
   });
+
+  test('casa: setHome, setRequireHome e clearHome gravam só os seus campos', () async {
+    final repo = MemorySettingsRepository(initial: const UserSettings(theme: 'coral'));
+    await repo.setHome(-19.9167, -45.7);
+    var s = await repo.watchSettings().first;
+    expect([s.homeLat, s.homeLon, s.theme, s.requireHome, s.homeRadiusM], [-19.9167, -45.7, 'coral', true, 50]);
+    await repo.setRequireHome(false);
+    s = await repo.watchSettings().first;
+    expect([s.requireHome, s.homeLat], [false, -19.9167]);
+    await repo.clearHome();
+    s = await repo.watchSettings().first;
+    expect([s.hasHome, s.requireHome, s.theme], [false, false, 'coral']);
+  });
+
+  test('casa: com failWrites as três escritas lançam e nada muda', () async {
+    final repo = MemorySettingsRepository(failWrites: true);
+    await expectLater(repo.setHome(1, 2), throwsA(isA<RepositoryException>()));
+    await expectLater(repo.clearHome(), throwsA(isA<RepositoryException>()));
+    await expectLater(repo.setRequireHome(false), throwsA(isA<RepositoryException>()));
+    final s = await repo.watchSettings().first;
+    expect([s.hasHome, s.requireHome], [false, true]);
+  });
 }

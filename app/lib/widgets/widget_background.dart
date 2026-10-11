@@ -5,6 +5,7 @@ import 'package:workmanager/workmanager.dart';
 import '../domain/calendar_event.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
+import '../location/location_background.dart';
 import 'widget_sink.dart';
 import 'widget_snapshot.dart';
 
@@ -83,19 +84,31 @@ Future<bool> refreshWidgetsInBackground({
   return data['w_state'] != 'error';
 }
 
+/// Cliente do Supabase para o isolate de segundo plano (reaproveita o do app
+/// quando a execução é dentro dele; senão inicializa com as chaves do build).
+Future<SupabaseClient?> _backgroundClient() async {
+  try {
+    return Supabase.instance.client; // já inicializado (execução no app)
+  } catch (_) {
+    if (_supabaseUrl.isNotEmpty && _supabaseKey.isNotEmpty) {
+      await Supabase.initialize(url: _supabaseUrl, publishableKey: _supabaseKey);
+      return Supabase.instance.client;
+    }
+    return null;
+  }
+}
+
+/// Único despachante do workmanager: roteia pelo nome da tarefa
+/// (`widgetsRefresh` ou `locationReport`).
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
     try {
       WidgetsFlutterBinding.ensureInitialized();
-      SupabaseClient? client;
-      try {
-        client = Supabase.instance.client; // já inicializado (execução no app)
-      } catch (_) {
-        if (_supabaseUrl.isNotEmpty && _supabaseKey.isNotEmpty) {
-          await Supabase.initialize(url: _supabaseUrl, publishableKey: _supabaseKey);
-          client = Supabase.instance.client;
-        }
+      final client = await _backgroundClient();
+      if (taskName == locationReportTask) {
+        await runLocationReportTask(client);
+        return true; // sem sessão/casa/permissão não é erro: tenta de novo em 15 min
       }
       await refreshWidgetsInBackground(
         client: () => client,
@@ -115,6 +128,19 @@ Future<void> registerWidgetBackgroundRefresh() async {
     widgetsRefreshUniqueName,
     widgetsRefreshTask,
     frequency: const Duration(minutes: 30),
+    constraints: Constraints(networkType: NetworkType.connected),
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
+  );
+}
+
+/// Relatório periódico de localização (a cada 15 min, só com rede). A tarefa
+/// decide sozinha se deve reportar (casa, chave e permissão "o tempo todo").
+Future<void> registerLocationBackgroundReport() async {
+  await Workmanager().initialize(callbackDispatcher);
+  await Workmanager().registerPeriodicTask(
+    locationReportUniqueName,
+    locationReportTask,
+    frequency: locationReportFrequency,
     constraints: Constraints(networkType: NetworkType.connected),
     existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
   );

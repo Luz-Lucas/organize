@@ -7,6 +7,7 @@ import '../../data/repository.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
+import 'home_location_card.dart';
 
 /// Ajustes: escolha do tema (10 sistemas de design) e conta.
 class SettingsScreen extends ConsumerWidget {
@@ -57,6 +58,11 @@ class SettingsScreen extends ConsumerWidget {
                   style: theme.textTheme.bodySmall?.copyWith(color: context.org.inkMuted),
                 ),
               ),
+            const SectionHeader('Minha casa'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: HomeLocationCard(),
+            ),
             const SectionHeader('Conta'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
