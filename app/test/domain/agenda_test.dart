@@ -17,10 +17,11 @@ void main() {
   CalendarEvent event(String id, DateTime start, DateTime end) =>
       CalendarEvent(id: id, title: id, startsAt: start, endsAt: end);
 
-  test('a semana começa na segunda', () {
-    expect(startOfWeek(DateTime(2026, 10, 1, 15)), DateTime(2026, 9, 28));
-    expect(startOfWeek(DateTime(2026, 10, 4)), DateTime(2026, 9, 28));
-    expect(startOfWeek(DateTime(2026, 9, 28)), DateTime(2026, 9, 28));
+  test('a semana começa no domingo', () {
+    expect(startOfWeek(DateTime(2026, 10, 1, 15)), DateTime(2026, 9, 27)); // quinta
+    expect(startOfWeek(DateTime(2026, 10, 4)), DateTime(2026, 10, 4)); // domingo
+    expect(startOfWeek(DateTime(2026, 10, 3)), DateTime(2026, 9, 27)); // sábado
+    expect(startOfWeek(DateTime(2026, 9, 28)), DateTime(2026, 9, 27)); // segunda
   });
 
   group('eventsOnDay', () {

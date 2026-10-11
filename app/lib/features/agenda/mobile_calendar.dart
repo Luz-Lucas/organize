@@ -8,7 +8,7 @@ import '../../ui/org_widgets.dart';
 import 'calendar_common.dart';
 import 'calendar_layout.dart';
 
-const _initials = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
+const _initials = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
 /// Celular: mês compacto (pontos nos dias com evento) + lista do dia escolhido.
 class MobileCalendar extends StatelessWidget {

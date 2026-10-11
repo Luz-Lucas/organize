@@ -3,8 +3,8 @@ import 'task_item.dart';
 
 DateTime startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
 
-DateTime startOfWeek(DateTime d) =>
-    DateTime(d.year, d.month, d.day - (d.weekday - DateTime.monday));
+/// Início da semana do calendário: **domingo**.
+DateTime startOfWeek(DateTime d) => DateTime(d.year, d.month, d.day - (d.weekday % DateTime.daysPerWeek));
 
 List<CalendarEvent> eventsOnDay(Iterable<CalendarEvent> events, DateTime day) {
   final start = DateTime(day.year, day.month, day.day);

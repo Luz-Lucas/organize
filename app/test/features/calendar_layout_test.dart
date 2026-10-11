@@ -29,11 +29,11 @@ void main() {
     expect(layoutDay([e], DateTime(2026, 10, 12)).single.height, 20);
   });
 
-  test('monthGrid tem 42 dias começando na segunda', () {
+  test('monthGrid tem 42 dias começando no domingo', () {
     final g = monthGrid(DateTime(2026, 10, 15));
     expect(g, hasLength(42));
-    expect(g.first, DateTime(2026, 9, 28));
-    expect(g.last, DateTime(2026, 11, 8));
+    expect(g.first, DateTime(2026, 9, 27));
+    expect(g.last, DateTime(2026, 11, 7));
   });
 
   test('arredonda a 15 minutos', () {

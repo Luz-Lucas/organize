@@ -21,13 +21,13 @@ void main() {
     await repo.upsertEvent(_fisica());
     await pumpApp(tester, repo, location: '/agenda');
     expect(tester.widget<ChoiceChip>(find.byKey(const Key('view-week'))).selected, isTrue);
-    expect(find.text('28 set – 4 out 2026'), findsOneWidget);
+    expect(find.text('27 set – 3 out 2026'), findsOneWidget);
     expect(find.text('Física'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('next-week')));
     await tester.pumpAndSettle();
     expect(find.text('Física'), findsNothing);
-    expect(find.text('5 – 11 out 2026'), findsOneWidget);
+    expect(find.text('4 – 10 out 2026'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('prev-week')));
     await tester.pumpAndSettle();
@@ -46,7 +46,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('month-day-2026-09-30')));
     await tester.pumpAndSettle();
     expect(tester.widget<ChoiceChip>(find.byKey(const Key('view-week'))).selected, isTrue);
-    expect(find.text('28 set – 4 out 2026'), findsOneWidget);
+    expect(find.text('27 set – 3 out 2026'), findsOneWidget);
   });
 
   testWidgets('mês mostra no máximo 3 pílulas e "+N"', (tester) async {

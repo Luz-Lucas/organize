@@ -6,7 +6,7 @@ import '../../ui/org_theme.dart';
 import 'calendar_common.dart';
 import 'calendar_layout.dart';
 
-const _weekdays = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+const _weekdays = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
 /// Grade 6×7 do mês com até 3 pílulas por dia e "+N".
 class MonthView extends StatelessWidget {
