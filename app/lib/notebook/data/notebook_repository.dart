@@ -72,11 +72,17 @@ abstract interface class NotebookRepository {
   /// quando a página precisa ser recriada. Se outro aparelho
   /// gravou antes, relê, mescla (`decode → merge → encode`) e grava de novo, até
   /// conseguir. Devolve a página como ficou no servidor (dados mesclados, versão nova);
-  /// quem chamou deve adotar o resultado. Também "toca" `notes.updated_at`.
+  /// quem chamou deve adotar o resultado. Também "toca" `notes.updated_at` (no máximo
+  /// uma vez por minuto por caderno; ver [touchNote]).
   /// Se a página foi apagada em outro aparelho, é recriada no fim (a tinta não se perde).
   Future<NotebookPage> savePage(NotebookPage page);
 
   Future<void> setBackground(String pageId, PageBackground background);
+
+  /// Faz o "toque" em `notes.updated_at` que o [savePage] adiou (ele toca no máximo
+  /// uma vez por minuto por caderno, para a lista de notas não reconstruir a cada
+  /// save). Chamado ao sair do caderno; sem toque adiado, não faz nada.
+  Future<void> touchNote(String noteId);
 
   /// Apaga a página e reindexa as seguintes.
   Future<void> deletePage(String pageId);

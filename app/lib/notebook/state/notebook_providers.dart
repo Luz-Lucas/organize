@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
+import '../core/notebook_core.dart';
 import '../data/notebook_page.dart';
 import '../data/notebook_repository.dart';
 import '../ui/notebook_session.dart';
@@ -17,6 +18,11 @@ final notebookRepositoryProvider = Provider<NotebookRepository>(
 
 /// Fila local de salvamento. Padrão em memória; `main.dart` usa `shared_preferences`.
 final notebookPendingStoreProvider = Provider<NotebookPendingStore>((ref) => MemoryNotebookPendingStore());
+
+/// Como codificar uma página para gravar. Padrão: comprime em outro isolate quando a
+/// página é grande. Os testes com relógio falso trocam por uma versão síncrona
+/// (um isolate de verdade nunca completaria dentro do `FakeAsync`).
+final notebookPageEncoderProvider = Provider<Future<String> Function(PageDoc doc)>((ref) => encodePageAsync);
 
 /// Cria o store de imagens de um caderno (o caminho no Storage leva o id da nota).
 final notebookImageStoreFactoryProvider = Provider<NotebookImageStore Function(String noteId)>(
@@ -32,6 +38,7 @@ final notebookControllerProvider = Provider.autoDispose.family<NotebookControlle
     repo: ref.read(notebookRepositoryProvider),
     images: ref.read(notebookImageStoreFactoryProvider)(noteId),
     pending: ref.read(notebookPendingStoreProvider),
+    encoder: ref.read(notebookPageEncoderProvider),
     onPendingChanged: (pending) {
       if (pending) {
         link ??= ref.keepAlive();

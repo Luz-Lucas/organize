@@ -73,6 +73,10 @@ class PageDoc {            // imutável
 // with*: quantizam o item; id tombstoned ou id repetido com conteúdo diferente => ArgumentError.
 
 String encodePage(PageDoc);   PageDoc decodePage(String);   // JSON v1 -> gzip -> base64
+// Escrita sem travar a interface: o JSON de cada traço é guardado (traços são imutáveis),
+// então recodificar depois de 1 traço novo só monta texto; a compressão vai para outro isolate:
+String pageJson(PageDoc);  String compressPageJson(String);   // encodePage == compress(pageJson)
+Future<String> encodePageAsync(PageDoc);                      // mesmo resultado, comprime fora da UI
 // decodePage('') => PageDoc.empty. Erros: PageDecodeException (FormatException);
 // versão desconhecida: UnsupportedPageVersionException(version) com mensagem pt-BR.
 const int pageFormatVersion = 1;

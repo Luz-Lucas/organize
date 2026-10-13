@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/notebook/core/notebook_core.dart';
 import 'package:organizacional/ui/org_theme.dart';
 
+import 'menu_support.dart';
 import 'ui_support.dart';
 
 void main() {
@@ -99,8 +100,7 @@ void main() {
     testWidgets('"Desenhar com o dedo" liga o toque', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
-      await tester.tap(find.byKey(const ValueKey('nb-finger-toggle')));
-      await tester.pump();
+      await tapMenu(tester, 'nb-finger-toggle');
       await SimPointer(tester, PointerDeviceKind.touch).drag(
         linePath(const Offset(100, 200), const Offset(500, 260)),
       );
@@ -187,8 +187,7 @@ void main() {
       await pumpNotebook(tester, s);
       await tester.tap(find.byKey(const ValueKey('nb-tool-eraser')));
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('nb-eraser-mode')));
-      await tester.pump();
+      await tapMenu(tester, 'nb-eraser-mode');
       await SimPointer(tester, PointerDeviceKind.stylus).drag(
         linePath(const Offset(350, 250), const Offset(350, 350), n: 8),
       );
@@ -222,8 +221,7 @@ void main() {
     testWidgets('dedo que desenha também não rola a página', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
-      await tester.tap(find.byKey(const ValueKey('nb-finger-toggle')));
-      await tester.pump();
+      await tapMenu(tester, 'nb-finger-toggle');
       final before = viewer(tester);
       await SimPointer(tester, PointerDeviceKind.touch).drag(
         linePath(const Offset(100, 100), const Offset(600, 800), n: 30),

@@ -149,6 +149,14 @@ class MemoryNotebookRepository implements NotebookRepository {
     _emit();
   }
 
+  /// Quantas vezes o controller pediu o toque final da nota (testes).
+  int touchNoteCalls = 0;
+
+  @override
+  Future<void> touchNote(String noteId) async {
+    touchNoteCalls++;
+  }
+
   void _reindex(String noteId, List<String> order) {
     for (var i = 0; i < order.length; i++) {
       _pages[order[i]] = _pages[order[i]]!.copyWith(idx: i);

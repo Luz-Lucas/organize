@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show gzip;
+import 'dart:isolate' show Isolate;
 
 import 'ink_types.dart';
 import 'page_doc.dart';
@@ -27,6 +28,65 @@ class UnsupportedPageVersionException extends PageDecodeException {
   final int version;
 }
 
+/// Contadores de diagnóstico do codec (testes e benchmarks; não afetam nada).
+class PageCodecStats {
+  PageCodecStats._();
+
+  /// Traços convertidos para JSON (um traço já convertido não conta de novo).
+  static int strokesSerialized = 0;
+
+  /// Chamadas a [decodePage] que chegaram a decodificar algo.
+  static int decodes = 0;
+
+  /// Vezes que [encodePageAsync] mandou o trabalho para outro isolate.
+  static int isolateRuns = 0;
+}
+
+/// JSON já pronto de cada traço. Traços são imutáveis por id, então o texto
+/// nunca muda: codificar a página de novo depois de acrescentar um traço
+/// reaproveita o JSON dos outros (o custo vira ~constante por traço novo em vez
+/// de proporcional à página inteira). O `Expando` não segura o traço: quando o
+/// traço sai da memória, o texto vai junto.
+final Expando<String> _strokeJson = Expando<String>('strokeJson');
+
+String _strokeFragment(Stroke s) {
+  final cached = _strokeJson[s];
+  if (cached != null) return cached;
+  PageCodecStats.strokesSerialized++;
+  return _strokeJson[s] = jsonEncode(_strokeToJson(s));
+}
+
+/// O JSON (texto) da página, na forma exata que `jsonEncode` daria ao mapa do
+/// formato v1: `{"v":1,"strokes":[…],"texts":[…],"images":[…],"deleted":[…]}`.
+/// É a parte barata de [encodePage] (reaproveita o JSON dos traços); falta só
+/// comprimir ([compressPageJson]). Página sem item nem tombstone → `''`.
+String pageJson(PageDoc doc) {
+  if (doc.isEmpty && doc.deleted.isEmpty) return '';
+  final b = StringBuffer('{"v":$pageFormatVersion,"strokes":[');
+  var first = true;
+  for (final s in doc.strokes) {
+    if (!first) b.write(',');
+    first = false;
+    b.write(_strokeFragment(s));
+  }
+  b
+    ..write('],"texts":')
+    ..write(jsonEncode([for (final t in doc.texts) _textToJson(t)]))
+    ..write(',"images":')
+    ..write(jsonEncode([for (final i in doc.images) _imageToJson(i)]))
+    ..write(',"deleted":')
+    ..write(jsonEncode(doc.deleted.toList()..sort()))
+    ..write('}');
+  return b.toString();
+}
+
+/// utf8 → gzip → base64 de um JSON de [pageJson]. Função de nível superior e
+/// sem estado: pode rodar em outro isolate (é a parte pesada para páginas grandes).
+String compressPageJson(String json) {
+  if (json.isEmpty) return '';
+  return base64Encode(gzip.encode(utf8.encode(json)));
+}
+
 /// JSON v1 → gzip → base64. Página sem nenhum item nem tombstone vira `''`.
 ///
 /// Quantização: coordenadas e caixas em 0,1 unidade de página; pressão com 2
@@ -36,17 +96,21 @@ class UnsupportedPageVersionException extends PageDecodeException {
 /// décimos, pressão em centésimos), o 1º ponto absoluto e os demais em delta
 /// em relação ao anterior. Isso comprime ~2x melhor no gzip que os `pts`
 /// absolutos da spec; [decodePage] lê as duas formas.
-String encodePage(PageDoc doc) {
-  if (doc.isEmpty && doc.deleted.isEmpty) return '';
-  final map = <String, Object?>{
-    'v': pageFormatVersion,
-    'strokes': [for (final s in doc.strokes) _strokeToJson(s)],
-    'texts': [for (final t in doc.texts) _textToJson(t)],
-    'images': [for (final i in doc.images) _imageToJson(i)],
-    'deleted': doc.deleted.toList()..sort(),
-  };
-  final bytes = utf8.encode(jsonEncode(map));
-  return base64Encode(gzip.encode(bytes));
+String encodePage(PageDoc doc) => compressPageJson(pageJson(doc));
+
+/// Tamanho do JSON (caracteres) a partir do qual [encodePageAsync] comprime em
+/// outro isolate. Abaixo disso, subir o isolate custa mais do que comprimir.
+const int pageInlineLimit = 16 * 1024;
+
+/// Igual a [encodePage], mas a compressão (utf8 + gzip + base64: ~metade do
+/// custo e a que cresce com a página) roda fora da thread da interface quando a
+/// página é grande. Na thread de chamada sobra montar o JSON a partir dos
+/// fragmentos em cache, que é rápido. O resultado é idêntico ao de [encodePage].
+Future<String> encodePageAsync(PageDoc doc, {int inlineLimit = pageInlineLimit}) {
+  final json = pageJson(doc);
+  if (json.length <= inlineLimit) return Future.value(compressPageJson(json));
+  PageCodecStats.isolateRuns++;
+  return Isolate.run(() => compressPageJson(json));
 }
 
 /// Inverso de [encodePage]. `''` (ou só espaços) → página vazia. Dados ruins →
@@ -54,6 +118,7 @@ String encodePage(PageDoc doc) {
 PageDoc decodePage(String data) {
   final text = data.trim();
   if (text.isEmpty) return PageDoc.empty;
+  PageCodecStats.decodes++;
 
   final List<int> compressed;
   try {

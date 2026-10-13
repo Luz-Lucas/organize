@@ -16,9 +16,23 @@ import 'notebook_repository.dart';
 /// * Cada requisição do PostgREST é uma transação; por isso a reindexação
 ///   (reordenar, apagar, inserir no meio) escolhe uma ordem de updates que nunca colide.
 class SupabaseNotebookRepository implements NotebookRepository {
-  SupabaseNotebookRepository(this._db);
+  SupabaseNotebookRepository(
+    this._db, {
+    DateTime Function()? now,
+    this.touchInterval = const Duration(seconds: 60),
+  }) : _now = now ?? DateTime.now;
 
   final SupabaseClient _db;
+  final DateTime Function() _now;
+
+  /// Intervalo mínimo entre dois "toques" em `notes.updated_at` do mesmo caderno.
+  /// Cada toque vira um evento de realtime da tabela `notes` para **todas** as telas
+  /// que listam notas (e para a rota do caderno), então tocar a cada save (1,5 s)
+  /// reconstruía o app inteiro durante a escrita.
+  final Duration touchInterval;
+
+  final _lastTouch = <String, DateTime>{};
+  final _touchSkipped = <String>{};
 
   static const _maxSaveAttempts = 12;
   static const _parkBase = 1000000;
@@ -152,11 +166,26 @@ class SupabaseNotebookRepository implements NotebookRepository {
         throw const RepositoryException('Muitos conflitos ao salvar a página; tente de novo.');
       });
 
-  /// Sobe a nota na lista. Falha aqui não pode perder o salvamento da página.
-  Future<void> _touchNote(String noteId) async {
+  /// Sobe a nota na lista, no máximo uma vez por [touchInterval] por caderno (o
+  /// toque adiado fica anotado e [touchNote] o faz ao sair). Falha aqui não pode
+  /// perder o salvamento da página, e um toque que falhou não conta como feito.
+  Future<void> _touchNote(String noteId, {bool force = false}) async {
+    final t = _now();
+    final last = _lastTouch[noteId];
+    if (!force && last != null && t.difference(last) < touchInterval) {
+      _touchSkipped.add(noteId);
+      return;
+    }
     try {
-      await _db.from('notes').update({'updated_at': DateTime.now().toUtc().toIso8601String()}).eq('id', noteId);
+      await _db.from('notes').update({'updated_at': t.toUtc().toIso8601String()}).eq('id', noteId);
+      _lastTouch[noteId] = t;
+      _touchSkipped.remove(noteId);
     } catch (_) {}
+  }
+
+  @override
+  Future<void> touchNote(String noteId) async {
+    if (_touchSkipped.contains(noteId)) await _touchNote(noteId, force: true);
   }
 
   @override

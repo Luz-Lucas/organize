@@ -17,6 +17,7 @@ void main() {
       'home_lon': null,
       'home_radius_m': 50,
       'require_home': true,
+      'notebook_prefs': <String, dynamic>{},
     });
     expect(themeIds, hasLength(10));
   });
@@ -61,6 +62,24 @@ void main() {
       expect(cleared.theme, 'coral');
       expect(s.copyWith(requireHome: false).requireHome, isFalse);
       expect(s.copyWith(requireHome: false).homeLat, 1);
+    });
+  });
+
+  group('favoritos do caderno', () {
+    test('padrão é um mapa vazio; fromMap lê o objeto e ignora lixo', () {
+      expect(const UserSettings().notebookPrefs, isEmpty);
+      final s = UserSettings.fromMap({
+        'notebook_prefs': {'v': 1, 'compact': false},
+      });
+      expect(s.notebookPrefs, {'v': 1, 'compact': false});
+      expect(UserSettings.fromMap({'notebook_prefs': 'texto'}).notebookPrefs, isEmpty);
+      expect(UserSettings.fromMap({'notebook_prefs': null}).notebookPrefs, isEmpty);
+    });
+
+    test('ida e volta por toMap/fromMap e copyWith', () {
+      final s = const UserSettings().copyWith(notebookPrefs: {'v': 1}, theme: 'coral');
+      expect(UserSettings.fromMap(s.toMap()).notebookPrefs, {'v': 1});
+      expect(s.copyWith(theme: 'musgo').notebookPrefs, {'v': 1});
     });
   });
 }

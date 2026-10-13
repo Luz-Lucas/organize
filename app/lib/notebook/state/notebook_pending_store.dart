@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate' show Isolate;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,6 +56,13 @@ class MemoryNotebookPendingStore implements NotebookPendingStore {
 class SharedPreferencesNotebookPendingStore implements NotebookPendingStore {
   const SharedPreferencesNotebookPendingStore();
 
+  /// A partir deste tamanho (caracteres do texto das páginas) o JSON é montado em
+  /// outro isolate: `jsonEncode` de uma página de 700 KB trava a interface por dezenas de ms.
+  static const int isolateJsonThreshold = 64 * 1024;
+
+  /// Quantas gravações montaram o JSON em outro isolate (testes).
+  static int isolateEncodes = 0;
+
   static const _pendingPrefix = 'notebook.pending.';
   static const _cachePrefix = 'notebook.cache.';
 
@@ -74,9 +82,24 @@ class SharedPreferencesNotebookPendingStore implements NotebookPendingStore {
   }
 
   Future<void> _write(String k, Map<String, Object?> json) async {
+    final String text;
+    if (_textLength(json) > isolateJsonThreshold) {
+      isolateEncodes++;
+      text = await Isolate.run(() => jsonEncode(json));
+    } else {
+      text = jsonEncode(json);
+    }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(k, jsonEncode(json));
+    await prefs.setString(k, text);
   }
+
+  /// Soma aproximada do texto guardado (as strings do mapa, em qualquer nível).
+  static int _textLength(Object? v) => switch (v) {
+        String s => s.length,
+        Map m => m.values.fold(0, (a, e) => a + _textLength(e)),
+        List l => l.fold(0, (a, e) => a + _textLength(e)),
+        _ => 0,
+      };
 
   Future<void> _remove(String k) async {
     final prefs = await SharedPreferences.getInstance();

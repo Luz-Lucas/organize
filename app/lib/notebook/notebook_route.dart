@@ -18,11 +18,14 @@ class NotebookRoute extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notes = ref.watch(notesProvider);
-    final loaded = notes.value;
-    final note = loaded?.where((n) => n.id == noteId).firstOrNull;
+    // Só esta nota interessa: salvar o caderno toca `notes.updated_at`, e assistir a
+    // lista inteira reconstruía a tela a cada save (Note.== ignora updatedAt).
+    final (loaded, note) = ref.watch(notesProvider.select((a) {
+      final list = a.value;
+      return (list != null, list?.where((n) => n.id == noteId).firstOrNull);
+    }));
     final Widget body;
-    if (loaded == null) {
+    if (!loaded) {
       body = const Scaffold(body: Center(child: CircularProgressIndicator()));
     } else if (note == null) {
       body = Scaffold(
@@ -32,8 +35,7 @@ class NotebookRoute extends ConsumerWidget {
     } else if (!note.isNotebook) {
       body = NoteScreen(key: ValueKey(noteId), noteId: noteId);
     } else {
-      body = NotebookScreen(
-        key: const Key('notebook-screen'),
+      body = NotebookScreenHost(
         noteId: noteId,
         title: note.title,
         session: ref.watch(notebookControllerProvider(noteId)),
@@ -45,6 +47,38 @@ class NotebookRoute extends ConsumerWidget {
         if (!didPop) context.go('/notas');
       },
       child: body,
+    );
+  }
+}
+
+/// A [NotebookScreen] ligada aos favoritos do usuário: lê `settingsProvider`
+/// (`user_settings.notebook_prefs`, sincronizado entre aparelhos) e grava as
+/// edições com `setNotebookPrefs`.
+class NotebookScreenHost extends ConsumerWidget {
+  const NotebookScreenHost({
+    super.key,
+    required this.noteId,
+    required this.title,
+    required this.session,
+    this.pickImage,
+  });
+
+  final String noteId;
+  final String title;
+  final NotebookSession session;
+  final Future<PickedImage?> Function()? pickImage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prefs = ref.watch(settingsProvider.select((s) => s.value?.notebookPrefs)) ?? const {};
+    return NotebookScreen(
+      key: const Key('notebook-screen'),
+      noteId: noteId,
+      title: title,
+      session: session,
+      pickImage: pickImage,
+      prefs: prefs,
+      onPrefsChanged: (m) => ref.read(settingsRepositoryProvider).setNotebookPrefs(m),
     );
   }
 }

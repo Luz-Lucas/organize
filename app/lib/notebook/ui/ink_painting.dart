@@ -14,14 +14,22 @@ import 'tool_settings.dart' show kEraserRadius;
 // Contorno do traço (largura variável com a pressão) — perfect_freehand.
 // ---------------------------------------------------------------------------
 
+/// Parâmetros do perfect_freehand por caneta.
+///
+/// `streamline` e `smoothing` ficam baixos de propósito: a S Pen já entrega
+/// pontos limpos e suavizar muito achata curvas rápidas (o S deformava, as
+/// pontas do U e do C encurtavam). `streamline` ~0,2 deixa o traço colado nas
+/// amostras (o ponto final é sempre o real) e `smoothing` ~0,4 só poupa pontos
+/// do contorno. `thinning` menor deixa a pressão variar a largura sem afinar
+/// demais; o resto é o [pressureWithFloor] em [strokeOutlinePath].
 StrokeOptions strokeOptionsFor(PenTool tool, double width, {required bool complete}) {
   switch (tool) {
     case PenTool.fountain:
       return StrokeOptions(
         size: width,
-        thinning: 0.65,
-        smoothing: 0.55,
-        streamline: 0.5,
+        thinning: 0.45,
+        smoothing: 0.4,
+        streamline: 0.2,
         simulatePressure: false,
         isComplete: complete,
       );
@@ -29,17 +37,17 @@ StrokeOptions strokeOptionsFor(PenTool tool, double width, {required bool comple
       return StrokeOptions(
         size: width,
         thinning: 0.2,
-        smoothing: 0.5,
-        streamline: 0.45,
+        smoothing: 0.4,
+        streamline: 0.2,
         simulatePressure: false,
         isComplete: complete,
       );
     case PenTool.pencil:
       return StrokeOptions(
         size: width,
-        thinning: 0.45,
-        smoothing: 0.4,
-        streamline: 0.3,
+        thinning: 0.3,
+        smoothing: 0.35,
+        streamline: 0.15,
         simulatePressure: false,
         isComplete: complete,
       );
@@ -47,8 +55,8 @@ StrokeOptions strokeOptionsFor(PenTool tool, double width, {required bool comple
       return StrokeOptions(
         size: width,
         thinning: 0,
-        smoothing: 0.5,
-        streamline: 0.5,
+        smoothing: 0.4,
+        streamline: 0.2,
         simulatePressure: false,
         isComplete: complete,
         start: StrokeEndOptions.start(cap: false),
@@ -56,6 +64,10 @@ StrokeOptions strokeOptionsFor(PenTool tool, double width, {required bool comple
       );
   }
 }
+
+/// Piso da pressão na largura: a caneta informa pressão baixa ao encostar e ao
+/// levantar, e sem piso as pontas ficavam quase invisíveis. `p' = 0,25 + 0,75 p`.
+double pressureWithFloor(double p) => 0.25 + 0.75 * p.clamp(0.0, 1.0);
 
 /// Caminho preenchível com o contorno do traço.
 Path strokeOutlinePath(
@@ -69,14 +81,14 @@ Path strokeOutlinePath(
   List<Offset> outline = const [];
   if (pts.length > 1) {
     outline = getStroke(
-      [for (final p in pts) PointVector(p.x, p.y, p.p)],
+      [for (final p in pts) PointVector(p.x, p.y, pressureWithFloor(p.p))],
       options: strokeOptionsFor(tool, width, complete: complete),
     );
   }
   if (outline.length < 3) {
     // Pingo (um ponto) ou traço sem comprimento: círculo na pressão média.
     final p = pts.first;
-    final r = radius * (0.5 + 0.5 * p.p.clamp(0.0, 1.0)) * 1.0;
+    final r = radius * (0.5 + 0.5 * pressureWithFloor(p.p));
     return Path()..addOval(Rect.fromCircle(center: p.offset, radius: math.max(r, 0.6)));
   }
   final path = Path();
@@ -496,6 +508,8 @@ class CommittedInkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // A tinta nunca aparece fora da página (dados antigos/importados incluídos).
+    canvas.clipRect(Offset.zero & size);
     final e = erase;
     final pic = e != null && e.active
         ? cache.pictureFor(doc, e.hidden, epoch, images, extra: e.extra, revision: e.revision)
@@ -516,6 +530,10 @@ class CommittedInkPainter extends CustomPainter {
 /// seleção). Notifica só essa camada: o resto da página não repinta.
 class LiveInk extends ChangeNotifier {
   List<InkPoint> points = const [];
+
+  /// Amostras cruas do último traço terminado (só o modo `NB_DEBUG_INPUT` as
+  /// mostra); [clear] não as apaga: ficam até o próximo traço terminar.
+  List<InkPoint> lastPoints = const [];
 
   /// Contorno incremental de [points] (só a cauda é recalculada a cada evento).
   final LiveStrokeOutline outline = LiveStrokeOutline();
@@ -558,6 +576,7 @@ class LiveInkPainter extends CustomPainter {
     required this.accent,
     required this.pixelRatio,
     required this.images,
+    this.debugSamples = false,
   }) : super(repaint: live);
 
   final LiveInk live;
@@ -565,6 +584,10 @@ class LiveInkPainter extends CustomPainter {
   final Color accent;
   final double pixelRatio;
   final Map<String, ui.Image> images;
+
+  /// Diagnóstico da entrada: pontinhos nas amostras cruas do traço atual
+  /// (vermelho) e do último traço (azul), por cima de tudo.
+  final bool debugSamples;
 
   /// Raio (em unidades de página) correspondente a [dp] pixels lógicos.
   double _units(Canvas canvas, double dp) {
@@ -574,6 +597,10 @@ class LiveInkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Recorte pela borda da página, como no Samsung Notes: sem tinta fora dela.
+    // (As alças da seleção, o laço e a borracha, que são guias, não são recortados.)
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
     final m = live.moveMatrix;
     // Prévia da seleção em movimento.
     final moving = live.movingDoc;
@@ -603,6 +630,7 @@ class LiveInkPainter extends CustomPainter {
         canvas.restore();
       }
     }
+    canvas.restore();
     // Retângulo e alças da seleção.
     final sel = selectionRect;
     if (sel != null) {
@@ -636,6 +664,7 @@ class LiveInkPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
     }
+    if (debugSamples) _paintSamples(canvas);
     // Borracha.
     final e = live.eraserPos;
     if (e != null) {
@@ -652,8 +681,24 @@ class LiveInkPainter extends CustomPainter {
     }
   }
 
+  /// Se o problema é a entrada (faltam pontos) ou o desenho (os pontos estão
+  /// lá, mas a tinta não cobre) fica visível no aparelho.
+  void _paintSamples(Canvas canvas) {
+    // Em unidades de página, menor que a caneta: o contorno ainda aparece em volta.
+    final r = math.max(live.width * 0.3, 1.0);
+    final last = Paint()..color = const Color(0xFF2979FF);
+    for (final p in live.lastPoints) {
+      canvas.drawCircle(p.offset, r, last);
+    }
+    final now = Paint()..color = const Color(0xFFFF1744);
+    for (final p in live.points) {
+      canvas.drawCircle(p.offset, r, now);
+    }
+  }
+
   @override
   bool shouldRepaint(LiveInkPainter old) =>
+      old.debugSamples != debugSamples ||
       old.selectionRect != selectionRect ||
       old.accent != accent ||
       !identical(old.images, images);

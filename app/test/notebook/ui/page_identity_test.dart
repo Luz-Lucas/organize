@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/notebook/core/notebook_core.dart';
 import 'package:organizacional/notebook/ui/notebook_screen.dart';
 
+import 'menu_support.dart';
 import 'ui_support.dart';
 
 PageDoc docWith(String id, {double y = 300}) =>
@@ -118,6 +119,8 @@ void main() {
       );
       await draw(tester, idx: 1); // ativa a página B
       final bId = s.idOf(1);
+      await openMenu(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('nb-tool-image')));
       await tester.runAsync(() async {
         await tester.tap(find.byKey(const ValueKey('nb-tool-image')));
         await Future<void>.delayed(const Duration(milliseconds: 50));

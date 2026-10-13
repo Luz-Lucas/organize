@@ -17,4 +17,7 @@ abstract interface class SettingsRepository {
 
   /// Liga/desliga "só tocar o despertar quando eu estiver em casa".
   Future<void> setRequireHome(bool value);
+
+  /// Grava só os favoritos do Caderno (`notebook_prefs`), sem tocar nos demais ajustes.
+  Future<void> setNotebookPrefs(Map<String, dynamic> prefs);
 }

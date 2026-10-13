@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' hide TextBox;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/notebook/core/notebook_core.dart';
 
+import 'menu_support.dart';
 import 'ui_support.dart';
 
 void main() {
@@ -15,8 +16,7 @@ void main() {
     await pumpNotebook(tester, s);
     await tester.tap(find.byKey(const ValueKey('nb-tool-eraser')));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('nb-eraser-mode')));
-    await tester.pump();
+    await tapMenu(tester, 'nb-eraser-mode');
     // A borracha anda ao longo do traço: cada movimento corta de novo os pedaços do anterior.
     await SimPointer(tester, PointerDeviceKind.stylus).drag(
       linePath(const Offset(120, 300), const Offset(880, 300), n: 40),
@@ -35,8 +35,7 @@ void main() {
     await pumpNotebook(tester, s);
     await tester.tap(find.byKey(const ValueKey('nb-tool-eraser')));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('nb-eraser-mode')));
-    await tester.pump();
+    await tapMenu(tester, 'nb-eraser-mode');
     await SimPointer(tester, PointerDeviceKind.stylus).drag(
       linePath(const Offset(400, 250), const Offset(400, 350), n: 8),
     );

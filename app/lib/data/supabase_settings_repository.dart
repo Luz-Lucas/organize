@@ -62,4 +62,9 @@ class SupabaseSettingsRepository implements SettingsRepository {
   Future<void> setRequireHome(bool value) => _guard(() async {
         await _db.from('user_settings').upsert({'user_id': _userId, 'require_home': value});
       });
+
+  @override
+  Future<void> setNotebookPrefs(Map<String, dynamic> prefs) => _guard(() async {
+        await _db.from('user_settings').upsert({'user_id': _userId, 'notebook_prefs': prefs});
+      });
 }

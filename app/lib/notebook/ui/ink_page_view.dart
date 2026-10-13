@@ -130,6 +130,9 @@ class _InkPageViewState extends State<InkPageView> {
   Duration _downTime = Duration.zero;
   double _travel = 0;
   List<InkPoint> _pts = [];
+
+  /// O traço já saiu pela borda da página: o resto do gesto não vira tinta.
+  bool _exited = false;
   List<Offset> _lasso = [];
   Set<String> _movingIds = const {};
   Offset _anchor = Offset.zero;
@@ -319,7 +322,9 @@ class _InkPageViewState extends State<InkPageView> {
 
     switch (mode) {
       case _Mode.draw:
-        _pts = [InkPoint(e.localPosition.dx, e.localPosition.dy, _pressureOf(e))];
+        final start = _clampToPage(e.localPosition);
+        _exited = false;
+        _pts = [InkPoint(start.dx, start.dy, _pressureOf(e))];
         _live
           ..tool = s.pen
           ..argb = withPenAlpha(widget.penArgb, s.pen)
@@ -426,8 +431,7 @@ class _InkPageViewState extends State<InkPageView> {
     _travel += (pos - _last).distance;
     switch (_mode) {
       case _Mode.draw:
-        if ((pos - _last).distance >= 0.4) {
-          _pts.add(InkPoint(pos.dx, pos.dy, _pressureOf(e)));
+        if (_addDrawPoint(pos, _pressureOf(e), minStep: 0.4)) {
           _live
             ..points = _pts
             ..changed();
@@ -458,6 +462,49 @@ class _InkPageViewState extends State<InkPageView> {
     _last = pos;
   }
 
+  static bool _insidePage(Offset o) => o.dx >= 0 && o.dx <= pageWidth && o.dy >= 0 && o.dy <= pageHeight;
+
+  static Offset _clampToPage(Offset o) =>
+      Offset(o.dx.clamp(0.0, pageWidth).toDouble(), o.dy.clamp(0.0, pageHeight).toDouble());
+
+  /// Acrescenta [pos] ao traço, limitado à página: um ponto que cai fora vira o
+  /// ponto da borda por onde o traço saiu (corte do segmento) e o resto do
+  /// gesto deixa de virar tinta (sem linha ao longo da borda nem corda de volta).
+  /// Devolve se o traço mudou.
+  bool _addDrawPoint(Offset pos, double pressure, {required double minStep}) {
+    if (_exited || _pts.isEmpty) return false;
+    final last = _pts.last.offset;
+    var at = pos;
+    if (!_insidePage(pos)) {
+      _exited = true;
+      final d = pos - last;
+      var t = 1.0;
+      if (pos.dx < 0) t = math.min(t, (0 - last.dx) / d.dx);
+      if (pos.dx > pageWidth) t = math.min(t, (pageWidth - last.dx) / d.dx);
+      if (pos.dy < 0) t = math.min(t, (0 - last.dy) / d.dy);
+      if (pos.dy > pageHeight) t = math.min(t, (pageHeight - last.dy) / d.dy);
+      at = _clampToPage(last + d * t.clamp(0.0, 1.0));
+      if ((at - last).distance <= 0) return false;
+    } else if ((at - last).distance < math.max(minStep, 1e-9)) {
+      return false;
+    }
+    _pts.add(InkPoint(at.dx, at.dy, pressure));
+    return true;
+  }
+
+  /// Grava o traço em andamento (se houver pontos) como uma edição.
+  void _commitStroke(PageDoc before) {
+    if (_pts.isEmpty) return;
+    final st = Stroke(
+      id: newInkId(),
+      tool: _live.tool,
+      argb: _live.argb,
+      width: _live.width,
+      points: _pts,
+    );
+    widget.onEdit(before, widget.doc.withStroke(st));
+  }
+
   void _onUp(PointerUpEvent e) {
     _pen.note(e);
     _forgetPalm(e.pointer);
@@ -466,16 +513,11 @@ class _InkPageViewState extends State<InkPageView> {
     final mode = _mode;
     switch (mode) {
       case _Mode.draw:
-        if (_pts.isNotEmpty) {
-          final st = Stroke(
-            id: newInkId(),
-            tool: _live.tool,
-            argb: _live.argb,
-            width: _live.width,
-            points: _pts,
-          );
-          widget.onEdit(before, widget.doc.withStroke(st));
-        }
+        // O `up` também é uma posição: sem ela o trecho entre a última amostra
+        // de movimento e o ponto onde a caneta saiu se perdia (a pressão é a do
+        // último ponto, pois o `up` costuma vir com pressão 0).
+        if (_pts.isNotEmpty) _addDrawPoint(e.localPosition, _pts.last.p, minStep: 0);
+        _commitStroke(before);
       case _Mode.erase:
         _flushErase();
         final w = _erase?.result();
@@ -544,7 +586,14 @@ class _InkPageViewState extends State<InkPageView> {
     _pen.note(e);
     _forgetPalm(e.pointer);
     if (e.pointer != _ptr) return;
-    _working = null;
+    // O sistema cancelou a caneta (rejeição de palma, troca de app): o que já
+    // foi escrito é do usuário, então o traço parcial é gravado como no `up`.
+    // Não acrescentamos a posição do cancelamento (pode ser inválida).
+    if (_mode == _Mode.draw && _pts.length >= 2) {
+      _commitStroke(_before ?? widget.doc);
+    } else {
+      _working = null;
+    }
     _endGesture();
   }
 
@@ -554,12 +603,14 @@ class _InkPageViewState extends State<InkPageView> {
   }
 
   void _endGesture() {
+    if (widget.debugInput && _mode == _Mode.draw && _pts.isNotEmpty) _live.lastPoints = _pts;
     _erase = null;
     _erasePreview.clear();
     _ptr = null;
     _mode = _Mode.none;
     _before = null;
     _pts = [];
+    _exited = false;
     _lasso = [];
     _movingIds = const {};
     _live.clear();
@@ -625,6 +676,7 @@ class _InkPageViewState extends State<InkPageView> {
                     accent: org.accent,
                     pixelRatio: MediaQuery.devicePixelRatioOf(context),
                     images: _images,
+                    debugSamples: widget.debugInput,
                   ),
                 ),
               ),

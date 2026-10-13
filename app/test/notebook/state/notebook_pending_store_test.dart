@@ -65,4 +65,23 @@ void main() {
     await store.clearPagesCache('n2');
     expect(await store.loadPagesCache('n2'), isNull);
   });
+
+  test('shared_preferences: JSON grande é codificado fora da thread principal e volta igual', () async {
+    const store = SharedPreferencesNotebookPendingStore();
+    final big = List.generate(40000, (i) => 'abcdefghij${i % 7}').join(); // ~400 KB
+    final payload = {
+      'v': 1,
+      'pages': {
+        'p1': {'data': big, 'version': 3, 'bg': 'lined'},
+      },
+      'ops': <Object?>[],
+    };
+    final before = SharedPreferencesNotebookPendingStore.isolateEncodes;
+    await store.save('n1', payload);
+    expect(SharedPreferencesNotebookPendingStore.isolateEncodes, before + 1);
+    expect(await store.load('n1'), payload);
+    // pequeno continua na thread (subir um isolate custaria mais que codificar)
+    await store.save('n2', {'v': 1, 'pages': {'p': 'x'}});
+    expect(SharedPreferencesNotebookPendingStore.isolateEncodes, before + 1);
+  });
 }

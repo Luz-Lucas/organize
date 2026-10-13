@@ -99,6 +99,13 @@ class ControlledRepo implements NotebookRepository {
   // ---- o resto delega ----------------------------------------------------------
 
   int listPagesCalls = 0;
+  int touchCalls = 0;
+
+  @override
+  Future<void> touchNote(String noteId) async {
+    touchCalls++;
+    await inner.touchNote(noteId);
+  }
 
   @override
   Future<List<NotebookPage>> listPages(String noteId) {

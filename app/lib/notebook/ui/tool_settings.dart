@@ -55,10 +55,11 @@ class ToolSettings {
     int? widthIndex,
     EraserMode? eraserMode,
     bool? fingerDraws,
+    bool clearArgb = false,
   }) => ToolSettings(
     kind: kind ?? this.kind,
     pen: pen ?? this.pen,
-    argb: argb ?? this.argb,
+    argb: clearArgb ? null : (argb ?? this.argb),
     widthIndex: widthIndex ?? this.widthIndex,
     eraserMode: eraserMode ?? this.eraserMode,
     fingerDraws: fingerDraws ?? this.fingerDraws,

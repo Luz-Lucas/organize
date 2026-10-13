@@ -6,6 +6,7 @@ import 'package:organizacional/notebook/core/notebook_core.dart';
 import 'package:organizacional/notebook/ui/notebook_screen.dart';
 import 'package:organizacional/ui/org_theme.dart';
 
+import 'menu_support.dart';
 import 'ui_support.dart';
 
 Future<void> tapKey(WidgetTester tester, String key) async {
@@ -30,7 +31,7 @@ void main() {
         ('nb-tool-highlighter', PenTool.highlighter),
         ('nb-tool-fountain', PenTool.fountain),
       ]) {
-        await tapKey(tester, key);
+        await tapMenu(tester, key);
         await SimPointer(tester, PointerDeviceKind.stylus).drag(
           linePath(const Offset(100, 100), const Offset(400, 100)),
         );
@@ -48,8 +49,10 @@ void main() {
       final s = FakeSession();
       await pumpNotebook(tester, s);
       final org = tester.element(find.byKey(const ValueKey('nb-page-0'))).org;
-      await tapKey(tester, 'nb-color-2');
-      await tapKey(tester, 'nb-width-4');
+      await openMenu(tester);
+      await tapInMenu(tester, 'nb-color-2');
+      await tapInMenu(tester, 'nb-width-4');
+      await closeMenu(tester);
       await SimPointer(tester, PointerDeviceKind.stylus).drag(
         linePath(const Offset(100, 100), const Offset(400, 100)),
       );
@@ -61,11 +64,13 @@ void main() {
     testWidgets('seletor de cor própria', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
-      await tapKey(tester, 'nb-color-custom');
+      await openMenu(tester);
+      await tapInMenu(tester, 'nb-color-custom');
       await tester.drag(find.byKey(const ValueKey('nb-hue')), const Offset(60, 0));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('nb-color-ok')));
       await tester.pumpAndSettle();
+      await closeMenu(tester);
       await SimPointer(tester, PointerDeviceKind.stylus).drag(
         linePath(const Offset(100, 100), const Offset(400, 100)),
       );
@@ -219,7 +224,7 @@ void main() {
     testWidgets('toque com a ferramenta Texto cria uma caixa de texto', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
-      await tapKey(tester, 'nb-tool-text');
+      await tapMenu(tester, 'nb-tool-text');
       final p = SimPointer(tester, PointerDeviceKind.stylus);
       await p.down(const Offset(200, 300));
       await p.up();
@@ -237,7 +242,7 @@ void main() {
     testWidgets('toque com o dedo na ferramenta Texto também posiciona', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
-      await tapKey(tester, 'nb-tool-text');
+      await tapMenu(tester, 'nb-tool-text');
       final p = SimPointer(tester, PointerDeviceKind.touch);
       await p.down(const Offset(200, 300));
       await p.up();
@@ -249,7 +254,7 @@ void main() {
       final tb = TextBox(id: '0001', x: 100, y: 100, w: 400, text: 'antigo', size: 24, argb: 0xFFFFFFFF);
       final s = FakeSession(docs: [PageDoc.empty.withText(tb)]);
       await pumpNotebook(tester, s);
-      await tapKey(tester, 'nb-tool-text');
+      await tapMenu(tester, 'nb-tool-text');
       final p = SimPointer(tester, PointerDeviceKind.stylus);
       await p.down(const Offset(150, 110));
       await p.up();
@@ -265,7 +270,7 @@ void main() {
     testWidgets('cancelar não cria nada', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
-      await tapKey(tester, 'nb-tool-text');
+      await tapMenu(tester, 'nb-tool-text');
       final p = SimPointer(tester, PointerDeviceKind.stylus);
       await p.down(const Offset(200, 300));
       await p.up();
@@ -284,11 +289,13 @@ void main() {
         s,
         pickImage: () async => PickedImage(bytes: kPng, ext: 'png', width: 400, height: 200),
       );
+      await openMenu(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('nb-tool-image')));
       await tester.runAsync(() async {
         await tester.tap(find.byKey(const ValueKey('nb-tool-image')));
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(s.images.uploads, hasLength(1));
       final images = s.docOf(0).images;
       expect(images, hasLength(1));
@@ -307,11 +314,13 @@ void main() {
         s,
         pickImage: () async => PickedImage(bytes: kPng, ext: 'png', width: 400, height: 200),
       );
+      await openMenu(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('nb-tool-image')));
       await tester.runAsync(() async {
         await tester.tap(find.byKey(const ValueKey('nb-tool-image')));
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
-      await tester.pump();
+      await tester.pumpAndSettle();
       // a imagem inserida já vem selecionada na ferramenta laço
       await tapKey(tester, 'nb-sel-delete');
       expect(s.docOf(0).images, isEmpty);
@@ -320,11 +329,13 @@ void main() {
     testWidgets('cancelar o seletor não faz nada', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s, pickImage: () async => null);
+      await openMenu(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('nb-tool-image')));
       await tester.runAsync(() async {
         await tester.tap(find.byKey(const ValueKey('nb-tool-image')));
         await Future<void>.delayed(const Duration(milliseconds: 20));
       });
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(s.images.uploads, isEmpty);
       expect(s.docOf(0).images, isEmpty);
     });
@@ -334,7 +345,7 @@ void main() {
     testWidgets('+ Página chama a sessão e a página nova aparece', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
-      await tapKey(tester, 'nb-add-page');
+      await tapMenu(tester, 'nb-add-page');
       await tester.pump();
       expect(s.current, hasLength(2));
       expect(find.byKey(const ValueKey('nb-page-1')), findsOneWidget);
@@ -350,10 +361,9 @@ void main() {
     testWidgets('trocar o fundo da página ativa', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
-      await tapKey(tester, 'nb-background');
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('nb-bg-grid')));
-      await tester.pumpAndSettle();
+      await openMenu(tester);
+      await tapInMenu(tester, 'nb-background');
+      await tapInMenu(tester, 'nb-bg-grid');
       expect(s.current.single.background, PageBackground.grid);
     });
 
@@ -428,12 +438,13 @@ void main() {
     testWidgets('botões de zoom ficam entre 50% e 400%', (tester) async {
       final s = FakeSession();
       await pumpNotebook(tester, s);
+      await openMenu(tester);
       for (var i = 0; i < 12; i++) {
-        await tapKey(tester, 'nb-zoom-in');
+        await tapInMenu(tester, 'nb-zoom-in');
       }
       expect(find.text('400%'), findsOneWidget);
       for (var i = 0; i < 25; i++) {
-        await tapKey(tester, 'nb-zoom-out');
+        await tapInMenu(tester, 'nb-zoom-out');
       }
       expect(find.text('50%'), findsOneWidget);
     });
@@ -463,9 +474,16 @@ void main() {
       final s = FakeSession();
       await pumpNotebook(tester, s, size: const Size(360, 780));
       expect(tester.takeException(), isNull);
-      for (final k in ['nb-tool-pen', 'nb-tool-eraser', 'nb-undo', 'nb-redo', 'nb-add-page']) {
+      for (final k in ['nb-fav-pen-0', 'nb-tool-eraser', 'nb-undo', 'nb-redo', 'nb-more']) {
         expect(find.byKey(ValueKey(k)), findsOneWidget, reason: k);
       }
+      await openMenu(tester);
+      for (final k in ['nb-tool-pen', 'nb-add-page']) {
+        await tester.ensureVisible(find.byKey(ValueKey(k)));
+        expect(find.byKey(ValueKey(k)), findsOneWidget, reason: k);
+      }
+      expect(tester.takeException(), isNull);
+      await closeMenu(tester);
       // página cabe na largura (sem rolagem horizontal)
       final r = tester.getRect(find.byKey(const ValueKey('nb-page-0')));
       expect(r.width, lessThanOrEqualTo(360));

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -12,8 +13,10 @@ import 'package:flutter/services.dart';
 import '../../ui/org_theme.dart';
 import '../core/notebook_core.dart';
 import 'ink_page_view.dart';
+import 'notebook_prefs.dart';
 import 'notebook_session.dart';
 import 'notebook_toolbar.dart';
+import 'notebook_tools_menu.dart';
 import 'tool_settings.dart';
 
 export 'notebook_session.dart';
@@ -74,6 +77,8 @@ class NotebookScreen extends StatefulWidget {
     required this.session,
     required this.title,
     this.pickImage,
+    this.prefs = const {},
+    this.onPrefsChanged,
   });
 
   final String noteId;
@@ -82,6 +87,14 @@ class NotebookScreen extends StatefulWidget {
 
   /// Escolhe uma imagem (padrão: seletor do sistema). Injetável nos testes.
   final Future<PickedImage?> Function()? pickImage;
+
+  /// Favoritos do Caderno (JSON de `user_settings.notebook_prefs`). Quando mudam
+  /// (outro aparelho), a barra se atualiza.
+  final Map<String, dynamic> prefs;
+
+  /// Chamado com os favoritos novos quando o usuário os edita. Se falhar, a tela
+  /// avisa e mantém a edição neste aparelho.
+  final Future<void> Function(Map<String, dynamic> prefs)? onPrefsChanged;
 
   @override
   State<NotebookScreen> createState() => _NotebookScreenState();
@@ -95,6 +108,11 @@ class _NotebookScreenState extends State<NotebookScreen> {
   late SaveStatus _status = widget.session.status;
 
   ToolSettings _settings = const ToolSettings();
+  late NotebookPrefs _prefs = NotebookPrefs.fromMap(widget.prefs);
+
+  /// Avisa o menu/ajuste rápido abertos (rotas separadas) de que algo mudou.
+  final ValueNotifier<int> _rev = ValueNotifier(0);
+  void _touch() => _rev.value++;
 
   /// Página ativa e página da seleção, por id (o índice muda quando a lista muda).
   String? _activeId;
@@ -121,7 +139,20 @@ class _NotebookScreenState extends State<NotebookScreen> {
   }
 
   @override
+  void didUpdateWidget(NotebookScreen old) {
+    super.didUpdateWidget(old);
+    if (jsonEncode(old.prefs) != jsonEncode(widget.prefs)) {
+      setState(() => _prefs = NotebookPrefs.fromMap(widget.prefs));
+      // Estamos no meio de uma construção: o menu aberto só pode ser avisado depois.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _touch();
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    _rev.dispose();
     _pagesSub?.cancel();
     _statusSub?.cancel();
     _tc.removeListener(_onTransform);
@@ -184,6 +215,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
       if (_slotById(_activeId) == null) _activeId = _slots.isEmpty ? null : _slots.first.id;
       _cleanSelection();
     });
+    _touch();
   }
 
   void _cleanSelection() {
@@ -235,6 +267,135 @@ class _NotebookScreenState extends State<NotebookScreen> {
       if (s.kind != _settings.kind && s.kind != ToolKind.lasso) _clearSelection();
       _settings = s;
     });
+    _touch();
+  }
+
+  /// Aplica uma cor à caneta; com borracha/laço ativos volta para a caneta.
+  void _applyColor(int argb) {
+    final k = _settings.kind;
+    _setSettings(
+      _settings.copyWith(argb: argb, kind: k == ToolKind.eraser || k == ToolKind.lasso ? ToolKind.draw : k),
+    );
+  }
+
+  // ---- favoritos ----------------------------------------------------------
+
+  void _updatePrefs(NotebookPrefs next) {
+    setState(() => _prefs = next);
+    _touch();
+    final save = widget.onPrefsChanged;
+    if (save == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    save(next.toMap()).catchError((Object _) {
+      messenger.showSnackBar(const SnackBar(content: Text('Não foi possível sincronizar os favoritos.')));
+    });
+  }
+
+  void _tapFavoritePen(int i) {
+    if (i < 0 || i >= _prefs.pens.length) return;
+    final pen = _prefs.pens[i];
+    final org = context.org;
+    final selected = _settings.kind == ToolKind.draw && pen.sameAs(FavoritePen.fromSettings(_settings), org);
+    if (selected) {
+      _showPanel(
+        (ctx) => NotebookQuickAdjust(
+          settings: _settings,
+          favoriteColors: _prefs.colorsFor(org),
+          currentColor: Color(_penArgb(org)),
+          onSettings: _setSettings,
+          onSave: () {
+            Navigator.of(ctx).pop();
+            _updatePrefs(_prefs.replacePenAt(i, FavoritePen.fromSettings(_settings)));
+          },
+        ),
+      );
+    } else {
+      _setSettings(pen.applyTo(_settings));
+    }
+  }
+
+  void _tapFavoriteColor(int i) {
+    final colors = _prefs.colorsFor(context.org);
+    if (i >= 0 && i < colors.length) _applyColor(colors[i]);
+  }
+
+  void _eraserOptions() => _showPanel(
+    (ctx) => NotebookEraserQuick(settings: _settings, onSettings: _setSettings),
+  );
+
+  void _openToolsMenu() {
+    final org = context.org;
+    final palette = notebookPalette(org);
+    _showPanel(
+      side: true,
+      (ctx) {
+        final slot = _slots.isEmpty ? null : _slots[_active.clamp(0, _slots.length - 1)];
+        return NotebookToolsMenu(
+          settings: _settings,
+          prefs: _prefs,
+          palette: palette,
+          currentColor: Color(_penArgb(org)),
+          background: slot?.background ?? PageBackground.lined,
+          zoom: _zoom,
+          canDeletePage: _slots.length > 1,
+          onSettings: _setSettings,
+          onColor: _applyColor,
+          onCustomColor: _pickCustomColor,
+          onBackground: (b) => _setBackground(slot, b),
+          onAddPage: widget.session.addPage,
+          onDuplicatePage: () {
+            if (slot != null) widget.session.duplicatePage(slot.id);
+          },
+          onDeletePage: () {
+            if (slot != null) _deletePage(slot.id);
+          },
+          onInsertImage: _insertImage,
+          onZoomIn: () => _zoomBy(1.25),
+          onZoomOut: () => _zoomBy(0.8),
+          onPrefs: _updatePrefs,
+        );
+      },
+    );
+  }
+
+  void _setBackground(_Slot? slot, PageBackground b) {
+    if (slot == null || slot.readOnly) return;
+    setState(() => slot.background = b);
+    widget.session.setBackground(slot.id, b);
+    _touch();
+  }
+
+  /// Mostra [content] numa folha inferior (celular) ou, se [side] e a tela é
+  /// larga, num painel lateral. O conteúdo é reconstruído a cada [_touch].
+  Future<void> _showPanel(Widget Function(BuildContext) content, {bool side = false}) {
+    Widget live(BuildContext ctx) => ListenableBuilder(listenable: _rev, builder: (_, _) => content(ctx));
+    final wide = MediaQuery.sizeOf(context).width >= 600;
+    if (side && wide) {
+      return showGeneralDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'Fechar',
+        barrierColor: Colors.black38,
+        transitionDuration: const Duration(milliseconds: 180),
+        pageBuilder: (ctx, _, _) => Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(width: 380, height: double.infinity, child: live(ctx)),
+        ),
+        transitionBuilder: (_, anim, _, child) => SlideTransition(
+          position: Tween(begin: const Offset(1, 0), end: Offset.zero).animate(
+            CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
+          ),
+          child: child,
+        ),
+      );
+    }
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 520),
+      builder: live,
+    );
   }
 
   Future<void> _pickCustomColor() async {
@@ -472,20 +633,6 @@ class _NotebookScreenState extends State<NotebookScreen> {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            key: const ValueKey('nb-undo'),
-            tooltip: 'Desfazer',
-            icon: const Icon(Icons.undo),
-            onPressed: slot != null && slot.history.canUndo ? () => _undoRedo(undo: true) : null,
-          ),
-          IconButton(
-            key: const ValueKey('nb-redo'),
-            tooltip: 'Refazer',
-            icon: const Icon(Icons.redo),
-            onPressed: slot != null && slot.history.canRedo ? () => _undoRedo(undo: false) : null,
-          ),
-        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -493,28 +640,60 @@ class _NotebookScreenState extends State<NotebookScreen> {
           Expanded(child: _buildViewer(context)),
           if (_settings.kind == ToolKind.lasso && (_selIds.isNotEmpty || _clip != null))
             _selectionBar(context),
-          NotebookToolbar(
-            settings: _settings,
-            palette: palette,
-            currentColor: Color(_penArgb(org)),
-            background: slot?.background ?? PageBackground.lined,
-            zoom: _zoom,
-            onSettings: _setSettings,
-            onCustomColor: _pickCustomColor,
-            onBackground: (b) {
-              if (slot == null || slot.readOnly) return;
-              setState(() => slot.background = b);
-              widget.session.setBackground(slot.id, b);
-            },
-            onAddPage: widget.session.addPage,
-            onInsertImage: _insertImage,
-            onZoomIn: () => _zoomBy(1.25),
-            onZoomOut: () => _zoomBy(0.8),
-          ),
+          _toolbarFor(org, palette, slot),
         ],
       ),
     );
   }
+
+  // A barra é reaproveitada (mesma instância) enquanto nada que ela mostra mudar: o Flutter
+  // então pula a reconstrução dela a cada traço, que era a maior parte do travamento.
+  Widget? _toolbar;
+  Object? _toolbarKey;
+
+  Widget _toolbarFor(OrgThemeSpec org, List<Color> palette, _Slot? slot) {
+    final canUndo = slot != null && slot.history.canUndo;
+    final canRedo = slot != null && slot.history.canRedo;
+    final key = (
+      _settings,
+      _prefs,
+      org,
+      Object.hashAll(palette),
+      _penArgb(org),
+      slot?.background ?? PageBackground.lined,
+      _zoom,
+      canUndo,
+      canRedo,
+    );
+    if (_toolbar == null || _toolbarKey != key) {
+      _toolbarKey = key;
+      _toolbar = NotebookToolbar(
+        settings: _settings,
+        prefs: _prefs,
+        palette: palette,
+        currentColor: Color(_penArgb(org)),
+        background: slot?.background ?? PageBackground.lined,
+        zoom: _zoom,
+        onSettings: _setSettings,
+        onCustomColor: _pickCustomColor,
+        // Busca a página ativa na hora (a barra pode ser de um build anterior).
+        onBackground: (b) => _setBackground(_activeSlot, b),
+        onAddPage: widget.session.addPage,
+        onInsertImage: _insertImage,
+        onZoomIn: () => _zoomBy(1.25),
+        onZoomOut: () => _zoomBy(0.8),
+        onUndo: canUndo ? () => _undoRedo(undo: true) : null,
+        onRedo: canRedo ? () => _undoRedo(undo: false) : null,
+        onMore: _openToolsMenu,
+        onFavoritePen: _tapFavoritePen,
+        onFavoriteColor: _tapFavoriteColor,
+        onEraserOptions: _eraserOptions,
+      );
+    }
+    return _toolbar!;
+  }
+
+  _Slot? get _activeSlot => _slots.isEmpty ? null : _slots[_active.clamp(0, _slots.length - 1)];
 
   String _statusLabel(SaveStatus s) => switch (s) {
     SaveStatus.saving => 'Salvando…',

@@ -2,6 +2,7 @@ package dev.organizacional.organizacional
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.MotionEvent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
@@ -23,6 +24,14 @@ class MainActivity : FlutterActivity() {
         if (savedInstanceState == null && !ShareGuard.launchedFromHistory(intent.flags)) {
             share?.handleIntent(intent, true)
         }
+    }
+
+    // Caneta (ou ponta-borracha): entrega cada amostra do input na hora, sem agrupar por vsync.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (StylusInput.shouldRequestUnbuffered(ev.actionMasked, ev.getToolType(0))) {
+            window.decorView.requestUnbufferedDispatch(ev)
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     @Deprecated("O seletor de pasta do Samsung Notes devolve o resultado por aqui.")

@@ -52,6 +52,19 @@ class _Local {
 
   bool get blocked => tooLarge && rejectedGen == gen;
 
+  /// Codificação (texto gravável) de [doc], por identidade: a cópia local e o envio
+  /// ao servidor da mesma edição compartilham uma só codificação.
+  (PageDoc, Future<String>)? encoded;
+
+  /// Último `data` do servidor que **já está** em [doc] (lido, mesclado ou enviado
+  /// por nós). Um evento do realtime com o mesmo texto não traz nada novo: é o
+  /// eco do nosso próprio save e não precisa ser decodificado nem mesclado.
+  String? remoteData;
+
+  /// O `data` que está a caminho do servidor neste momento (o eco pode chegar
+  /// antes de o `savePage` responder).
+  String? inflightData;
+
   /// Há algo a enviar ao servidor.
   bool get needsSend => dirty && !locked && !blocked;
 
@@ -152,6 +165,8 @@ class NotebookController implements NotebookSession {
     this.onPendingChanged,
     this.pageWarnLength = 3000000,
     this.pageMaxLength = 4000000,
+    this.cacheMinInterval = const Duration(seconds: 5),
+    this.encoder = encodePageAsync,
   });
 
   final String noteId;
@@ -176,6 +191,15 @@ class NotebookController implements NotebookSession {
 
   /// Tamanho acima do qual o servidor recusa a página (CHECK de 4.000.000 bytes).
   final int pageMaxLength;
+
+  /// Intervalo mínimo entre duas gravações do cache da lista de páginas. Cada eco
+  /// do realtime muda a versão das páginas; regravar o caderno inteiro (tudo em
+  /// JSON) a cada save custava mais que o próprio save.
+  final Duration cacheMinInterval;
+
+  /// Codifica uma página para gravar. Páginas grandes comprimem em outro isolate
+  /// ([encodePageAsync]); os testes trocam por uma versão síncrona.
+  final Future<String> Function(PageDoc doc) encoder;
 
   /// Avisa quando passa a existir (true) ou deixa de existir (false) algo não confirmado
   /// no servidor. O provider usa para manter o controller vivo até terminar de salvar.
@@ -217,6 +241,10 @@ class NotebookController implements NotebookSession {
   bool _rereading = false;
   String _cacheSignature = '';
   final _cacheData = <String, String>{};
+  final Stopwatch _cacheClock = Stopwatch();
+  bool _cacheDirty = false;
+  String? _persistedSig;
+  bool _savedAny = false;
   final _settledWaiters = <Completer<void>>[];
   SaveStatus _status = SaveStatus.saved;
 
@@ -418,6 +446,9 @@ class NotebookController implements NotebookSession {
     _streamTimer?.cancel();
     _sub?.cancel();
     if (holds && !_noteGone) unawaited(_persist());
+    if (_cacheDirty && !_noteGone) unawaited(_writeCacheNow());
+    // Os saves tocam `notes.updated_at` no máximo a cada minuto; o toque adiado sai agora.
+    if (_savedAny && !_noteGone) unawaited(_repo.touchNote(noteId).then((_) {}, onError: (Object _) {}));
     for (final c in _settledWaiters) {
       if (!c.isCompleted) c.complete();
     }
@@ -438,7 +469,7 @@ class NotebookController implements NotebookSession {
       final version = (m['ver'] as num?)?.toInt() ?? 0;
       final bg = parsePageBackground(m['bg']);
       _cacheData[id] = data;
-      pages.add(_decodeLocal(id, bg, data, version));
+      pages.add(_decodeLocal(id, bg, data, version)..remoteData = data);
     }
     if (pages.isEmpty) return;
     _pages = pages;
@@ -511,6 +542,7 @@ class NotebookController implements NotebookSession {
     }
     final l = _decodeLocal(r.id, r.background, r.data, r.version);
     l.nearLimit = r.data.length > pageWarnLength;
+    l.remoteData = r.data;
     return l;
   }
 
@@ -547,9 +579,16 @@ class NotebookController implements NotebookSession {
       _needReread = true;
       return false;
     }
+    if (r.data == l.remoteData || r.data == l.inflightData) {
+      // Mesmo texto que já está em [doc] (ou que estamos enviando): é o eco do nosso
+      // próprio save. Decodificar e mesclar custa O(página) na thread da interface.
+      l.seenVersion = math.max(l.seenVersion, r.version);
+      return false;
+    }
     try {
       final merged = l.doc.merge(decodePage(r.data));
       l.seenVersion = r.version;
+      l.remoteData = r.data;
       l.nearLimit = r.data.length > pageWarnLength;
       if (merged != l.doc) {
         l.doc = merged;
@@ -691,7 +730,11 @@ class NotebookController implements NotebookSession {
         if (_disposed || _noteGone) return true;
         if (!l.needsSend || !_pages.contains(l)) continue;
         final gen = l.gen;
-        final sent = encodePage(l.doc);
+        final sent = await _encodedOf(l);
+        // Durante a codificação (outro isolate) a página pode ter sido apagada ou o
+        // caderno descartado.
+        if (_disposed || _noteGone) return true;
+        if (!l.needsSend || !_pages.contains(l)) continue;
         final before = l.notice;
         if (sent.length > pageMaxLength) {
           // Nem adianta enviar: o servidor recusaria.
@@ -701,6 +744,7 @@ class NotebookController implements NotebookSession {
           continue;
         }
         final NotebookPage saved;
+        l.inflightData = sent;
         try {
           saved = await _repo.savePage(NotebookPage(
             id: l.id,
@@ -711,6 +755,7 @@ class NotebookController implements NotebookSession {
             version: l.version,
           ));
         } on NotebookRepositoryException catch (e) {
+          l.inflightData = null;
           switch (e.kind) {
             case NotebookErrorKind.transient:
               rethrow;
@@ -728,12 +773,17 @@ class NotebookController implements NotebookSession {
               continue;
           }
         }
+        l.inflightData = null;
+        _savedAny = true;
         l.version = saved.version;
         var changed = false;
-        if (saved.data != sent) {
+        if (saved.data == sent) {
+          l.remoteData = sent;
+        } else {
           // Outro aparelho gravou no meio: o servidor devolveu o resultado mesclado.
           try {
             final merged = l.doc.merge(decodePage(saved.data));
+            l.remoteData = saved.data;
             if (merged != l.doc) {
               l.doc = merged;
               changed = true;
@@ -752,6 +802,9 @@ class NotebookController implements NotebookSession {
       }
       return true;
     } catch (e) {
+      for (final l in _pages) {
+        l.inflightData = null;
+      }
       if (_disposed) return false;
       await _goOffline();
       return false;
@@ -775,6 +828,7 @@ class NotebookController implements NotebookSession {
     _maxWaitTimer = null;
     _persistTimer?.cancel();
     _persistTimer = null;
+    _cacheDirty = false;
     unawaited(_store(() async {
       try {
         await _pending.clear(noteId);
@@ -840,14 +894,53 @@ class NotebookController implements NotebookSession {
 
   Future<void> _persist() => _store(_persistNow);
 
+  /// A codificação de [l] (a mesma para a cópia local e para o envio da mesma edição).
+  Future<String> _encodedOf(_Local l) {
+    final doc = l.doc;
+    final memo = l.encoded;
+    if (memo != null && identical(memo.$1, doc)) return memo.$2;
+    final f = encoder(doc);
+    l.encoded = (doc, f);
+    // Se falhar, a próxima tentativa codifica de novo em vez de repetir o erro.
+    f.then((_) {}, onError: (Object _) {
+      if (identical(l.encoded?.$2, f)) l.encoded = null;
+    });
+    return f;
+  }
+
+  /// O que a cópia local vai conter, em forma barata de comparar: se for igual à da
+  /// última gravação não há o que codificar nem gravar.
+  String _persistSignature() {
+    final b = StringBuffer();
+    for (final l in _pages) {
+      if (l.holdsInk) b.write('p${l.id}.${l.gen}.${l.version}.${l.background.name};');
+    }
+    for (final o in _ops) {
+      b.write(switch (o) {
+        _AddOp() => 'a${o.id}.${o.background.name}.${_pages.indexWhere((l) => l.id == o.id)};',
+        _DelOp() => 'd${o.id};',
+        _BgOp() => 'b${o.id}.${o.background.name};',
+      });
+    }
+    for (final e in _parked.entries) {
+      b.write('k${e.key};');
+    }
+    return b.toString();
+  }
+
   Future<void> _persistNow() async {
     // Antes da primeira leitura a fila guardada ainda não foi reaplicada: não mexer nela.
     if (!_loaded || _noteGone) return;
+    final sig = _persistSignature();
+    if (sig == _persistedSig) return; // nada mudou desde a última gravação local
     final pages = <String, Object?>{};
-    for (final l in _pages) {
+    for (final l in List.of(_pages)) {
       if (!l.holdsInk) continue;
-      pages[l.id] = {'data': encodePage(l.doc), 'version': l.version, 'bg': l.background.name};
+      final version = l.version;
+      final bg = l.background.name;
+      pages[l.id] = {'data': await _encodedOf(l), 'version': version, 'bg': bg};
     }
+    if (_noteGone) return;
     final ops = <Map<String, Object?>>[
       for (final o in _ops)
         switch (o) {
@@ -862,6 +955,7 @@ class NotebookController implements NotebookSession {
       } else {
         await _pending.save(noteId, {'v': 1, 'pages': pages, 'ops': ops, 'parked': _parked});
       }
+      _persistedSig = sig;
     } catch (e) {
       debugPrint('Caderno: não foi possível guardar a fila local: $e');
     }
@@ -924,11 +1018,30 @@ class NotebookController implements NotebookSession {
   // ---- cache da lista de páginas ---------------------------------------------
 
   /// Guarda a última lista de páginas do servidor, para abrir e escrever offline.
+  /// A 1ª gravação é imediata; depois, no máximo uma a cada [cacheMinInterval]
+  /// (relógio real, sem timer) e a mais recente é gravada ao fechar o caderno. O
+  /// cache só serve para abrir sem rede: ficar alguns segundos atrasado não perde
+  /// tinta (o que não foi enviado está na fila local, e o servidor mescla).
   void _writeCache(List<NotebookPage> remote) {
+    if (_cacheSig(remote) == _cacheSignature) return;
+    _cacheDirty = true;
+    if (_cacheClock.isRunning && _cacheClock.elapsed < cacheMinInterval) return;
+    unawaited(_writeCacheNow());
+  }
+
+  String _cacheSig(List<NotebookPage> remote) => [
+        for (final r in remote)
+          if (!_deletedUnconfirmed.contains(r.id)) '${r.id}:${r.version}:${r.background.name}:${r.data.length}',
+      ].join('|');
+
+  Future<void> _writeCacheNow() {
+    _cacheDirty = false;
+    _cacheClock
+      ..reset()
+      ..start();
+    final remote = _lastRemote;
     final live = [for (final r in remote) if (!_deletedUnconfirmed.contains(r.id)) r];
-    final sig = [for (final r in live) '${r.id}:${r.version}:${r.background.name}:${r.data.length}'].join('|');
-    if (sig == _cacheSignature) return;
-    _cacheSignature = sig;
+    _cacheSignature = _cacheSig(remote);
     final entries = <Map<String, Object?>>[];
     for (final r in live) {
       // Linha grande cujo dado o realtime omitiu: mantém o que já tínhamos guardado.
@@ -940,13 +1053,13 @@ class NotebookController implements NotebookSession {
       }
       entries.add({'id': r.id, 'bg': r.background.name, 'data': data, 'ver': r.version});
     }
-    unawaited(_store(() async {
+    return _store(() async {
       if (_noteGone) return;
       try {
         await _pending.savePagesCache(noteId, {'v': 1, 'pages': entries});
       } catch (e) {
         debugPrint('Caderno: não foi possível guardar o cache das páginas: $e');
       }
-    }));
+    });
   }
 }
