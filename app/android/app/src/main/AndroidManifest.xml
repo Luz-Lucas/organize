@@ -3,6 +3,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <!-- Samsung Notes: achar e ler a pasta onde ele salva os arquivos (app pessoal, fora da Play Store).
+         Android 11+ usa "Acesso a todos os arquivos"; até o 12L basta a leitura comum. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <application
         android:label="organizacional"
         android:name="${applicationName}"
@@ -224,6 +228,8 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Android 11+: sem isso o app do Samsung Notes fica invisível (isInstalled/abrir). -->
+        <package android:name="com.samsung.android.app.notes"/>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

@@ -126,4 +126,36 @@ void main() {
     expect((await repo.list()).truncated, isFalse);
     expect((await repo.search('arq')).truncated, isFalse);
   });
+
+  test('ensurePath cria cada nível a partir do Meu Drive e reaproveita o que existe', () async {
+    final repo = MemoryDriveRepository();
+    final id = await repo.ensurePath(['Organizacional', 'Samsung Notes']);
+    final again = await repo.ensurePath(['Organizacional', 'Samsung Notes']);
+    expect(again, id);
+    // "Organizacional" já existia (a raiz) e foi reaproveitada, não duplicada.
+    final my = await repo.list(folderId: 'root');
+    expect(my.items.where((i) => i.name == 'Organizacional'), hasLength(1));
+    final org = await repo.list();
+    expect(org.items.map((i) => i.name), contains('Samsung Notes'));
+    final other = await repo.ensurePath(['Outra', 'Pasta']);
+    expect(other, isNot(id));
+  });
+
+  test('upload guarda o sha256 de appProperties e findBySha256 acha (e ignora a lixeira)', () async {
+    final repo = MemoryDriveRepository();
+    final sha = 'b' * 64;
+    expect(await repo.findBySha256(sha), isNull);
+    final up = await repo.upload(
+      parentId: repo.rootFolderId,
+      name: 'a.pdf',
+      mimeType: 'application/pdf',
+      size: 2,
+      data: Stream.value([1, 2]),
+      appProperties: {'sha256': sha},
+    );
+    expect(repo.uploads.single.appProperties, {'sha256': sha});
+    expect((await repo.findBySha256(sha))!.id, up.id);
+    await repo.trash(up.id);
+    expect(await repo.findBySha256(sha), isNull);
+  });
 }

@@ -7,11 +7,13 @@ import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
     private var share: ShareChannel? = null
+    private var samsung: SamsungNotesChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         AppIconChannel.register(flutterEngine.dartExecutor.binaryMessenger, applicationContext)
         share = ShareChannel(this).also { it.attach(flutterEngine.dartExecutor.binaryMessenger) }
+        samsung = SamsungNotesChannel(this).also { it.attach(flutterEngine.dartExecutor.binaryMessenger) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,6 +23,13 @@ class MainActivity : FlutterActivity() {
         if (savedInstanceState == null && !ShareGuard.launchedFromHistory(intent.flags)) {
             share?.handleIntent(intent, true)
         }
+    }
+
+    @Deprecated("O seletor de pasta do Samsung Notes devolve o resultado por aqui.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (samsung?.onActivityResult(requestCode, resultCode, data) == true) return
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onNewIntent(intent: Intent) {

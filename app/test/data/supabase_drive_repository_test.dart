@@ -214,4 +214,56 @@ void main() {
     expect(msg, isNot(contains('Connection reset')));
     expect(msg, contains('conexão'));
   });
+
+  final sha = 'a' * 64;
+
+  test('ensurePath manda {action:ensure_path,path} e devolve o folderId', () async {
+    final calls = <_Call>[];
+    final repo = _repo(calls, (_) => {'folderId': 'F9'});
+    expect(await repo.ensurePath(['Organizacional', 'Samsung Notes']), 'F9');
+    expect(calls.single.function, 'drive');
+    expect(calls.single.body, {
+      'action': 'ensure_path',
+      'path': ['Organizacional', 'Samsung Notes'],
+    });
+  });
+
+  test('ensurePath com resposta sem folderId é erro', () async {
+    final repo = _repo([], (_) => {});
+    await expectLater(repo.ensurePath(['A']), throwsA(isA<RepositoryException>()));
+  });
+
+  test('findBySha256 manda {action:find_by_sha256,sha256}; file nulo vira null', () async {
+    final calls = <_Call>[];
+    final found = _repo(calls, (_) => {
+          'file': {'id': 'f1', 'name': 'a.pdf', 'webViewLink': 'https://drive.google.com/file/d/f1/view'},
+        });
+    final item = await found.findBySha256(sha);
+    expect(calls.single.body, {'action': 'find_by_sha256', 'sha256': sha});
+    expect(item!.id, 'f1');
+    expect(item.name, 'a.pdf');
+    expect(item.webViewLink, contains('f1'));
+    final none = _repo([], (_) => {'file': null});
+    expect(await none.findBySha256(sha), isNull);
+  });
+
+  test('upload com appProperties manda no upload_session; sem appProperties o corpo não muda', () async {
+    final calls = <_Call>[];
+    final client = MockClient.streaming((req, body) async {
+      await body.drain<void>();
+      return http.StreamedResponse(Stream.value(utf8.encode('{"id":"f1","name":"a.pdf"}')), 200);
+    });
+    final repo = _repo(calls, (_) => {'uploadUrl': 'https://www.googleapis.com/upload/drive/v3/files?upload_id=X'}, client: client);
+    await repo.upload(
+      parentId: 'P',
+      name: 'a.pdf',
+      mimeType: 'application/pdf',
+      size: 1,
+      data: Stream.value([1]),
+      appProperties: {'sha256': sha},
+    );
+    expect(calls.last.body['appProperties'], {'sha256': sha});
+    await repo.upload(parentId: 'P', name: 'a.pdf', mimeType: 'application/pdf', size: 1, data: Stream.value([1]));
+    expect(calls.last.body.containsKey('appProperties'), isFalse);
+  });
 }

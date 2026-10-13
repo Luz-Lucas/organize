@@ -25,7 +25,7 @@ void main() {
     expect(find.byKey(const Key('drive-card')), findsOneWidget);
     expect(find.text('Não conectado'), findsWidgets);
     expect(find.byKey(const Key('drive-samsung-help')), findsOneWidget);
-    expect(find.textContaining('Samsung Notes'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('drive-card')), matching: find.textContaining('Samsung Notes')), findsOneWidget);
     await tester.tap(find.byKey(const Key('drive-connect')));
     await tester.pumpAndSettle();
     expect(opened, [repo.connectUri]);
@@ -56,6 +56,8 @@ void main() {
     await tester.tap(find.byKey(const Key('drive-confirm-disconnect')));
     await tester.pumpAndSettle();
     expect(repo.disconnectCalls, 1);
+    // Ajustes ficou mais longo (cartão do Samsung Notes): a lista rola de volta até o botão do Drive.
+    await tester.scrollUntilVisible(find.byKey(const Key('drive-connect')), -300, scrollable: find.byType(Scrollable).first);
     expect(find.byKey(const Key('drive-connect')), findsOneWidget);
   });
 

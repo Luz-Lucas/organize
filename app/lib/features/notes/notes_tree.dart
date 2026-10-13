@@ -11,6 +11,7 @@ import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../import/import_flow.dart';
+import '../samsung_notes/samsung_platform.dart';
 import '../spaces/spaces_screen.dart' show iconForKind;
 
 const _accents = {
@@ -99,6 +100,7 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
         return _fold(a.title).compareTo(_fold(b.title));
       });
     final mobile = MediaQuery.sizeOf(context).width < 720;
+    final samsungInstalled = ref.watch(samsungNotesInstalledProvider).value ?? false;
 
     final spaceIds = {for (final s in spaces) s.id};
     List<Note> inSpace(String id) => [for (final n in visible) if (n.spaceId == id) n];
@@ -146,9 +148,12 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                 padding: EdgeInsets.zero,
                 onSelected: (v) {
                   if (v == 'import') runBatchImport(context, ref);
+                  if (v == 'samsung') ref.read(samsungNotesPlatformProvider).open();
                 },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(key: Key('notes-import'), value: 'import', child: Text('Importar arquivos')),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(key: Key('notes-import'), value: 'import', child: Text('Importar arquivos')),
+                  if (samsungInstalled)
+                    const PopupMenuItem(key: Key('open-samsung-notes'), value: 'samsung', child: Text('Abrir Samsung Notes')),
                 ],
               ),
             ],

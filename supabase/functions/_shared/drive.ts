@@ -238,13 +238,40 @@ export async function ensureFolder(accessToken: string, parentId: string, name: 
   return await createFolder(accessToken, parentId, name, fetchFn);
 }
 
+/** sha256 em hexadecimal minúsculo (64 caracteres): a chave de deduplicação dos arquivos importados. */
+export const validSha256 = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
+
+export interface FoundFile {
+  id: string;
+  name: string;
+  webViewLink: string | null;
+}
+
+/** Acha, fora da lixeira, um arquivo cujo appProperties.sha256 é [sha256] (gravado no upload). */
+export async function findBySha256(accessToken: string, sha256: string, fetchFn: FetchFn): Promise<FoundFile | null> {
+  if (!validSha256(sha256)) throw new GoogleError("other"); // nunca entra na consulta sem validar
+  const p = new URLSearchParams({
+    q: `appProperties has { key='sha256' and value='${sha256}' } and trashed = false`,
+    pageSize: "1",
+    fields: "files(id,name,webViewLink)",
+  });
+  const j = await driveRequest(fetchFn, `${DRIVE_API}/files?${p}`, { headers: authz(accessToken) });
+  const f = Array.isArray(j?.files) ? (j!.files as Record<string, unknown>[])[0] : undefined;
+  if (!f || typeof f.id !== "string") return null;
+  return {
+    id: f.id,
+    name: typeof f.name === "string" ? f.name : "",
+    webViewLink: typeof f.webViewLink === "string" ? f.webViewLink : null,
+  };
+}
+
 /**
  * Cria uma sessão de upload resumable e devolve a URL (Location). O app envia o arquivo
  * direto para essa URL, sem token. A resposta final do PUT traz id, name e webViewLink.
  */
 export async function createUploadSession(
   accessToken: string,
-  meta: { parentId: string; name: string; mimeType: string; size: number },
+  meta: { parentId: string; name: string; mimeType: string; size: number; appProperties?: Record<string, string> },
   fetchFn: FetchFn,
 ): Promise<string> {
   let res: Response;
@@ -256,7 +283,12 @@ export async function createUploadSession(
         "X-Upload-Content-Type": meta.mimeType,
         "X-Upload-Content-Length": String(meta.size),
       },
-      body: JSON.stringify({ name: meta.name, parents: [meta.parentId], mimeType: meta.mimeType }),
+      body: JSON.stringify({
+        name: meta.name,
+        parents: [meta.parentId],
+        mimeType: meta.mimeType,
+        ...(meta.appProperties ? { appProperties: meta.appProperties } : {}),
+      }),
       signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });
   } catch {

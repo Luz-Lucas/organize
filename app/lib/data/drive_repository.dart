@@ -42,7 +42,15 @@ abstract interface class DriveRepository {
   Future<List<DrivePermission>> permissions(String id);
   Future<void> unshare(String id, String permissionId);
 
-  /// Envia [data] (exatamente [size] bytes) para [parentId].
+  /// Acha ou cria cada pasta de [path] a partir do Meu Drive (ex.: `['Organizacional', 'Samsung Notes']`)
+  /// e devolve o id da última.
+  Future<String> ensurePath(List<String> path);
+
+  /// Arquivo (fora da lixeira) enviado com `appProperties.sha256 == [sha256]`; null se não houver.
+  Future<DriveItem?> findBySha256(String sha256);
+
+  /// Envia [data] (exatamente [size] bytes) para [parentId]. [appProperties] (opcional, só `sha256`)
+  /// fica gravado no arquivo do Drive e permite achá-lo depois por `findBySha256`.
   Future<UploadedFile> upload({
     required String parentId,
     required String name,
@@ -50,6 +58,7 @@ abstract interface class DriveRepository {
     required int size,
     required Stream<List<int>> data,
     void Function(int sent, int total)? onProgress,
+    Map<String, String>? appProperties,
   });
 }
 

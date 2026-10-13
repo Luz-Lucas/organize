@@ -6,12 +6,13 @@ import 'drive_repository.dart';
 import 'repository.dart';
 
 class UploadCall {
-  UploadCall(this.parentId, this.name, this.mimeType, this.size);
+  UploadCall(this.parentId, this.name, this.mimeType, this.size, [this.appProperties]);
 
   final String parentId;
   final String name;
   final String mimeType;
   final int size;
+  final Map<String, String>? appProperties;
 }
 
 class _Node {
@@ -20,6 +21,7 @@ class _Node {
   DriveItem item;
   String? parentId;
   bool trashed = false;
+  Map<String, String>? appProperties;
   final List<DrivePermission> permissions = [
     const DrivePermission(id: 'owner', email: 'sua-conta@exemplo.com', role: 'owner', type: 'user'),
   ];
@@ -167,6 +169,25 @@ class MemoryDriveRepository implements DriveRepository {
   }
 
   @override
+  Future<String> ensurePath(List<String> path) async {
+    _check();
+    var parent = 'my-drive';
+    for (final name in path) {
+      parent = (await ensureFolder(parent, name)).id;
+    }
+    return parent;
+  }
+
+  @override
+  Future<DriveItem?> findBySha256(String sha256) async {
+    _check();
+    for (final n in _nodes.values) {
+      if (!n.trashed && n.appProperties?['sha256'] == sha256) return n.item;
+    }
+    return null;
+  }
+
+  @override
   Future<void> rename(String id, String name) async {
     _check();
     final n = _node(id);
@@ -228,6 +249,7 @@ class MemoryDriveRepository implements DriveRepository {
     required int size,
     required Stream<List<int>> data,
     void Function(int sent, int total)? onProgress,
+    Map<String, String>? appProperties,
   }) async {
     _check();
     var sent = 0;
@@ -235,8 +257,9 @@ class MemoryDriveRepository implements DriveRepository {
       sent += chunk.length;
       onProgress?.call(sent, size);
     }
-    uploads.add(UploadCall(parentId, name, mimeType, size));
+    uploads.add(UploadCall(parentId, name, mimeType, size, appProperties));
     final item = addFile(name, _node(parentId).item.id, mimeType: mimeType, size: size);
+    _nodes[item.id]!.appProperties = appProperties;
     return UploadedFile(id: item.id, name: name, webViewLink: item.webViewLink);
   }
 }

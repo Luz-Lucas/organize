@@ -9,9 +9,13 @@ import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/ids.dart';
 import '../../domain/note.dart';
+import '../../domain/space.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
+import '../import/importer.dart' show driveLinkInBody;
+import '../samsung_notes/folder_sync.dart' show samsungSpaceName;
+import '../samsung_notes/samsung_platform.dart';
 import 'markdown_bridge.dart';
 import 'rich_note_editor.dart';
 import '../../app/back_navigation.dart';
@@ -196,8 +200,43 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
+  /// Link do Drive quando a nota é uma nota-link criada pela sincronização do Samsung Notes.
+  String? _samsungDriveLink(Note note) {
+    final spaces = ref.watch(spacesProvider).value ?? const <Space>[];
+    final space = spaces.where((s) => s.id == note.spaceId).firstOrNull;
+    if (space == null || normalizeTitle(space.name) != normalizeTitle(samsungSpaceName)) return null;
+    return driveLinkInBody(note.body);
+  }
+
+  Widget _samsungActions(String link) {
+    final installed = ref.watch(samsungNotesInstalledProvider).value ?? false;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            key: const Key('samsung-open-drive'),
+            icon: const Icon(Icons.open_in_new, size: 18),
+            label: const Text('Abrir no Drive'),
+            onPressed: () => ref.read(linkOpenerProvider)(Uri.parse(link)),
+          ),
+          if (installed)
+            OutlinedButton.icon(
+              key: const Key('samsung-open-app'),
+              icon: const Icon(Icons.edit_note, size: 18),
+              label: const Text('Abrir Samsung Notes'),
+              onPressed: () => ref.read(samsungNotesPlatformProvider).open(),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBody(
       BuildContext context, ThemeData theme, List<Note> all, List<Note> backlinks) {
+    final samsungLink = _note == null ? null : _samsungDriveLink(_note!);
     final header = <Widget>[
       TextField(
         key: const Key('note-title'),
@@ -208,6 +247,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         style: theme.textTheme.headlineMedium,
         decoration: const InputDecoration.collapsed(hintText: 'Título'),
       ),
+      if (samsungLink != null) _samsungActions(samsungLink),
       if (_saveError != null)
         Padding(
           padding: const EdgeInsets.only(top: 8),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../app_icon/app_icon.dart';
+import '../features/samsung_notes/samsung_sync_controller.dart';
 import '../location/location_report_sync.dart';
 import '../ui/org_theme.dart';
 import '../widgets/widget_sync.dart';
@@ -21,6 +22,7 @@ class OrganizacionalApp extends ConsumerWidget {
     ref.watch(widgetSyncProvider);
     ref.watch(appIconSyncProvider);
     ref.watch(locationReportSyncProvider);
+    ref.watch(samsungForegroundSyncProvider);
     final id = ref.watch(settingsProvider).value?.theme ?? 'violeta';
     final theme = buildOrgTheme(
       orgThemeById(id),

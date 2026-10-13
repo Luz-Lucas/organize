@@ -19,12 +19,14 @@ import {
   driveRequest,
   type DriveStore,
   ensureFolder,
+  findBySha256,
   getFolder,
   listChildren,
   listPaged,
   PERMISSIONS_LIMIT,
   searchFiles,
   validId,
+  validSha256,
 } from "../_shared/drive.ts";
 
 export interface TokenEntry {
@@ -73,6 +75,18 @@ function id(v: unknown, what = "item"): string {
 function name(v: unknown): string {
   const s = typeof v === "string" ? v.trim() : "";
   if (s.length < 1 || s.length > 255) throw new BadRequest("O nome deve ter de 1 a 255 caracteres.");
+  return s;
+}
+
+const MAX_PATH_DEPTH = 5;
+
+/** Nome de UMA pasta de um caminho: sem separadores, sem caracteres de controle, nem "." / "..". */
+function pathSegment(v: unknown): string {
+  const s = typeof v === "string" ? v.trim() : "";
+  // deno-lint-ignore no-control-regex
+  if (s.length < 1 || s.length > 255 || /[\/\\\u0000-\u001f\u007f]/.test(s) || s === "." || s === "..") {
+    throw new BadRequest("Nome de pasta inválido.");
+  }
   return s;
 }
 
@@ -302,8 +316,41 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
         if (typeof size !== "number" || !Number.isInteger(size) || size < 0 || size > 5 * 1024 ** 4) {
           throw new BadRequest("Tamanho de arquivo inválido.");
         }
-        const uploadUrl = await withToken((t) => createUploadSession(t, { parentId, name: n, mimeType, size }, fetchFn));
+        // Opcional (o app antigo não manda): só {sha256} em hex minúsculo; null conta como ausente.
+        let appProperties: { sha256: string } | undefined;
+        const ap = body.appProperties;
+        if (ap !== undefined && ap !== null) {
+          const keys = ap && typeof ap === "object" && !Array.isArray(ap) ? Object.keys(ap) : [];
+          if (keys.length !== 1 || keys[0] !== "sha256" || !validSha256((ap as Body).sha256)) {
+            throw new BadRequest("Propriedades do arquivo inválidas.");
+          }
+          appProperties = { sha256: (ap as { sha256: string }).sha256 };
+        }
+        const uploadUrl = await withToken((t) =>
+          createUploadSession(t, { parentId, name: n, mimeType, size, ...(appProperties ? { appProperties } : {}) }, fetchFn)
+        );
         return json({ uploadUrl });
+      }
+
+      case "ensure_path": {
+        const raw = body.path;
+        if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_PATH_DEPTH) {
+          throw new BadRequest(`Informe o caminho com 1 a ${MAX_PATH_DEPTH} pastas.`);
+        }
+        const names = raw.map(pathSegment);
+        const folderId = await withToken(async (t) => {
+          let parent = "root";
+          for (const n of names) parent = (await ensureFolder(t, parent, n, fetchFn)).id;
+          return parent;
+        });
+        return json({ folderId });
+      }
+
+      case "find_by_sha256": {
+        const sha = body.sha256;
+        if (!validSha256(sha)) throw new BadRequest("Hash do arquivo inválido.");
+        const file = await withToken((t) => findBySha256(t, sha, fetchFn));
+        return json({ file });
       }
 
       default:

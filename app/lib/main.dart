@@ -12,6 +12,13 @@ import 'app/providers.dart';
 import 'app/router.dart';
 import 'app_icon/app_icon.dart';
 import 'data/github_repository.dart';
+import 'data/imported_files_repository.dart';
+import 'data/supabase_imported_files_repository.dart';
+import 'features/samsung_notes/samsung_background.dart';
+import 'features/samsung_notes/samsung_platform.dart';
+import 'features/samsung_notes/samsung_sync_controller.dart';
+import 'features/samsung_notes/samsung_sync_settings.dart';
+import 'features/samsung_notes/sync_lock.dart';
 import 'data/supabase_alexa_repository.dart';
 import 'data/supabase_github_repository.dart';
 import 'data/drive_repository.dart';
@@ -78,6 +85,11 @@ Future<void> main() async {
       driveRepositoryProvider.overrideWithValue(SupabaseDriveRepository(client)),
       if (isAndroid) shareIntentServiceProvider.overrideWithValue(MethodChannelShareIntentService()),
       githubRepositoryProvider.overrideWithValue(SupabaseGithubRepository(client)),
+      importedFilesRepositoryProvider.overrideWithValue(SupabaseImportedFilesRepository(client)),
+      samsungSyncPrefsProvider.overrideWithValue(SharedPreferencesSamsungSyncPrefs()),
+      samsungSyncLockProvider.overrideWithValue(FileSyncLock(samsungSyncLockFile())),
+      if (isAndroid) samsungNotesPlatformProvider.overrideWithValue(MethodChannelSamsungNotesPlatform()),
+      if (isAndroid) samsungBackgroundSchedulerProvider.overrideWithValue(const WorkmanagerSamsungScheduler()),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
       if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
       if (isAndroid) locationServiceProvider.overrideWithValue(const GeolocatorLocationService()),

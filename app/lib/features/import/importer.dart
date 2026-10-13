@@ -53,7 +53,16 @@ String plainTextToMarkdown(String text) {
   return (title, plainTextToMarkdown(rest.join('\n')));
 }
 
-String _stem(String name) {
+/// Corpo da nota-link de um arquivo enviado ao Drive (também lido de volta por [driveLinkInBody]).
+String driveLinkNoteBody(String fileName, String? link) =>
+    link == null ? 'Arquivo enviado ao Google Drive: $fileName' : 'Arquivo no Google Drive: [$fileName]($link)';
+
+final _driveLinkInBody = RegExp(r'Arquivo no Google Drive: \[[^\]\n]*\]\((https://[^)\s]+)\)');
+
+/// Link do Drive de uma nota-link criada por [driveLinkNoteBody]; null se a nota não tem um.
+String? driveLinkInBody(String body) => _driveLinkInBody.firstMatch(body)?.group(1);
+
+String noteStem(String name) {
   final i = name.lastIndexOf('.');
   return i > 0 ? name.substring(0, i) : name;
 }
@@ -133,7 +142,7 @@ class Importer {
         if (file.becomesNote) {
           final raw = await file.readAsString();
           final isMd = file.name.toLowerCase().endsWith('.md');
-          final note = await _createNote(_stem(file.name), isMd ? raw.replaceAll('\r\n', '\n').trimRight() : plainTextToMarkdown(raw), space);
+          final note = await _createNote(noteStem(file.name), isMd ? raw.replaceAll('\r\n', '\n').trimRight() : plainTextToMarkdown(raw), space);
           summary
             ..notes += 1
             ..noteIds.add(note.id);
@@ -150,8 +159,7 @@ class Importer {
           );
           summary.files += 1;
           final link = up.webViewLink;
-          final body = link == null ? 'Arquivo enviado ao Google Drive: ${file.name}' : 'Arquivo no Google Drive: [${file.name}]($link)';
-          final note = await _createNote(file.name, body, space);
+          final note = await _createNote(file.name, driveLinkNoteBody(file.name, link), space);
           summary
             ..notes += 1
             ..noteIds.add(note.id);

@@ -5,6 +5,8 @@ import 'package:workmanager/workmanager.dart';
 import '../domain/calendar_event.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
+import '../features/samsung_notes/samsung_background.dart';
+import '../features/samsung_notes/samsung_sync_controller.dart';
 import '../location/location_background.dart';
 import 'widget_sink.dart';
 import 'widget_snapshot.dart';
@@ -99,7 +101,7 @@ Future<SupabaseClient?> _backgroundClient() async {
 }
 
 /// Único despachante do workmanager: roteia pelo nome da tarefa
-/// (`widgetsRefresh` ou `locationReport`).
+/// (`widgetsRefresh`, `locationReport` ou `samsungNotesSync`).
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
@@ -109,6 +111,10 @@ void callbackDispatcher() {
       if (taskName == locationReportTask) {
         await runLocationReportTask(client);
         return true; // sem sessão/casa/permissão não é erro: tenta de novo em 15 min
+      }
+      if (taskName == samsungSyncTask) {
+        await runSamsungSyncTask(client);
+        return true; // chave desligada, sem Drive ou sem pasta não é erro: tenta de novo em 15 min
       }
       await refreshWidgetsInBackground(
         client: () => client,
@@ -144,4 +150,25 @@ Future<void> registerLocationBackgroundReport() async {
     constraints: Constraints(networkType: NetworkType.connected),
     existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
   );
+}
+
+/// Sincronização periódica do Samsung Notes (a cada 15 min, só com rede). A tarefa decide sozinha se deve
+/// rodar (chave, Drive conectado, pasta, sessão); ligar e desligar a chave agenda e cancela.
+class WorkmanagerSamsungScheduler implements SamsungBackgroundScheduler {
+  const WorkmanagerSamsungScheduler();
+
+  @override
+  Future<void> schedule() async {
+    await Workmanager().initialize(callbackDispatcher);
+    await Workmanager().registerPeriodicTask(
+      samsungSyncUniqueName,
+      samsungSyncTask,
+      frequency: samsungSyncFrequency,
+      constraints: Constraints(networkType: NetworkType.connected),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
+    );
+  }
+
+  @override
+  Future<void> cancel() => Workmanager().cancelByUniqueName(samsungSyncUniqueName);
 }

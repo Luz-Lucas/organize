@@ -10,6 +10,7 @@ import '../../ui/org_widgets.dart';
 import 'drive_card.dart';
 import 'gmail_card.dart';
 import 'home_location_card.dart';
+import 'samsung_notes_card.dart';
 import 'widgets_card.dart';
 
 /// Ajustes: escolha do tema (10 sistemas de design) e conta.
@@ -83,6 +84,11 @@ class SettingsScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: DriveCard(),
+            ),
+            const SectionHeader('Samsung Notes'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: SamsungNotesCard(),
             ),
             if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...const [
               SectionHeader('Widgets'),

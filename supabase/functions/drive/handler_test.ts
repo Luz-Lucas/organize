@@ -377,6 +377,163 @@ Deno.test("upload_session valida os campos e recusa Location fora do Google", as
   }
 });
 
+// ---------------------------------------------------------------- upload com appProperties / ensure_path / find_by_sha256
+
+const SHA = "a".repeat(64);
+const SESSION_OK = () =>
+  new Response(null, { status: 200, headers: { Location: "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=XYZ" } });
+
+Deno.test("upload_session com appProperties.sha256 grava a propriedade no arquivo do Drive", async () => {
+  const s = await setup([[`${UPLOAD}/files`, SESSION_OK]]);
+  const r = await s.run("upload_session", {
+    parentId: "P1", name: "Aula.pdf", mimeType: "application/pdf", size: 10, appProperties: { sha256: SHA },
+  });
+  assertEquals(r.status, 200);
+  assertEquals((await r.json()).uploadUrl.startsWith("https://www.googleapis.com/upload/drive/v3/files"), true);
+  const c = s.f.calls.find((x) => x.url.startsWith(UPLOAD))!;
+  assertEquals(JSON.parse(c.body), { name: "Aula.pdf", parents: ["P1"], mimeType: "application/pdf", appProperties: { sha256: SHA } });
+});
+
+Deno.test("upload_session sem appProperties (ou null) mantém exatamente o corpo antigo", async () => {
+  const s = await setup([[`${UPLOAD}/files`, SESSION_OK]]);
+  for (const extra of [{}, { appProperties: null }]) {
+    const r = await s.run("upload_session", { parentId: "P1", name: "a.pdf", mimeType: "application/pdf", size: 3, ...extra });
+    assertEquals(r.status, 200);
+    await r.body?.cancel();
+  }
+  for (const c of api(s.f.calls, UPLOAD)) {
+    assertEquals(JSON.parse(c.body), { name: "a.pdf", parents: ["P1"], mimeType: "application/pdf" });
+  }
+});
+
+Deno.test("upload_session recusa appProperties inválido com 400 e não chama o Google", async () => {
+  const s = await setup([[`${UPLOAD}/files`, SESSION_OK]]);
+  for (const bad of [
+    "texto", 5, true, [], [SHA], {},
+    { sha256: "abc" }, { sha256: "A".repeat(64) }, { sha256: "g".repeat(64) }, { sha256: "a".repeat(65) }, { sha256: 5 }, { sha256: null },
+    { sha256: SHA, outra: "x" }, { outra: "x" },
+  ]) {
+    const r = await s.run("upload_session", { parentId: "P1", name: "a.pdf", mimeType: "application/pdf", size: 3, appProperties: bad });
+    assertEquals(r.status, 400, JSON.stringify(bad));
+    await r.body?.cancel();
+  }
+  assertEquals(s.f.calls.length, 0);
+});
+
+Deno.test("ensure_path cria o que falta, nível por nível a partir do Meu Drive", async () => {
+  const created: string[] = [];
+  const s = await setup([
+    [`${DRIVE}/files?fields=`, (c) => {
+      const b = JSON.parse(c.body);
+      created.push(`${b.parents[0]}>${b.name}`);
+      return jsonRes({ id: `ID-${b.name.replaceAll(" ", "_")}`, name: b.name, mimeType: FOLDER });
+    }],
+    [`${DRIVE}/files?`, () => files()], // nada existe
+  ]);
+  const r = await s.run("ensure_path", { path: ["Organizacional", "Samsung Notes"] });
+  assertEquals(r.status, 200);
+  assertEquals(await r.json(), { folderId: "ID-Samsung_Notes" });
+  assertEquals(created, ["root>Organizacional", "ID-Organizacional>Samsung Notes"]);
+  const lookups = api(s.f.calls, `${DRIVE}/files?`).filter((c) => c.method === "GET").map((c) => new URL(c.url).searchParams.get("q"));
+  assertEquals(lookups, [
+    `'root' in parents and name = 'Organizacional' and mimeType = '${FOLDER}' and trashed = false`,
+    `'ID-Organizacional' in parents and name = 'Samsung Notes' and mimeType = '${FOLDER}' and trashed = false`,
+  ]);
+});
+
+Deno.test("ensure_path reaproveita o que existe e só cria o nível que falta", async () => {
+  const created: string[] = [];
+  const s = await setup([
+    [`${DRIVE}/files?fields=`, (c) => {
+      const b = JSON.parse(c.body);
+      created.push(`${b.parents[0]}>${b.name}`);
+      return jsonRes({ id: "ID-NOVA", name: b.name, mimeType: FOLDER });
+    }],
+    [`${DRIVE}/files?`, (c) =>
+      new URL(c.url).searchParams.get("q")!.includes("name = 'Organizacional'")
+        ? files({ id: "ORG-EXISTE", name: "Organizacional", mimeType: FOLDER })
+        : files()],
+  ]);
+  const r = await s.run("ensure_path", { path: ["Organizacional", "Samsung Notes"] });
+  assertEquals(await r.json(), { folderId: "ID-NOVA" });
+  assertEquals(created, ["ORG-EXISTE>Samsung Notes"]);
+
+  // tudo existe: nenhuma criação
+  const t = await setup([[`${DRIVE}/files?`, (c) =>
+    files({ id: new URL(c.url).searchParams.get("q")!.includes("Samsung") ? "SN" : "ORG", name: "x", mimeType: FOLDER })]]);
+  const r2 = await t.run("ensure_path", { path: ["Organizacional", "Samsung Notes"] });
+  assertEquals(await r2.json(), { folderId: "SN" });
+  assertEquals(api(t.f.calls, DRIVE).filter((c) => c.method === "POST").length, 0);
+});
+
+Deno.test("ensure_path escapa aspas no nome da pasta", async () => {
+  const s = await setup([[`${DRIVE}/files?`, () => files({ id: "X1", name: "x", mimeType: FOLDER })]]);
+  const r = await s.run("ensure_path", { path: ["Aula d'Água"] });
+  assertEquals(await r.json(), { folderId: "X1" });
+  assertEquals(
+    new URL(api(s.f.calls, `${DRIVE}/files?`)[0].url).searchParams.get("q"),
+    `'root' in parents and name = 'Aula d\\'Água' and mimeType = '${FOLDER}' and trashed = false`,
+  );
+});
+
+Deno.test("ensure_path recusa caminho ou nome inválido com 400 e não chama o Google", async () => {
+  const s = await setup([[`${DRIVE}/files`, () => files()]]);
+  for (const bad of [
+    undefined, null, "Organizacional/Samsung Notes", {}, [], 5,
+    [""], ["   "], ["a/b"], ["a\\b"], ["Organizacional", "Samsung/Notes"], [5], [null], ["a".repeat(256)],
+    ["ok", "bad\u0000name"], ["."], [".."], ["a", "b", "c", "d", "e", "f", "g", "h", "i"],
+  ]) {
+    const r = await s.run("ensure_path", { path: bad });
+    assertEquals(r.status, 400, JSON.stringify(bad));
+    assert((await r.json()).error !== "Ação desconhecida.", "a ação precisa existir");
+  }
+  assertEquals(s.f.calls.length, 0);
+});
+
+Deno.test("ensure_path sem conta do drive => 409 not_connected", async () => {
+  const s = await setup([], ["u1"]);
+  const r = await s.run("ensure_path", { path: ["Organizacional"] }, "jwt-u2");
+  assertEquals(r.status, 409);
+  assertEquals((await r.json()).code, "not_connected");
+});
+
+Deno.test("find_by_sha256 devolve o arquivo achado (id, name, webViewLink) e consulta appProperties", async () => {
+  const s = await setup([[`${DRIVE}/files?`, () =>
+    files({ id: "F9", name: "Aula.pdf", webViewLink: "https://drive.google.com/file/d/F9/view", mimeType: "application/pdf", size: "10" })]]);
+  const r = await s.run("find_by_sha256", { sha256: SHA });
+  assertEquals(r.status, 200);
+  assertEquals(await r.json(), { file: { id: "F9", name: "Aula.pdf", webViewLink: "https://drive.google.com/file/d/F9/view" } });
+  const q = new URL(api(s.f.calls, `${DRIVE}/files?`)[0].url).searchParams;
+  assertEquals(q.get("q"), `appProperties has { key='sha256' and value='${SHA}' } and trashed = false`);
+  assertEquals(q.get("pageSize"), "1");
+});
+
+Deno.test("find_by_sha256 sem resultado devolve file: null; webViewLink ausente vira null", async () => {
+  const none = await setup([[`${DRIVE}/files?`, () => files()]]);
+  const r = await none.run("find_by_sha256", { sha256: SHA });
+  assertEquals(await r.json(), { file: null });
+
+  const noLink = await setup([[`${DRIVE}/files?`, () => files({ id: "F9", name: "x.txt" })]]);
+  assertEquals(await (await noLink.run("find_by_sha256", { sha256: SHA })).json(), { file: { id: "F9", name: "x.txt", webViewLink: null } });
+});
+
+Deno.test("find_by_sha256 recusa sha256 inválido com 400 (nada vai para a consulta)", async () => {
+  const s = await setup([[`${DRIVE}/files`, () => files()]]);
+  for (const bad of [undefined, null, "", "abc", "A".repeat(64), "a".repeat(63), "a".repeat(65), `${"a".repeat(63)}'`, 5, [SHA]]) {
+    const r = await s.run("find_by_sha256", { sha256: bad });
+    assertEquals(r.status, 400, JSON.stringify(bad));
+    assert((await r.json()).error !== "Ação desconhecida.", "a ação precisa existir");
+  }
+  assertEquals(s.f.calls.length, 0);
+});
+
+Deno.test("find_by_sha256 sem conta do drive => 409 not_connected", async () => {
+  const s = await setup([], ["u1"]);
+  const r = await s.run("find_by_sha256", { sha256: SHA }, "jwt-u2");
+  assertEquals(r.status, 409);
+  assertEquals((await r.json()).code, "not_connected");
+});
+
 // ---------------------------------------------------------------- desconectar
 
 Deno.test("disconnect revoga o refresh token, apaga a conta e zera o estado só deste usuário", async () => {

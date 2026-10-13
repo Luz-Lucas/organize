@@ -159,6 +159,20 @@ class SupabaseDriveRepository implements DriveRepository {
   }
 
   @override
+  Future<String> ensurePath(List<String> path) async {
+    final res = await _call('ensure_path', {'path': path});
+    final id = res['folderId'];
+    if (id is! String || id.isEmpty) throw const RepositoryException('Resposta inesperada do servidor.');
+    return id;
+  }
+
+  @override
+  Future<DriveItem?> findBySha256(String sha256) async {
+    final file = (await _call('find_by_sha256', {'sha256': sha256}))['file'];
+    return file is Map ? DriveItem.fromMap(Map<String, dynamic>.from(file)) : null;
+  }
+
+  @override
   Future<UploadedFile> upload({
     required String parentId,
     required String name,
@@ -166,8 +180,15 @@ class SupabaseDriveRepository implements DriveRepository {
     required int size,
     required Stream<List<int>> data,
     void Function(int sent, int total)? onProgress,
+    Map<String, String>? appProperties,
   }) async {
-    final session = await _call('upload_session', {'parentId': parentId, 'name': name, 'mimeType': mimeType, 'size': size});
+    final session = await _call('upload_session', {
+      'parentId': parentId,
+      'name': name,
+      'mimeType': mimeType,
+      'size': size,
+      if (appProperties != null && appProperties.isNotEmpty) 'appProperties': appProperties,
+    });
     final uri = Uri.tryParse((session['uploadUrl'] as String?) ?? '');
     if (uri == null || !isGoogleUploadUri(uri)) {
       throw const RepositoryException('Resposta inesperada do servidor.');
