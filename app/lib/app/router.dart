@@ -13,12 +13,12 @@ import '../features/more/more_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/news/news_screen.dart';
 import '../features/news/news_settings_screen.dart';
-import '../features/notes/note_screen.dart';
 import '../features/notes/notes_screen.dart';
 import '../features/spaces/space_screen.dart';
 import '../features/spaces/spaces_screen.dart';
 import '../features/tasks/tasks_screen.dart';
 import '../features/today/today_screen.dart';
+import '../notebook/notebook_route.dart';
 import 'shell.dart';
 
 /// Converte um Stream (ex.: mudanças de sessão) em Listenable para o go_router.
@@ -52,6 +52,14 @@ GoRouter buildRouter({
       },
       routes: [
         GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+        // Caderno: tela cheia, fora da casca (sem barras), para escrever com a caneta.
+        GoRoute(
+          path: '/caderno/:id',
+          builder: (context, state) {
+            final id = state.pathParameters['id']!;
+            return NotebookRoute(key: ValueKey('caderno-$id'), noteId: id);
+          },
+        ),
         ShellRoute(
           builder: (context, state, child) => AppShell(location: state.uri.path, child: child),
           routes: [
@@ -72,7 +80,7 @@ GoRouter buildRouter({
               path: '/nota/:id',
               builder: (context, state) {
                 final id = state.pathParameters['id']!;
-                return NoteScreen(key: ValueKey(id), noteId: id);
+                return NoteOrNotebookRoute(key: ValueKey(id), noteId: id);
               },
             ),
             GoRoute(

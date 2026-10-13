@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +11,10 @@ import '../../domain/note.dart';
 import '../../domain/space.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
+import '../../notebook/create_notebook.dart';
+import '../../notebook/data/notebook_image_purger.dart';
+import '../../notebook/notebook_thumbnail.dart';
+import '../../notebook/state/notebook_providers.dart';
 import '../../ui/org_theme.dart';
 import '../import/import_flow.dart';
 import '../samsung_notes/samsung_platform.dart';
@@ -59,10 +65,11 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
   }
 
   void _open(Note note) {
-    final path = '/nota/${note.id}';
+    final path = note.isNotebook ? '/caderno/${note.id}' : '/nota/${note.id}';
     // Já dentro de uma nota (barra lateral): troca a nota em vez de empilhar,
     // para o histórico não crescer a cada toque; voltar leva à lista/página anterior.
-    if (widget.activeNoteId != null) {
+    // Caderno abre sempre empilhado (tela cheia, fora da casca).
+    if (widget.activeNoteId != null && !note.isNotebook) {
       context.pushReplacement(path);
     } else {
       context.push(path);
@@ -81,6 +88,88 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
     if (mounted) _open(note);
   }
 
+  Future<void> _createNotebook() async {
+    try {
+      final note = await createNotebook(ref);
+      if (mounted) _open(note);
+    } on RepositoryException {
+      if (mounted) showError(context, 'Não foi possível criar o caderno.');
+    }
+  }
+
+  Future<void> _notebookMenu(Note note) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(note.title, overflow: TextOverflow.ellipsis),
+        children: [
+          SimpleDialogOption(
+            key: const Key('notebook-menu-rename'),
+            onPressed: () => Navigator.of(ctx).pop('rename'),
+            child: const Text('Renomear'),
+          ),
+          SimpleDialogOption(
+            key: const Key('notebook-menu-delete'),
+            onPressed: () => Navigator.of(ctx).pop('delete'),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'rename') await _renameNotebook(note);
+    if (action == 'delete') await _deleteNotebook(note);
+  }
+
+  Future<void> _renameNotebook(Note note) async {
+    final title = await showDialog<String>(
+      context: context,
+      builder: (_) => _RenameNotebookDialog(initial: note.title),
+    );
+    if (title == null || title.isEmpty || title == note.title || !mounted) return;
+    try {
+      await ref.read(repositoryProvider).upsertNote(note.copyWith(title: title));
+    } on RepositoryException catch (e) {
+      if (mounted) {
+        showError(context, e.duplicate ? 'Já existe uma nota com esse título.' : 'Não foi possível renomear o caderno.');
+      }
+    }
+  }
+
+  Future<void> _deleteNotebook(Note note) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Excluir “${note.title}”?'),
+        content: const Text('As páginas e imagens do caderno serão apagadas. Essa ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            key: const Key('notebook-delete-cancel'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            key: const Key('notebook-delete-confirm'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final images = ref.read(notebookImageStoreFactoryProvider)(note.id);
+    try {
+      await ref.read(repositoryProvider).deleteNote(note.id);
+    } on RepositoryException {
+      if (mounted) showError(context, 'Não foi possível excluir o caderno.');
+      return;
+    }
+    // O banco apagou as páginas em cascata; as imagens só saem pela API do Storage.
+    if (images is NotebookImagePurger) {
+      unawaited((images as NotebookImagePurger).purgeAll().catchError((Object _) {}));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final spaces = ref.watch(spacesProvider).value ?? const <Space>[];
@@ -89,9 +178,13 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
     final searching = q.isNotEmpty;
     // Busca no título e no corpo; quem casa pelo título vem primeiro.
     bool titleHit(Note n) => _fold(n.title).contains(q);
+    // Cadernos: também o texto reconhecido da escrita (só buscado quando há busca).
+    final recognized = searching ? (ref.watch(notebookRecognizedTextProvider).value ?? const <String, String>{}) : const <String, String>{};
+    bool bodyHit(Note n) =>
+        _fold(n.body).contains(q) || (n.isNotebook && _fold(recognized[n.id] ?? '').contains(q));
     final visible = [
       for (final n in notes)
-        if (!searching || titleHit(n) || _fold(n.body).contains(q)) n,
+        if (!searching || titleHit(n) || bodyHit(n)) n,
     ]..sort((a, b) {
         if (searching) {
           final byHit = (titleHit(a) ? 0 : 1).compareTo(titleHit(b) ? 0 : 1);
@@ -141,6 +234,13 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                 icon: const Icon(Icons.add, size: 20),
                 onPressed: () => _create(notes),
               ),
+              IconButton(
+                key: const Key('new-notebook'),
+                tooltip: 'Novo caderno',
+                visualDensity: mobile ? null : VisualDensity.compact,
+                icon: const Icon(Icons.draw_outlined, size: 20),
+                onPressed: _createNotebook,
+              ),
               PopupMenuButton<String>(
                 key: const Key('notes-menu'),
                 tooltip: 'Mais opções',
@@ -176,6 +276,7 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                   expanded: searching || inSpace(space.id).any((n) => n.id == widget.activeNoteId),
                   activeNoteId: widget.activeNoteId,
                   onOpen: _open,
+                  onMenu: _notebookMenu,
                 ),
               ),
           if (loose.isNotEmpty) ...[
@@ -189,12 +290,46 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                       ),
                 ),
               ),
-            for (final n in loose) _NoteRow(note: n, active: n.id == widget.activeNoteId, onOpen: _open),
+            for (final n in loose)
+              _NoteRow(note: n, active: n.id == widget.activeNoteId, onOpen: _open, onMenu: _notebookMenu),
           ],
         ],
       ],
     );
   }
+}
+
+class _RenameNotebookDialog extends StatefulWidget {
+  const _RenameNotebookDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_RenameNotebookDialog> createState() => _RenameNotebookDialogState();
+}
+
+class _RenameNotebookDialogState extends State<_RenameNotebookDialog> {
+  late final _controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Renomear caderno'),
+        content: TextField(key: const Key('notebook-rename-field'), controller: _controller, autofocus: true),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+          FilledButton(
+            key: const Key('notebook-rename-ok'),
+            onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
+            child: const Text('Salvar'),
+          ),
+        ],
+      );
 }
 
 class _SpaceTile extends StatelessWidget {
@@ -204,6 +339,7 @@ class _SpaceTile extends StatelessWidget {
     required this.expanded,
     required this.activeNoteId,
     required this.onOpen,
+    required this.onMenu,
   });
 
   final Space space;
@@ -211,6 +347,7 @@ class _SpaceTile extends StatelessWidget {
   final bool expanded;
   final String? activeNoteId;
   final void Function(Note) onOpen;
+  final void Function(Note) onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +390,7 @@ class _SpaceTile extends StatelessWidget {
                   style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted)),
             ),
           for (final n in notes)
-            _NoteRow(note: n, active: n.id == activeNoteId, onOpen: onOpen, indent: 28),
+            _NoteRow(note: n, active: n.id == activeNoteId, onOpen: onOpen, onMenu: onMenu, indent: 28),
         ],
       ),
     );
@@ -261,11 +398,18 @@ class _SpaceTile extends StatelessWidget {
 }
 
 class _NoteRow extends StatelessWidget {
-  const _NoteRow({required this.note, required this.active, required this.onOpen, this.indent = 0});
+  const _NoteRow({
+    required this.note,
+    required this.active,
+    required this.onOpen,
+    required this.onMenu,
+    this.indent = 0,
+  });
 
   final Note note;
   final bool active;
   final void Function(Note) onOpen;
+  final void Function(Note) onMenu;
   final double indent;
 
   @override
@@ -281,14 +425,17 @@ class _NoteRow extends StatelessWidget {
         child: InkWell(
           key: ValueKey('tree-note-${note.id}'),
           onTap: () => onOpen(note),
+          onLongPress: note.isNotebook ? () => onMenu(note) : null,
           child: Container(
             constraints: BoxConstraints(minHeight: MediaQuery.sizeOf(context).width < 720 ? 48 : 0),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
             alignment: Alignment.centerLeft,
             child: Row(
               children: [
-                Icon(Icons.description_outlined,
-                    size: 16, color: active ? org.accentText : org.inkMuted),
+                Icon(note.isNotebook ? Icons.menu_book_outlined : Icons.description_outlined,
+                    key: ValueKey('tree-note-icon-${note.id}'),
+                    size: 16,
+                    color: active ? org.accentText : org.inkMuted),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -299,6 +446,10 @@ class _NoteRow extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (note.isNotebook) ...[
+                  const SizedBox(width: 8),
+                  NotebookThumbnail(noteId: note.id, stamp: note.updatedAt?.millisecondsSinceEpoch ?? 0, width: 20),
+                ],
               ],
             ),
           ),

@@ -34,6 +34,10 @@ import 'data/supabase_settings_repository.dart';
 import 'features/import/share_listener.dart';
 import 'location/geolocator_location_service.dart';
 import 'location/location_report_sync.dart';
+import 'notebook/data/supabase_notebook_image_store.dart';
+import 'notebook/data/supabase_notebook_repository.dart';
+import 'notebook/state/notebook_pending_store.dart';
+import 'notebook/state/notebook_providers.dart';
 import 'location/location_service.dart';
 import 'widgets/widget_background.dart';
 import 'widgets/widget_links.dart';
@@ -86,6 +90,10 @@ Future<void> main() async {
       if (isAndroid) shareIntentServiceProvider.overrideWithValue(MethodChannelShareIntentService()),
       githubRepositoryProvider.overrideWithValue(SupabaseGithubRepository(client)),
       importedFilesRepositoryProvider.overrideWithValue(SupabaseImportedFilesRepository(client)),
+      notebookRepositoryProvider.overrideWithValue(SupabaseNotebookRepository(client)),
+      notebookPendingStoreProvider.overrideWithValue(const SharedPreferencesNotebookPendingStore()),
+      notebookImageStoreFactoryProvider
+          .overrideWithValue((noteId) => SupabaseNotebookImageStore(client, noteId: noteId)),
       samsungSyncPrefsProvider.overrideWithValue(SharedPreferencesSamsungSyncPrefs()),
       samsungSyncLockProvider.overrideWithValue(FileSyncLock(samsungSyncLockFile())),
       if (isAndroid) samsungNotesPlatformProvider.overrideWithValue(MethodChannelSamsungNotesPlatform()),

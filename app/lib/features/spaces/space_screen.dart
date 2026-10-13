@@ -9,6 +9,7 @@ import '../../domain/note.dart';
 import '../../domain/space.dart';
 import '../../domain/task_item.dart';
 import '../../domain/wikilinks.dart';
+import '../../notebook/notebook_thumbnail.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
@@ -143,12 +144,16 @@ class SpaceScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: OrgCard(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        onTap: () => context.push('/nota/${n.id}'),
+                        onTap: () => context.push(n.isNotebook ? '/caderno/${n.id}' : '/nota/${n.id}'),
                         child: Row(
                           children: [
-                            Icon(Icons.description_outlined, color: context.org.inkMuted),
+                            Icon(n.isNotebook ? Icons.menu_book_outlined : Icons.description_outlined,
+                                key: ValueKey('space-note-icon-${n.id}'), color: context.org.inkMuted),
                             const SizedBox(width: 12),
                             Expanded(child: Text(n.title)),
+                            if (n.isNotebook)
+                              NotebookThumbnail(
+                                  noteId: n.id, stamp: n.updatedAt?.millisecondsSinceEpoch ?? 0, width: 28),
                           ],
                         ),
                       ),

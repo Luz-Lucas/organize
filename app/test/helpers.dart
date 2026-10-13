@@ -30,6 +30,12 @@ import 'package:organizacional/features/samsung_notes/folder_sync.dart';
 import 'package:organizacional/features/samsung_notes/samsung_platform.dart';
 import 'package:organizacional/features/samsung_notes/samsung_sync_controller.dart';
 import 'package:organizacional/features/samsung_notes/samsung_sync_settings.dart';
+import 'package:organizacional/notebook/data/memory_notebook_repository.dart';
+import 'package:organizacional/notebook/data/notebook_repository.dart';
+import 'package:organizacional/notebook/state/notebook_providers.dart';
+import 'package:organizacional/notebook/ui/notebook_session.dart' show NotebookImageStore;
+
+import 'notebook/data/fake_image_store.dart';
 
 final defaultNow = DateTime(2026, 9, 28, 10); // segunda-feira
 
@@ -55,6 +61,8 @@ Future<void> pumpApp(
   FolderFileSystem? samsungFs,
   SamsungBackgroundScheduler? samsungScheduler,
   DirectoryPickerService? directoryPicker,
+  NotebookRepository? notebookRepo,
+  NotebookImageStore Function(String noteId)? notebookImages,
   void Function()? exitApp,
   List<Override> overrides = const [],
 }) async {
@@ -81,6 +89,8 @@ Future<void> pumpApp(
       if (samsungScheduler != null) samsungBackgroundSchedulerProvider.overrideWithValue(samsungScheduler),
       if (directoryPicker != null) directoryPickerProvider.overrideWithValue(directoryPicker),
       if (locationService != null) locationServiceProvider.overrideWithValue(locationService),
+      notebookRepositoryProvider.overrideWithValue(notebookRepo ?? MemoryNotebookRepository()),
+      notebookImageStoreFactoryProvider.overrideWithValue(notebookImages ?? (_) => FakeNotebookImageStore()),
       googleFontsEnabledProvider.overrideWithValue(false),
       if (exitApp != null) exitAppProvider.overrideWithValue(exitApp),
       ...overrides,

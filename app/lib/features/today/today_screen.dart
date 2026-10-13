@@ -19,6 +19,7 @@ import '../../domain/system_notices.dart';
 import '../../domain/task_item.dart';
 import '../../domain/wake_override.dart';
 import '../../domain/agenda.dart';
+import '../../notebook/create_notebook.dart';
 import '../../ui/common.dart';
 import '../../ui/motif_painter.dart';
 import '../../ui/org_theme.dart';
@@ -129,6 +130,15 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       return;
     }
     if (mounted) context.push('/nota/${note.id}');
+  }
+
+  Future<void> _newNotebook() async {
+    try {
+      final note = await createNotebook(ref);
+      if (mounted) context.push('/caderno/${note.id}');
+    } on RepositoryException {
+      if (mounted) showError(context, 'Não foi possível criar o caderno.');
+    }
   }
 
   String _uniqueTitle(String base, List<Note> all) {
@@ -276,6 +286,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           label: 'Nota',
           semantics: 'Nova nota',
           onTap: _newNote,
+        ),
+        const SizedBox(width: 8),
+        _QuickAction(
+          key: const Key('quick-new-notebook'),
+          icon: Icons.draw_outlined,
+          label: 'Caderno',
+          semantics: 'Novo caderno',
+          onTap: _newNotebook,
         ),
         const SizedBox(width: 8),
         _QuickAction(
