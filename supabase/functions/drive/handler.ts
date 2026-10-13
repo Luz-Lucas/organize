@@ -19,10 +19,14 @@ import {
   driveRequest,
   type DriveStore,
   ensureFolder,
+  contentDisposition,
   findBySha256,
+  getDownloadMeta,
   getFolder,
   listChildren,
   listPaged,
+  MAX_DOWNLOAD_BYTES,
+  openMedia,
   PERMISSIONS_LIMIT,
   searchFiles,
   validId,
@@ -54,6 +58,7 @@ const MSG_UNAVAILABLE = "O Google Drive está indisponível agora. Tente de novo
 /** Erro de entrada: vira 400 com a mensagem (sempre texto fixo nosso). */
 class BadRequest extends Error {}
 class NotConnected extends Error {}
+class TooLarge extends Error {}
 
 const ROLES = ["reader", "writer", "commenter"] as const;
 type Role = typeof ROLES[number];
@@ -353,11 +358,34 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
         return json({ file });
       }
 
+      case "download": {
+        const fid = id(body.id, "arquivo");
+        const out = await withToken(async (t) => {
+          const meta = await getDownloadMeta(t, fid, fetchFn);
+          if (meta.mimeType.toLowerCase().startsWith(GOOGLE_NATIVE_MIME_PREFIX) || meta.size === null) {
+            throw new BadRequest("Este tipo de arquivo não pode ser baixado. Abra no Google Drive.");
+          }
+          if (meta.size > MAX_DOWNLOAD_BYTES) throw new TooLarge();
+          return { meta, res: await openMedia(t, fid, fetchFn) };
+        });
+        return new Response(out.res.body, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": contentDisposition(out.meta.name),
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            ...CORS,
+          },
+        });
+      }
+
       default:
         throw new BadRequest("Ação desconhecida.");
     }
   } catch (e) {
     if (e instanceof BadRequest) return failure(400, e.message);
+    if (e instanceof TooLarge) return failure(413, "O arquivo é grande demais para baixar pelo app (máximo de 50 MB). Abra no Google Drive.", "too_large");
     if (e instanceof NotConnected) return failure(409, MSG_NOT_CONNECTED, "not_connected");
     if (e instanceof GoogleError) {
       // Só o tipo do erro vai para o log: nada de nomes de arquivos, e-mails ou tokens.

@@ -25,4 +25,35 @@ void main() {
   test('só existe um bloco <queries>', () {
     expect(RegExp(r'<queries>').allMatches(manifest), hasLength(1));
   });
+
+  group('FileProvider para "Editar no Samsung Notes"', () {
+    final provider = RegExp(r'<provider\b[\s\S]*?</provider>').allMatches(manifest).map((m) => m.group(0)!).singleWhere(
+          (p) => p.contains('android:name=".SamsungFileProvider"'),
+          orElse: () => '',
+        );
+
+    test('o <provider> existe, não é exportado e concede permissão de URI por intent', () {
+      expect(provider, isNotEmpty);
+      expect(provider, contains('android:authorities="${r'${applicationId}'}.samsung_files"'));
+      expect(provider, contains('android:exported="false"'));
+      expect(provider, contains('android:grantUriPermissions="true"'));
+      expect(provider, contains('android:resource="@xml/file_paths"'));
+    });
+
+    test('o provider fica dentro de <application>', () {
+      final app = RegExp(r'<application\b[\s\S]*?</application>').firstMatch(manifest)!.group(0)!;
+      expect(app, contains('android:name=".SamsungFileProvider"'));
+    });
+
+    test('file_paths.xml expõe só cache/samsung_open/', () {
+      final xml = File('android/app/src/main/res/xml/file_paths.xml').readAsStringSync();
+      final paths = RegExp(r'<(files-path|cache-path|external-path|external-files-path|external-cache-path|external-media-path|root-path)\b[^>]*/>')
+          .allMatches(xml)
+          .map((m) => m.group(0)!)
+          .toList();
+      expect(paths, hasLength(1));
+      expect(paths.single, contains('<cache-path'));
+      expect(paths.single, contains('path="samsung_open/"'));
+    });
+  });
 }

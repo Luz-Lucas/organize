@@ -145,7 +145,7 @@ void main() {
   testWidgets('"Sincronizar agora" roda mesmo com a chave desligada e mostra o resumo', (tester) async {
     final fs = FakeFolderFileSystem()
       ..put('Aula.pdf', [1, 2, 3, 4])
-      ..put('Nota.sdocx', [9]);
+      ..put('Planilha.xlsx', [9]);
     final drive = MemoryDriveRepository(state: _driveOk);
     await _open(tester,
         prefs: MemorySamsungSyncPrefs(const SamsungSyncSettings(folder: _notesFolder)),
@@ -256,10 +256,19 @@ void main() {
     expect(drive.uploads, hasLength(1));
   });
 
-  testWidgets('a ajuda explica como exportar pelo Samsung Notes', (tester) async {
+  testWidgets('a ajuda explica como exportar pelo Samsung Notes: .sdocx para editar, PDF para só visualizar', (tester) async {
     await _open(tester);
     expect(find.textContaining('abra a nota'), findsWidgets);
     expect(find.textContaining('Salvar como arquivo'), findsOneWidget);
-    expect(find.textContaining('PDF'), findsWidgets);
+    final help = tester.widget<Text>(find.byKey(const Key('samsung-help'))).textSpan!.toPlainText();
+    expect(help, contains('Para editar em outro aparelho, salve como Arquivo do Samsung Notes (.sdocx); para só visualizar, PDF.'));
+    expect(find.textContaining('.sdocx'), findsWidgets);
+    // O formato destacado está em negrito.
+    final bold = <String>[];
+    tester.widget<Text>(find.byKey(const Key('samsung-help'))).textSpan!.visitChildren((s) {
+      if (s is TextSpan && s.style?.fontWeight == FontWeight.bold && s.text != null) bold.add(s.text!);
+      return true;
+    });
+    expect(bold, ['Arquivo do Samsung Notes (.sdocx)']);
   });
 }

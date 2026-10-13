@@ -722,3 +722,110 @@ Deno.test("upload_session só aceita Location em www.googleapis.com", async () =
     await r.body?.cancel();
   }
 });
+
+Deno.test("upload_session aceita application/octet-stream (usado pelo .sdocx do Samsung Notes)", async () => {
+  const s = await setup([[`${UPLOAD}/files`, () => new Response(null, { status: 200, headers: { Location: "https://www.googleapis.com/upload/drive/v3/files?upload_id=X" } })]]);
+  const r = await s.run("upload_session", { parentId: "P1", name: "Aula.sdocx", mimeType: "application/octet-stream", size: 10 });
+  assertEquals(r.status, 200);
+  await r.body?.cancel();
+  assertEquals(JSON.parse(api(s.f.calls, UPLOAD)[0].body).mimeType, "application/octet-stream");
+});
+
+// ---------------------------------------------------------------- download
+
+const META = (over: Record<string, unknown> = {}) => ({ id: "f1", name: "Aula.sdocx", mimeType: "application/octet-stream", size: "5", ...over });
+const bytesRes = (data: number[]) => new Response(new Uint8Array(data), { status: 200, headers: { "Content-Type": "application/octet-stream" } });
+const media = (calls: Call[]) => calls.filter((c) => c.url.includes("alt=media"));
+
+Deno.test("download transmite os bytes do arquivo com octet-stream e nome seguro", async () => {
+  const s = await setup([
+    [`${DRIVE}/files/f1?alt=media`, () => bytesRes([1, 2, 3, 4, 5])],
+    [`${DRIVE}/files/f1?`, () => jsonRes(META({ name: 'Au"la\r\nde Cálculo.sdocx' }))],
+  ]);
+  const r = await s.run("download", { id: "f1" });
+  assertEquals(r.status, 200);
+  assertEquals(r.headers.get("content-type"), "application/octet-stream");
+  const cd = r.headers.get("content-disposition")!;
+  assertStringIncludes(cd, "attachment");
+  assertStringIncludes(cd, "filename*=UTF-8''");
+  assertStringIncludes(cd, "C%C3%A1lculo.sdocx");
+  assertEquals(cd.includes("\r") || cd.includes("\n"), false);
+  assertEquals([...new Uint8Array(await r.arrayBuffer())], [1, 2, 3, 4, 5]);
+  assertEquals(media(s.f.calls)[0].headers.get("authorization"), "Bearer ACC1-R-u1");
+  assertEquals(media(s.f.calls)[0].method, "GET");
+});
+
+Deno.test("download recusa id inválido sem chamar o Drive", async () => {
+  const s = await setup([]);
+  for (const bad of ["a/b", "x' or '1'='1", "", 5, undefined, "../x"]) {
+    const r = await s.run("download", { id: bad });
+    assertEquals(r.status, 400, String(bad));
+    await r.body?.cancel();
+  }
+  assertEquals(s.f.calls.length, 0);
+});
+
+Deno.test("download recusa arquivos nativos do Google (Docs, Planilhas, pasta)", async () => {
+  for (const mimeType of ["application/vnd.google-apps.document", FOLDER, "Application/Vnd.Google-Apps.spreadsheet"]) {
+    const s = await setup([[`${DRIVE}/files/f1?`, () => jsonRes(META({ mimeType, size: undefined }))]]);
+    const r = await s.run("download", { id: "f1" });
+    assertEquals(r.status, 400, mimeType);
+    assertEquals(typeof (await r.json()).error, "string");
+    assertEquals(media(s.f.calls).length, 0);
+  }
+});
+
+Deno.test("download recusa arquivo acima de 50 MB com 413, sem baixar", async () => {
+  const s = await setup([[`${DRIVE}/files/f1?`, () => jsonRes(META({ size: String(50 * 1024 * 1024 + 1) }))]]);
+  const r = await s.run("download", { id: "f1" });
+  assertEquals(r.status, 413);
+  assertEquals(typeof (await r.json()).error, "string");
+  assertEquals(media(s.f.calls).length, 0);
+
+  const ok = await setup([
+    [`${DRIVE}/files/f1?alt=media`, () => bytesRes([9])],
+    [`${DRIVE}/files/f1?`, () => jsonRes(META({ size: String(50 * 1024 * 1024) }))],
+  ]);
+  const r2 = await ok.run("download", { id: "f1" });
+  assertEquals(r2.status, 200);
+  await r2.body?.cancel();
+});
+
+Deno.test("download: 404 do Drive vira not_found; 403 não derruba a conexão", async () => {
+  const s = await setup([[`${DRIVE}/files/f1?`, () => jsonRes({ error: { message: "SEGREDO" } }, 404)]]);
+  const r = await s.run("download", { id: "f1" });
+  assertEquals(r.status, 404);
+  assertEquals((await r.json()).code, "not_found");
+
+  const s2 = await setup([[`${DRIVE}/files/f1?alt=media`, () => jsonRes({ error: { errors: [{ reason: "downloadRestricted" }] } }, 403)], [`${DRIVE}/files/f1?`, () => jsonRes(META())]]);
+  const r2 = await s2.run("download", { id: "f1" });
+  assertEquals(r2.status, 403);
+  assertEquals(s2.store.states.get("u1")?.status, "ok");
+});
+
+Deno.test("download: 401 renova o token e repete; segunda falha marca auth_required", async () => {
+  const s = await setup([
+    [`${DRIVE}/files/f1?alt=media`, (c) => c.headers.get("authorization") === "Bearer ACC1-R-u1" ? jsonRes({ error: {} }, 401) : bytesRes([7])],
+    [`${DRIVE}/files/f1?`, () => jsonRes(META({ size: "1" }))],
+  ]);
+  const ok = await s.run("download", { id: "f1" });
+  assertEquals(ok.status, 200);
+  assertEquals([...new Uint8Array(await ok.arrayBuffer())], [7]);
+  assertEquals(s.refreshes(), 2);
+
+  const s2 = await setup([[`${DRIVE}/files/f1?`, () => jsonRes({ error: {} }, 401)]]);
+  const r = await s2.run("download", { id: "f1" });
+  assertEquals(r.status, 409);
+  assertEquals((await r.json()).code, "auth_required");
+  assertEquals(s2.store.states.get("u1")?.status, "auth_required");
+});
+
+Deno.test("download: invalid_grant no refresh => auth_required", async () => {
+  const store = await connectedStore();
+  const f = fakeFetch([[TOKEN_URL, () => jsonRes({ error: "invalid_grant" }, 400)]]);
+  const req = new Request("https://x/", { method: "POST", headers: { Authorization: "Bearer jwt-u1" }, body: JSON.stringify({ action: "download", id: "f1" }) });
+  const r = await handle(req, { cfg: CFG, store, fetchFn: f.fn, getUserId, tokenCache: new Map() });
+  assertEquals(r.status, 409);
+  assertEquals((await r.json()).code, "auth_required");
+  assertEquals(store.states.get("u1")?.status, "auth_required");
+});

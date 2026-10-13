@@ -7,6 +7,8 @@ import 'package:organizacional/domain/drive.dart';
 import 'package:organizacional/data/memory_imported_files_repository.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/imported_file.dart';
+import 'package:organizacional/domain/local_file.dart';
+import 'package:organizacional/features/import/importer.dart' show driveLinkInBody;
 import 'package:organizacional/features/samsung_notes/folder_sync.dart';
 import 'package:organizacional/features/samsung_notes/samsung_folder.dart';
 
@@ -122,10 +124,35 @@ void main() {
     expect(e.imported.all.single.driveFileId, isNotNull);
   });
 
-  test('.sdocx e outros formatos não suportados são ignorados (sem ler o arquivo)', () async {
+  test('.sdocx sobe como application/octet-stream, com sha256, e ganha nota-link (mesmo fluxo dos PDFs)', () async {
     final e = _Env();
-    e.fs.put('Nota.sdocx', [1, 2, 3]);
+    final bytes = utf8.encode('conteudo de uma nota editavel');
+    e.fs.put('Aula 2.sdocx', bytes);
+    final r = await e.run();
+
+    expect(r.uploaded, 1);
+    expect(r.ignored, 0);
+    expect(r.errors, isEmpty);
+    final up = e.drive.uploads.single;
+    expect(up.name, 'Aula 2.sdocx');
+    expect(up.mimeType, 'application/octet-stream');
+    expect(up.appProperties, {'sha256': _sha(bytes)});
+    final note = (await e.repo.watchNotes().first).single;
+    expect(note.title, 'Aula 2.sdocx');
+    expect(driveLinkInBody(note.body), isNotNull);
+    expect(e.imported.all.single.name, 'Aula 2.sdocx');
+    expect(e.imported.all.single.noteId, note.id);
+
+    // Segunda rodada: mesmo conteúdo, nada novo.
+    final r2 = await e.run();
+    expect(r2.uploaded, 0);
+    expect(r2.skipped, 1);
+  });
+
+  test('formatos não suportados (xlsx, zip...) continuam ignorados, sem ler o arquivo', () async {
+    final e = _Env();
     e.fs.put('Planilha.xlsx', [1, 2, 3]);
+    e.fs.put('Pacote.zip', [1, 2, 3]);
     e.fs.put('Ok.pdf', [4, 5, 6]);
     final r = await e.run();
     expect(r.ignored, 2);
@@ -133,13 +160,20 @@ void main() {
     expect(e.fs.opened, ['Ok.pdf']);
   });
 
-  test('extensões aceitas: pdf docx doc txt md png jpg jpeg (qualquer caixa)', () {
-    for (final n in ['a.pdf', 'a.DOCX', 'a.doc', 'a.txt', 'a.md', 'a.png', 'a.jpg', 'a.JPEG']) {
+  test('extensões aceitas: pdf docx doc txt md png jpg jpeg sdocx (qualquer caixa)', () {
+    for (final n in ['a.pdf', 'a.DOCX', 'a.doc', 'a.txt', 'a.md', 'a.png', 'a.jpg', 'a.JPEG', 'a.sdocx', 'a.SDOCX']) {
       expect(isSyncableName(n), isTrue, reason: n);
     }
-    for (final n in ['a.sdocx', 'a.zip', 'semextensao', '.pdf.tmp', 'a.gif']) {
+    for (final n in ['a.zip', 'semextensao', '.pdf.tmp', '.a.sdocx', 'a.gif', 'a.sdocx.tmp']) {
       expect(isSyncableName(n), isFalse, reason: n);
     }
+  });
+
+  test('mimeForFileName: .sdocx é application/octet-stream (o servidor recusa curingas e tipos nativos do Google)', () {
+    final mime = mimeForFileName('Nota.SDOCX');
+    expect(mime, 'application/octet-stream');
+    expect(mime.contains('*'), isFalse);
+    expect(mime.startsWith('application/vnd.google-apps.'), isFalse);
   });
 
   test('erro no upload não grava registro; a próxima rodada tenta de novo', () async {

@@ -28,6 +28,10 @@ class FakePlatform implements SamsungNotesPlatform {
   Future<SamsungFolder?> pickFolder() async => null;
   @override
   Future<String?> deviceName() async => 'Teste';
+  @override
+  Future<String?> openDir() async => null;
+  @override
+  Future<bool> openFile(String path) async => false;
 
   @override
   Future<List<SyncEntry>> listTree(String uri) async {
@@ -132,6 +136,24 @@ void main() {
       expect(await p.pickFolder(), isNull);
       expect(await p.deviceName(), isNull);
       await expectLater(p.listTree('content://x'), throwsA(isA<FolderAccessException>()));
+    });
+
+    test('openDir e openFile: contrato do canal (openFile manda {path}) e valores neutros em falha', () async {
+      mock((c) async => switch (c.method) {
+            'openDir' => '/data/cache/samsung_open',
+            'openFile' => true,
+            _ => throw MissingPluginException(),
+          });
+      final p = MethodChannelSamsungNotesPlatform();
+      expect(await p.openDir(), '/data/cache/samsung_open');
+      expect(await p.openFile('/data/cache/samsung_open/Aula.sdocx'), isTrue);
+      expect(calls.firstWhere((c) => c.method == 'openFile').arguments, {'path': '/data/cache/samsung_open/Aula.sdocx'});
+
+      mock((c) async => throw PlatformException(code: 'x'));
+      expect(await p.openDir(), isNull);
+      expect(await p.openFile('/x'), isFalse);
+      mock((c) async => null);
+      expect(await p.openFile('/x'), isFalse);
     });
 
     test('pickFolder cancelado (null) devolve null', () async {

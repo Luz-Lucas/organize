@@ -35,6 +35,13 @@ abstract interface class SamsungNotesPlatform {
 
   /// Nome do aparelho (fabricante e modelo), gravado em `imported_files.device`.
   Future<String?> deviceName();
+
+  /// Pasta do cache do app onde `openFile` aceita arquivos (`cache/samsung_open/`); null se não deu para criá-la.
+  Future<String?> openDir();
+
+  /// Abre o arquivo ([path] dentro de [openDir]) no Samsung Notes, que importa a nota como editável. Se o app
+  /// não resolver, tenta o seletor do sistema. False se nada abriu o arquivo.
+  Future<bool> openFile(String path);
 }
 
 /// Sem Android (Linux, testes): nada instalado, nada a buscar.
@@ -59,6 +66,10 @@ class NoopSamsungNotesPlatform implements SamsungNotesPlatform {
   Future<String?> copyToCache(String uri) async => null;
   @override
   Future<String?> deviceName() async => null;
+  @override
+  Future<String?> openDir() async => null;
+  @override
+  Future<bool> openFile(String path) async => false;
 }
 
 class MethodChannelSamsungNotesPlatform implements SamsungNotesPlatform {
@@ -127,6 +138,12 @@ class MethodChannelSamsungNotesPlatform implements SamsungNotesPlatform {
 
   @override
   Future<String?> deviceName() => _call<String>('deviceName');
+
+  @override
+  Future<String?> openDir() => _call<String>('openDir');
+
+  @override
+  Future<bool> openFile(String path) async => (await _call<bool>('openFile', {'path': path})) ?? false;
 }
 
 final samsungNotesPlatformProvider = Provider<SamsungNotesPlatform>((ref) => const NoopSamsungNotesPlatform());

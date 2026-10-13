@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -27,6 +28,8 @@ import java.util.UUID
  * - `pickFolder`: seletor de pasta do sistema (SAF), com a permissão persistida.
  * - `listTree` / `copyToCache`: leitura de uma pasta escolhida pelo seletor.
  * - `deviceName`: fabricante e modelo.
+ * - `openDir` / `openFile`: "Editar no Samsung Notes". O Dart baixa o `.sdocx` do Drive para `openDir`
+ *   (`cache/samsung_open/`) e `openFile(path)` o entrega por `ACTION_VIEW` + FileProvider (ver [SamsungOpenGuard]).
  *
  * Só existe com o app aberto (registrado na MainActivity); a tarefa em segundo plano lê pelo caminho.
  */
@@ -67,6 +70,11 @@ class SamsungNotesChannel(private val activity: Activity) : MethodChannel.Method
                 if (uri == null) result.error("bad_args", "uri ausente", null) else background(result) { copyToCache(Uri.parse(uri)) }
             }
             "deviceName" -> result.success("${Build.MANUFACTURER} ${Build.MODEL}".trim())
+            "openDir" -> result.success(openDir()?.absolutePath)
+            "openFile" -> {
+                val path = call.argument<String>("path")
+                if (path == null) result.error("bad_args", "path ausente", null) else result.success(openFile(File(path)))
+            }
             else -> result.notImplemented()
         }
     }
@@ -213,9 +221,48 @@ class SamsungNotesChannel(private val activity: Activity) : MethodChannel.Method
         }
     }
 
+    /** Pasta onde o Dart grava o arquivo baixado; null se não deu para criá-la. */
+    private fun openDir(): File? {
+        val dir = File(activity.cacheDir, SamsungOpenGuard.DIR)
+        return if (dir.isDirectory || dir.mkdirs()) dir else null
+    }
+
+    /**
+     * Abre o `.sdocx` no Samsung Notes (que o importa como nota editável). Tenta primeiro com o pacote da Samsung e,
+     * se ninguém resolver, sem pacote (seletor do sistema). False se nada abriu ou o arquivo não é aceitável.
+     */
+    private fun openFile(file: File): Boolean {
+        val root = openDir() ?: return false
+        if (!SamsungOpenGuard.isOpenable(root, file)) return false
+        val uri = try {
+            FileProvider.getUriForFile(activity, SamsungOpenGuard.authority(activity.packageName), file)
+        } catch (e: IllegalArgumentException) {
+            return false
+        }
+        for (pkg in SamsungOpenGuard.packageAttempts()) {
+            val intent = Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, SamsungOpenGuard.MIME)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (pkg != null) {
+                if (activity.packageManager.getLaunchIntentForPackage(pkg) == null) continue
+                intent.setPackage(pkg)
+            }
+            try {
+                activity.startActivity(intent)
+                return true
+            } catch (e: ActivityNotFoundException) {
+                // tenta a próxima
+            } catch (e: SecurityException) {
+                // tenta a próxima
+            }
+        }
+        return false
+    }
+
     private fun cleanOld() {
-        val root = File(activity.cacheDir, CACHE_DIR)
         val limit = System.currentTimeMillis() - MAX_AGE_MS
-        root.listFiles()?.forEach { if (it.lastModified() < limit) it.deleteRecursively() }
+        for (name in listOf(CACHE_DIR, SamsungOpenGuard.DIR)) {
+            File(activity.cacheDir, name).listFiles()?.forEach { if (it.lastModified() < limit) it.deleteRecursively() }
+        }
     }
 }

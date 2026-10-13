@@ -172,6 +172,17 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
+        <!-- "Editar no Samsung Notes": entrega o .sdocx baixado (só cache/samsung_open/) ao outro app por URI com
+             permissão temporária. Não exportado; o ShareGuard recusa essa autoridade vinda de fora. -->
+        <provider
+            android:name=".SamsungFileProvider"
+            android:authorities="${applicationId}.samsung_files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
         <receiver
             android:name=".widgets.HojeWidgetProvider"
             android:exported="true"

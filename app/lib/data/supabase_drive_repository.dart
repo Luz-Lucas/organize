@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,6 +10,15 @@ import 'drive_repository.dart';
 import 'repository.dart';
 
 typedef DriveInvoke = Future<Map<String, dynamic>> Function(String function, Map<String, dynamic> body);
+
+/// Baixa os bytes de um arquivo do Drive pela função `drive` (ação `download`).
+typedef DriveDownload = Future<Uint8List> Function(String id);
+
+/// A resposta de `download` tem de ser o arquivo (`application/octet-stream`): texto ou JSON no lugar é erro.
+Uint8List driveBytesFrom(Object? data) {
+  if (data is Uint8List) return data;
+  throw const RepositoryException('Resposta inesperada do servidor.');
+}
 
 /// Converte a resposta de erro da Edge Function (`{error, code}`) em [DriveException].
 DriveException driveErrorFrom(int status, Object? details) {
@@ -29,12 +39,14 @@ class SupabaseDriveRepository implements DriveRepository {
   SupabaseDriveRepository(SupabaseClient db, {http.Client? httpClient})
       : _db = db,
         _http = httpClient ?? http.Client(),
-        _invoke = _supabaseInvoke(db);
+        _invoke = _supabaseInvoke(db),
+        _download = _supabaseDownload(db);
 
   /// Para testes: sem cliente Supabase.
-  SupabaseDriveRepository.test({required this._invoke, http.Client? httpClient})
+  SupabaseDriveRepository.test({required this._invoke, http.Client? httpClient, DriveDownload? download})
       : _db = null,
-        _http = httpClient ?? http.Client();
+        _http = httpClient ?? http.Client(),
+        _download = download ?? ((_) async => throw const RepositoryException('download não configurado'));
 
   static DriveInvoke _supabaseInvoke(SupabaseClient db) => (fn, body) async {
         try {
@@ -46,9 +58,20 @@ class SupabaseDriveRepository implements DriveRepository {
         }
       };
 
+  /// A resposta binária passa por `functions.invoke` (que renova o JWT sozinho): o corpo vem como `Uint8List`.
+  static DriveDownload _supabaseDownload(SupabaseClient db) => (id) async {
+        try {
+          final res = await db.functions.invoke('drive', body: {'action': 'download', 'id': id});
+          return driveBytesFrom(res.data);
+        } on FunctionException catch (e) {
+          throw driveErrorFrom(e.status, e.details);
+        }
+      };
+
   final SupabaseClient? _db;
   final http.Client _http;
   final DriveInvoke _invoke;
+  final DriveDownload _download;
 
   Future<T> _guard<T>(Future<T> Function() op) async {
     try {
@@ -157,6 +180,9 @@ class SupabaseDriveRepository implements DriveRepository {
   Future<void> unshare(String id, String permissionId) async {
     await _call('unshare', {'id': id, 'permissionId': permissionId});
   }
+
+  @override
+  Future<Uint8List> download(String id) => _guard(() => _download(id));
 
   @override
   Future<String> ensurePath(List<String> path) async {

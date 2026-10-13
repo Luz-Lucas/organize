@@ -114,6 +114,13 @@ class FakeSamsungPlatform implements SamsungNotesPlatform {
   int openCalls = 0;
   int pickCalls = 0;
 
+  /// Pasta de trabalho de `openFile` (null = o app não conseguiu criá-la).
+  String? openDirPath = '/cache/samsung_open';
+
+  /// O que `openFile` responde (false = nenhum app resolveu o arquivo).
+  bool openFileResult = true;
+  final openedFiles = <String>[];
+
   @override
   Future<bool> isInstalled() async => installed;
   @override
@@ -144,5 +151,12 @@ class FakeSamsungPlatform implements SamsungNotesPlatform {
   Future<String?> copyToCache(String uri) async => null;
   @override
   Future<String?> deviceName() async => 'SM-X200';
+  @override
+  Future<String?> openDir() async => openDirPath;
+  @override
+  Future<bool> openFile(String path) async {
+    openedFiles.add(path);
+    return openFileResult;
+  }
 }
 

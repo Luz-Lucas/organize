@@ -10,7 +10,8 @@ import '../../ui/org_widgets.dart';
 
 /// Texto de ajuda para quem usa o Samsung Notes (não há API; o caminho é compartilhar).
 const samsungNotesHelp =
-    'No Samsung Notes: abra a nota → Compartilhar → Organizacional (texto) ou Salvar como PDF e compartilhar.';
+    'No Samsung Notes: abra a nota → Compartilhar → Organizacional (texto) ou salve como Arquivo do Samsung Notes (.sdocx) '
+    'para editar em outro aparelho (PDF, para só visualizar) e compartilhe.';
 
 /// Ajustes > "Google Drive": conectar e desconectar (Documentos e arquivos importados).
 class DriveCard extends ConsumerStatefulWidget {

@@ -57,10 +57,29 @@ String plainTextToMarkdown(String text) {
 String driveLinkNoteBody(String fileName, String? link) =>
     link == null ? 'Arquivo enviado ao Google Drive: $fileName' : 'Arquivo no Google Drive: [$fileName]($link)';
 
-final _driveLinkInBody = RegExp(r'Arquivo no Google Drive: \[[^\]\n]*\]\((https://[^)\s]+)\)');
+final _driveLinkInBody = RegExp(r'Arquivo no Google Drive: \[([^\]\n]*)\]\((https://[^)\s]+)\)');
 
 /// Link do Drive de uma nota-link criada por [driveLinkNoteBody]; null se a nota não tem um.
-String? driveLinkInBody(String body) => _driveLinkInBody.firstMatch(body)?.group(1);
+String? driveLinkInBody(String body) => _driveLinkInBody.firstMatch(body)?.group(2);
+
+/// Nome do arquivo (o texto do link) de uma nota-link criada por [driveLinkNoteBody]; null se a nota não tem um.
+String? driveLinkFileName(String body) {
+  final name = _driveLinkInBody.firstMatch(body)?.group(1)?.trim();
+  return name == null || name.isEmpty ? null : name;
+}
+
+final _driveFileIdInPath = RegExp(r'^/file/d/([A-Za-z0-9_-]{1,200})(?:/|$)');
+final _driveFileIdValid = RegExp(r'^[A-Za-z0-9_-]{1,200}$');
+
+/// Id do arquivo num link do Google Drive (`/file/d/ID/view` ou `/open?id=ID`); null para qualquer outra coisa.
+String? driveFileIdFromLink(String link) {
+  final uri = Uri.tryParse(link);
+  if (uri == null || uri.scheme != 'https' || uri.host != 'drive.google.com') return null;
+  final fromPath = _driveFileIdInPath.firstMatch(uri.path)?.group(1);
+  if (fromPath != null) return fromPath;
+  final fromQuery = uri.path == '/open' ? uri.queryParameters['id'] : null;
+  return fromQuery != null && _driveFileIdValid.hasMatch(fromQuery) ? fromQuery : null;
+}
 
 String noteStem(String name) {
   final i = name.lastIndexOf('.');

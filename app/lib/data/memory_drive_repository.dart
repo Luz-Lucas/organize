@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../domain/drive.dart';
 import '../domain/ids.dart';
@@ -22,6 +23,7 @@ class _Node {
   String? parentId;
   bool trashed = false;
   Map<String, String>? appProperties;
+  Uint8List bytes = Uint8List(0);
   final List<DrivePermission> permissions = [
     const DrivePermission(id: 'owner', email: 'sua-conta@exemplo.com', role: 'owner', type: 'user'),
   ];
@@ -48,6 +50,9 @@ class MemoryDriveRepository implements DriveRepository {
   Uri connectUri = Uri.parse('https://accounts.google.com/o/oauth2/v2/auth?drive=1');
   final uploads = <UploadCall>[];
 
+  /// Ids pedidos a `download`, na ordem.
+  final downloads = <String>[];
+
   /// Simula o teto do servidor: list/search devolvem no máximo isso e marcam `truncated`.
   int? itemLimit;
 
@@ -64,15 +69,16 @@ class MemoryDriveRepository implements DriveRepository {
     return item;
   }
 
-  DriveItem addFile(String name, String parentId, {String mimeType = 'application/pdf', int size = 1024}) {
+  DriveItem addFile(String name, String parentId, {String mimeType = 'application/pdf', int size = 1024, List<int>? bytes, String? id}) {
     final item = DriveItem(
-      id: newId(),
+      id: id ?? newId(),
       name: name,
       mimeType: mimeType,
-      size: size,
+      size: bytes?.length ?? size,
       webViewLink: 'https://drive.example/file/${_nodes.length}',
     );
     _nodes[item.id] = _Node(item, parentId);
+    if (bytes != null) _nodes[item.id]!.bytes = Uint8List.fromList(bytes);
     return item;
   }
 
@@ -188,6 +194,15 @@ class MemoryDriveRepository implements DriveRepository {
   }
 
   @override
+  Future<Uint8List> download(String id) async {
+    _check();
+    final n = _node(id);
+    if (n.trashed || n.item.isFolder) throw const DriveException('Item não encontrado no Google Drive.', code: 'not_found');
+    downloads.add(id);
+    return n.bytes;
+  }
+
+  @override
   Future<void> rename(String id, String name) async {
     _check();
     final n = _node(id);
@@ -253,13 +268,16 @@ class MemoryDriveRepository implements DriveRepository {
   }) async {
     _check();
     var sent = 0;
+    final received = BytesBuilder(copy: false);
     await for (final chunk in data) {
       sent += chunk.length;
+      received.add(chunk);
       onProgress?.call(sent, size);
     }
     uploads.add(UploadCall(parentId, name, mimeType, size, appProperties));
     final item = addFile(name, _node(parentId).item.id, mimeType: mimeType, size: size);
     _nodes[item.id]!.appProperties = appProperties;
+    _nodes[item.id]!.bytes = received.takeBytes();
     return UploadedFile(id: item.id, name: name, webViewLink: item.webViewLink);
   }
 }

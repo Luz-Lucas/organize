@@ -203,4 +203,9 @@ Gmail:
 Nada a configurar no Google. No Samsung Notes: abra a nota → **Compartilhar → Organizacional** (texto vira
 uma nota) ou **Salvar como PDF** e compartilhe o PDF (vai ao Drive em `Organizacional/Importados`, com uma
 nota contendo o link). Para enviar arquivos é preciso ter o Drive conectado. Não existe API do Samsung
-Notes: o app não lê arquivos `.sdocx`.
+Notes: o app não interpreta o conteúdo dos arquivos `.sdocx`. Eles sobem ao Drive como binário opaco
+(`application/octet-stream`) pela sincronização da pasta do Samsung Notes (Ajustes → Samsung Notes) e, na
+nota-link, o botão **Editar no Samsung Notes** (só no Android, com o app instalado) baixa o arquivo pela ação
+`download` da função `drive` e o abre no Samsung Notes, que o importa como nota editável. A ação `download`
+recusa arquivos nativos do Google e maiores que 50 MB. Depois de mudar `drive`/`_shared/drive.ts`, publique a
+função de novo (`supabase functions deploy drive`).

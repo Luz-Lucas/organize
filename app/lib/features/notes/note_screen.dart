@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,7 +14,8 @@ import '../../domain/space.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
-import '../import/importer.dart' show driveLinkInBody;
+import '../import/importer.dart' show driveFileIdFromLink, driveLinkFileName, driveLinkInBody;
+import '../samsung_notes/edit_in_samsung_notes.dart';
 import '../samsung_notes/folder_sync.dart' show samsungSpaceName;
 import '../samsung_notes/samsung_platform.dart';
 import 'markdown_bridge.dart';
@@ -56,6 +58,10 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool _deleted = false;
   // Nota recém-criada ("Sem título…" e vazia): foca o título com tudo selecionado.
   bool _focusTitle = false;
+  // "Editar no Samsung Notes": baixando; erro do download; ou o aviso de que nenhum app abriu o arquivo.
+  bool _editing = false;
+  String? _editError;
+  bool _editNotOpened = false;
 
   @override
   void initState() {
@@ -208,26 +214,94 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     return driveLinkInBody(note.body);
   }
 
-  Widget _samsungActions(String link) {
+  bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Baixa o `.sdocx` do Drive e o entrega ao Samsung Notes (que o importa como nota editável).
+  Future<void> _editInSamsungNotes(String fileId, String fileName) async {
+    if (_editing) return;
+    setState(() {
+      _editing = true;
+      _editError = null;
+      _editNotOpened = false;
+    });
+    final result = await ref.read(samsungEditorProvider).edit(fileId: fileId, fileName: fileName);
+    if (!mounted) return;
+    setState(() {
+      _editing = false;
+      _editError = result.outcome == EditOutcome.failed ? result.message : null;
+      _editNotOpened = result.outcome == EditOutcome.notOpened;
+    });
+  }
+
+  Widget _samsungActions(String link, String body) {
     final installed = ref.watch(samsungNotesInstalledProvider).value ?? false;
+    final fileName = driveLinkFileName(body);
+    final fileId = driveFileIdFromLink(link);
+    final canEdit =
+        installed && _isAndroid && fileId != null && fileName != null && fileName.toLowerCase().endsWith('.sdocx');
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          OutlinedButton.icon(
-            key: const Key('samsung-open-drive'),
-            icon: const Icon(Icons.open_in_new, size: 18),
-            label: const Text('Abrir no Drive'),
-            onPressed: () => ref.read(linkOpenerProvider)(Uri.parse(link)),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('samsung-open-drive'),
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text('Abrir no Drive'),
+                onPressed: () => ref.read(linkOpenerProvider)(Uri.parse(link)),
+              ),
+              if (installed)
+                OutlinedButton.icon(
+                  key: const Key('samsung-open-app'),
+                  icon: const Icon(Icons.edit_note, size: 18),
+                  label: const Text('Abrir Samsung Notes'),
+                  onPressed: () => ref.read(samsungNotesPlatformProvider).open(),
+                ),
+              if (canEdit)
+                OutlinedButton.icon(
+                  key: const Key('edit-in-samsung-notes'),
+                  icon: _editing
+                      ? const SizedBox(
+                          key: Key('edit-in-samsung-progress'),
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.edit, size: 18),
+                  label: Text(_editing ? 'Baixando…' : 'Editar no Samsung Notes'),
+                  onPressed: _editing ? null : () => _editInSamsungNotes(fileId, fileName),
+                ),
+            ],
           ),
-          if (installed)
-            OutlinedButton.icon(
-              key: const Key('samsung-open-app'),
-              icon: const Icon(Icons.edit_note, size: 18),
-              label: const Text('Abrir Samsung Notes'),
-              onPressed: () => ref.read(samsungNotesPlatformProvider).open(),
+          if (_editError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_editError!, key: const Key('edit-in-samsung-error'), style: TextStyle(color: theme.colorScheme.error)),
+            ),
+          if (_editNotOpened)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Não encontrei um app para abrir este arquivo.',
+                    key: const Key('edit-in-samsung-notice'),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  TextButton(
+                    key: const Key('edit-in-samsung-open-drive'),
+                    onPressed: () => ref.read(linkOpenerProvider)(Uri.parse(link)),
+                    child: const Text('Abrir no Drive'),
+                  ),
+                ],
+              ),
             ),
         ],
       ),
@@ -247,7 +321,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         style: theme.textTheme.headlineMedium,
         decoration: const InputDecoration.collapsed(hintText: 'Título'),
       ),
-      if (samsungLink != null) _samsungActions(samsungLink),
+      if (samsungLink != null) _samsungActions(samsungLink, _note!.body),
       if (_saveError != null)
         Padding(
           padding: const EdgeInsets.only(top: 8),

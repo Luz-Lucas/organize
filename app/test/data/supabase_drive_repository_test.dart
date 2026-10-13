@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:organizacional/data/drive_repository.dart';
 import 'package:organizacional/data/repository.dart';
 import 'package:organizacional/data/supabase_drive_repository.dart';
 import 'package:organizacional/domain/drive.dart';
@@ -265,5 +267,42 @@ void main() {
     expect(calls.last.body['appProperties'], {'sha256': sha});
     await repo.upload(parentId: 'P', name: 'a.pdf', mimeType: 'application/pdf', size: 1, data: Stream.value([1]));
     expect(calls.last.body.containsKey('appProperties'), isFalse);
+  });
+
+  test('download repassa o id ao servidor e devolve os bytes', () async {
+    final asked = <String>[];
+    final repo = SupabaseDriveRepository.test(
+      invoke: (fn, body) async => {},
+      download: (id) async {
+        asked.add(id);
+        return Uint8List.fromList([1, 2, 3]);
+      },
+    );
+    expect(await repo.download('abc_123'), [1, 2, 3]);
+    expect(asked, ['abc_123']);
+  });
+
+  test('download: erro do servidor mantém mensagem e código; falha inesperada vira mensagem genérica sem detalhes', () async {
+    final server = SupabaseDriveRepository.test(
+      invoke: (fn, body) async => {},
+      download: (id) async => throw const DriveException('O acesso ao Google Drive expirou. Reconecte em Ajustes.', code: 'auth_required'),
+    );
+    await expectLater(server.download('x'), throwsA(isA<DriveException>().having((e) => e.needsReconnect, 'needsReconnect', isTrue)));
+
+    final broken = SupabaseDriveRepository.test(
+      invoke: (fn, body) async => {},
+      download: (id) async => throw StateError('https://www.googleapis.com/upload?upload_id=SEGREDO'),
+    );
+    await expectLater(
+      broken.download('x'),
+      throwsA(isA<RepositoryException>().having((e) => e.message, 'message', allOf(contains('conexão'), isNot(contains('SEGREDO'))))),
+    );
+  });
+
+  test('driveBytesFrom aceita só bytes; texto ou JSON no lugar do arquivo é resposta inesperada', () {
+    expect(driveBytesFrom(Uint8List.fromList([7])), [7]);
+    for (final bad in <Object?>['texto', {'error': 'x'}, null, 5]) {
+      expect(() => driveBytesFrom(bad), throwsA(isA<RepositoryException>()), reason: '$bad');
+    }
   });
 }

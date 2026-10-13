@@ -311,3 +311,58 @@ export async function createUploadSession(
   }
   return url.toString();
 }
+
+// ---------------------------------------------------------------- download
+
+/** Teto de um download pelo servidor (o app grava o arquivo inteiro no aparelho). */
+export const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
+
+export interface DownloadMeta {
+  name: string;
+  mimeType: string;
+  size: number | null;
+}
+
+export async function getDownloadMeta(accessToken: string, id: string, fetchFn: FetchFn): Promise<DownloadMeta> {
+  const j = await driveRequest(fetchFn, `${DRIVE_API}/files/${encodeURIComponent(id)}?fields=id,name,mimeType,size`, {
+    headers: authz(accessToken),
+  });
+  if (!j || typeof j.id !== "string") throw new GoogleError("other");
+  const item = toItem(j);
+  return { name: item.name, mimeType: item.mimeType, size: item.size };
+}
+
+/**
+ * Abre `files/{id}?alt=media` e devolve a resposta (corpo ainda não lido) para repassar em streaming.
+ * O prazo de [HTTP_TIMEOUT_MS] vale só até os cabeçalhos chegarem; depois o corpo flui sem corte.
+ */
+export async function openMedia(accessToken: string, id: string, fetchFn: FetchFn): Promise<Response> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), HTTP_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetchFn(`${DRIVE_API}/files/${encodeURIComponent(id)}?alt=media`, { headers: authz(accessToken), signal: ctl.signal });
+  } catch {
+    throw new GoogleError("transient");
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) {
+    const err = classify(res.status, await readJson(res), false);
+    throw err.kind === "auth" && err.status === 403 ? new GoogleError("other", 403) : err;
+  }
+  if (!res.body) throw new GoogleError("other");
+  return res;
+}
+
+/**
+ * Cabeçalho Content-Disposition seguro: sem aspas, barras, quebras de linha ou controles no nome ASCII,
+ * e o nome original em `filename*` (RFC 5987) com percent-encoding.
+ */
+export function contentDisposition(name: string): string {
+  // deno-lint-ignore no-control-regex
+  const clean = name.replace(/[\u0000-\u001f\u007f]/g, "").trim() || "arquivo";
+  const ascii = clean.replace(/[^\x20-\x7e]|["\\\/;]/g, "_");
+  const star = encodeURIComponent(clean).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${star}`;
+}

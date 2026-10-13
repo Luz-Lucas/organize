@@ -25,14 +25,15 @@ const samsungDrivePath = ['Organizacional', 'Samsung Notes'];
 /// Arquivos modificados há menos que isso ainda podem estar sendo gravados: ficam para a próxima rodada.
 const samsungMinFileAge = Duration(seconds: 10);
 
-const _syncableExtensions = {'pdf', 'docx', 'doc', 'txt', 'md', 'png', 'jpg', 'jpeg'};
+const _syncableExtensions = {'pdf', 'docx', 'doc', 'txt', 'md', 'png', 'jpg', 'jpeg', 'sdocx'};
 
 String _extension(String name) {
   final i = name.lastIndexOf('.');
   return i <= 0 ? '' : name.substring(i + 1).toLowerCase();
 }
 
-/// Só estes formatos são sincronizados (`.sdocx`, o formato fechado do Samsung Notes, não). Ocultos ficam de fora.
+/// Só estes formatos são sincronizados (`.sdocx` é a nota editável do Samsung Notes: sobe como binário opaco).
+/// Ocultos ficam de fora.
 bool isSyncableName(String name) => !name.startsWith('.') && _syncableExtensions.contains(_extension(name));
 
 /// A pasta não pôde ser lida (sem permissão, apagada...). A mensagem já é para o usuário.
@@ -76,7 +77,7 @@ class SyncResult {
   /// Já estavam sincronizados (no registro ou no Drive).
   int skipped = 0;
 
-  /// Formatos que não sincronizamos (`.sdocx`...) ou grandes demais.
+  /// Formatos que não sincronizamos (`.xlsx`, `.zip`...) ou grandes demais.
   int ignored = 0;
 
   /// Ainda sendo gravados: ficam para a próxima rodada.

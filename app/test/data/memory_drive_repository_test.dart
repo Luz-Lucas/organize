@@ -158,4 +158,30 @@ void main() {
     await repo.trash(up.id);
     expect(await repo.findBySha256(sha), isNull);
   });
+
+  test('download devolve os bytes enviados (upload) ou definidos; sumiu/lixeira => not_found; sem acesso => auth_required', () async {
+    final repo = MemoryDriveRepository();
+    final up = await repo.upload(
+      parentId: repo.rootFolderId,
+      name: 'Aula.sdocx',
+      mimeType: 'application/octet-stream',
+      size: 3,
+      data: Stream.fromIterable([[1, 2], [3]]),
+    );
+    expect(await repo.download(up.id), [1, 2, 3]);
+    expect(repo.downloads, [up.id]);
+
+    final manual = repo.addFile('b.sdocx', repo.rootFolderId, bytes: [9, 8]);
+    expect(await repo.download(manual.id), [9, 8]);
+
+    await repo.trash(up.id);
+    await expectLater(repo.download(up.id), throwsA(isA<DriveException>().having((e) => e.code, 'code', 'not_found')));
+    await expectLater(repo.download('nao-existe'), throwsA(isA<DriveException>()));
+
+    repo.authRequired = true;
+    await expectLater(repo.download(manual.id), throwsA(isA<DriveException>().having((e) => e.needsReconnect, 'needsReconnect', isTrue)));
+    repo.authRequired = false;
+    repo.failActions = true;
+    await expectLater(repo.download(manual.id), throwsA(isA<RepositoryException>()));
+  });
 }

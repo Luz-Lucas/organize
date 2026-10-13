@@ -12,7 +12,11 @@ import '../samsung_notes/samsung_folder.dart';
 import '../samsung_notes/samsung_sync_controller.dart';
 
 /// Como exportar uma nota do Samsung Notes para um arquivo (o app não tem API; o caminho é este).
-const samsungExportHelp = 'No Samsung Notes: abra a nota → ⋮ → Salvar como arquivo → PDF.';
+/// O formato do meio aparece em negrito.
+const samsungExportHelpBefore = 'No Samsung Notes: abra a nota → ⋮ → Salvar como arquivo. Para editar em outro aparelho, salve como ';
+const samsungExportHelpBold = 'Arquivo do Samsung Notes (.sdocx)';
+const samsungExportHelpAfter = '; para só visualizar, PDF.';
+const samsungExportHelp = '$samsungExportHelpBefore$samsungExportHelpBold$samsungExportHelpAfter';
 
 /// Ajustes > "Samsung Notes": acha a pasta onde o Samsung Notes salva os arquivos e os sincroniza com o
 /// Google Drive (Organizacional/Samsung Notes), criando uma nota-link para cada um.
@@ -130,7 +134,17 @@ class _SamsungNotesCardState extends ConsumerState<SamsungNotesCard> {
             style: muted,
           ),
           const SizedBox(height: 8),
-          Text(samsungExportHelp, key: const Key('samsung-help'), style: muted),
+          Text.rich(
+            TextSpan(
+              style: muted,
+              children: const [
+                TextSpan(text: samsungExportHelpBefore),
+                TextSpan(text: samsungExportHelpBold, style: TextStyle(fontWeight: FontWeight.bold)),
+                TextSpan(text: samsungExportHelpAfter),
+              ],
+            ),
+            key: const Key('samsung-help'),
+          ),
           const SizedBox(height: 12),
           Text(
             folder == null ? 'Nenhuma pasta escolhida' : 'Pasta: ${folder.label}',

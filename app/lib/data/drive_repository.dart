@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/drive.dart';
@@ -41,6 +43,10 @@ abstract interface class DriveRepository {
   Future<String?> setLinkSharing(String id, bool enabled);
   Future<List<DrivePermission>> permissions(String id);
   Future<void> unshare(String id, String permissionId);
+
+  /// Baixa o conteúdo de um arquivo (até 50 MB; arquivos nativos do Google, como Docs, não). Lança
+  /// [DriveException] com a mensagem do servidor quando o Drive recusa.
+  Future<Uint8List> download(String id);
 
   /// Acha ou cria cada pasta de [path] a partir do Meu Drive (ex.: `['Organizacional', 'Samsung Notes']`)
   /// e devolve o id da última.
