@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
-import { verifyState } from "../_shared/gmail.ts";
+import { verifyState, verifyStateInfo } from "../_shared/gmail.ts";
 import { CFG } from "../_shared/gmail_testutil.ts";
 import { handle } from "./handler.ts";
 
@@ -51,4 +51,32 @@ Deno.test("connect: GET => 405, OPTIONS => 204, sem configuração => 500", asyn
   const nocfg = await handle(post({ Authorization: "Bearer jwt-bom" }), { cfg: null, getUserId });
   assertEquals(nocfg.status, 500);
   await nocfg.body?.cancel();
+});
+
+Deno.test("connect com provider drive devolve o consentimento do escopo drive e state do drive", async () => {
+  const res = await handle(post({ Authorization: "Bearer jwt-bom" }, { provider: "drive", email: "contato@gmail.com" }), { cfg: CFG, getUserId });
+  assertEquals(res.status, 200);
+  const { url } = await res.json();
+  const u = new URL(url);
+  assertEquals(u.searchParams.get("scope"), "https://www.googleapis.com/auth/drive");
+  assertEquals(u.searchParams.get("login_hint"), "contato@gmail.com");
+  assertEquals(u.searchParams.get("redirect_uri"), CFG.redirectUri); // o mesmo URI já cadastrado
+  assertEquals(await verifyStateInfo(u.searchParams.get("state")!, CFG.stateSecret), { userId: U, provider: "drive" });
+});
+
+Deno.test("connect com provider gmail explícito ou ausente continua sendo gmail", async () => {
+  for (const body of [{ provider: "gmail" }, { provider: null }, {}] as unknown[]) {
+    const res = await handle(post({ Authorization: "Bearer jwt-bom" }, body), { cfg: CFG, getUserId });
+    const u = new URL((await res.json()).url);
+    assertEquals(u.searchParams.get("scope"), "https://www.googleapis.com/auth/gmail.metadata");
+    assertEquals((await verifyStateInfo(u.searchParams.get("state")!, CFG.stateSecret))?.provider, "gmail");
+  }
+});
+
+Deno.test("connect recusa provider desconhecido (400)", async () => {
+  for (const provider of ["outlook", 5, "DRIVE"]) {
+    const res = await handle(post({ Authorization: "Bearer jwt-bom" }, { provider }), { cfg: CFG, getUserId });
+    assertEquals(res.status, 400);
+    await res.body?.cancel();
+  }
 });

@@ -52,6 +52,16 @@ export interface WakeRun {
   fallbackHandle: string | null;
 }
 
+/** Exceção de uma data só ("só amanhã"): pula o despertar ou troca o horário daquele dia. */
+export interface WakeOverride {
+  planId: string;
+  /** Data local YYYY-MM-DD. */
+  runDate: string;
+  skip: boolean;
+  /** HH:MM[:SS]; vale mesmo que o dia da semana não esteja em `plan.days`. */
+  time: string | null;
+}
+
 export type WakeAction =
   | { type: 'arm'; plan: WakePlan; runDate: string; plannedFor: Date; fallbackAt: Date }
   | { type: 'rearm'; run: WakeRun; plan: WakePlan; plannedFor: Date; fallbackAt: Date }
@@ -64,7 +74,15 @@ export const DEFAULT_OPTIONS: SchedulerOptions = { graceMin: 15, fallbackDelayMi
 
 const MIN = 60_000;
 
-export function occurrence(plan: WakePlan, runDate: string, timeZone: string): Date | null {
+export function occurrence(
+  plan: WakePlan,
+  runDate: string,
+  timeZone: string,
+  overrides: readonly WakeOverride[] = [],
+): Date | null {
+  const override = overrides.find((o) => o.planId === plan.id && o.runDate === runDate);
+  if (override?.skip) return null;
+  if (override?.time) return zonedTime(runDate, override.time.slice(0, 5), timeZone);
   const weekday = localParts(zonedTime(runDate, '12:00', timeZone), timeZone).weekday;
   return plan.days.includes(weekday) ? zonedTime(runDate, plan.time.slice(0, 5), timeZone) : null;
 }
@@ -75,6 +93,7 @@ export function planWakeActions(
   now: Date,
   timeZone: string,
   opts: SchedulerOptions = DEFAULT_OPTIONS,
+  overrides: readonly WakeOverride[] = [],
 ): WakeAction[] {
   const actions: WakeAction[] = [];
   const planById = new Map(plans.map((p) => [p.id, p]));
@@ -86,7 +105,7 @@ export function planWakeActions(
   for (const run of runs) {
     if (run.status !== 'armed') continue;
     const plan = run.planId ? planById.get(run.planId) : undefined;
-    const occ = plan && plan.enabled && plan.fallbackAlarm ? occurrence(plan, run.runDate, timeZone) : null;
+    const occ = plan && plan.enabled && plan.fallbackAlarm ? occurrence(plan, run.runDate, timeZone, overrides) : null;
     if (!plan || !occ) {
       actions.push({ type: 'cancel', run });
       continue;
@@ -106,7 +125,7 @@ export function planWakeActions(
   for (const plan of plans) {
     if (!plan.enabled) continue;
     for (const runDate of [addDays(today, -1), today, addDays(today, 1)]) {
-      const occ = occurrence(plan, runDate, timeZone);
+      const occ = occurrence(plan, runDate, timeZone, overrides);
       if (!occ) continue;
       const run = runByKey.get(`${plan.id}:${runDate}`) ?? null;
       const delta = now.getTime() - occ.getTime();

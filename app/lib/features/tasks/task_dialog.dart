@@ -7,6 +7,7 @@ import '../../domain/space.dart';
 import '../../domain/task_item.dart';
 import '../../ui/common.dart';
 import '../../ui/date_labels.dart';
+import '../github/issue_form.dart';
 
 /// Abre o editor de tarefa: folha de baixo no celular (< 720 dp), diálogo no
 /// computador. Devolve `true` quando a tarefa foi salva.
@@ -110,6 +111,24 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
     } on RepositoryException {
       if (mounted) showError(context, 'Não foi possível salvar a tarefa.');
     }
+  }
+
+  /// Cria uma issue no GitHub a partir desta tarefa; ao criar, anexa o link ao
+  /// fim da descrição e salva a tarefa.
+  Future<void> _toIssue() async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final result = await showIssueForm(
+      context,
+      initialTitle: _title.text.trim(),
+      initialBody: _description.text.trim(),
+    );
+    if (result == null || !mounted) return;
+    final current = _description.text.trim();
+    _description.text = current.isEmpty ? result.issue.url : '$current\n\n${result.issue.url}';
+    messenger
+      ?..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text('Issue #${result.issue.number} criada e link anexado à tarefa.')));
+    await _save();
   }
 
   Future<void> _delete() async {
@@ -217,6 +236,16 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
             onChanged: (v) => setState(() => _spaceId = v),
           ),
         ],
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('task-to-issue'),
+            onPressed: _toIssue,
+            icon: const Icon(Icons.code, size: 18),
+            label: const Text('Criar issue no GitHub'),
+          ),
+        ),
       ],
     );
   }

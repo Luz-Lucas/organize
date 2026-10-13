@@ -1,4 +1,14 @@
-import { bearer, buildConsentUrl, CORS, type GmailConfig, json, signState, validEmail } from "../_shared/gmail.ts";
+import {
+  bearer,
+  buildConsentUrl,
+  CORS,
+  type GmailConfig,
+  type GoogleProvider,
+  isProvider,
+  json,
+  signState,
+  validEmail,
+} from "../_shared/gmail.ts";
 
 export interface ConnectDeps {
   cfg: GmailConfig | null;
@@ -6,7 +16,7 @@ export interface ConnectDeps {
   now?: () => number;
 }
 
-/** POST { email?: string } -> { url }. Identifica o usuário pelo JWT. */
+/** POST { provider?: "gmail" | "drive", email?: string } -> { url }. Padrão: gmail. Identifica o usuário pelo JWT. */
 export async function handle(req: Request, deps: ConnectDeps): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (req.method !== "POST") return json({ error: "método não permitido" }, 405);
@@ -18,10 +28,15 @@ export async function handle(req: Request, deps: ConnectDeps): Promise<Response>
 
   const body = await req.json().catch(() => ({}));
   const hint = (body as { email?: unknown })?.email;
+  const rawProvider = (body as { provider?: unknown })?.provider;
+  if (rawProvider !== undefined && rawProvider !== null && !isProvider(rawProvider)) {
+    return json({ error: "serviço desconhecido" }, 400);
+  }
+  const provider: GoogleProvider = rawProvider ?? "gmail";
   if (hint !== undefined && hint !== null && hint !== "" && !validEmail(hint)) {
     return json({ error: "e-mail inválido" }, 400);
   }
 
-  const state = await signState(userId, deps.cfg.stateSecret, deps.now?.() ?? Date.now());
-  return json({ url: buildConsentUrl(deps.cfg, state, validEmail(hint) ? hint : undefined) });
+  const state = await signState(userId, deps.cfg.stateSecret, deps.now?.() ?? Date.now(), undefined, provider);
+  return json({ url: buildConsentUrl(deps.cfg, state, validEmail(hint) ? hint : undefined, provider) });
 }

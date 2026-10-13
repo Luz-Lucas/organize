@@ -90,11 +90,21 @@ class MobileCalendar extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          e.title,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                e.title,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleSmall,
+                              ),
+                            ),
+                            if (e.seriesId != null) ...[
+                              const SizedBox(width: 6),
+                              Icon(Icons.repeat, size: 14, color: org.inkMuted),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(

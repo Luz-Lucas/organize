@@ -431,3 +431,12 @@ verify_jwt = false
 
 [functions.gmail-disconnect]
 verify_jwt = true
+
+# GitHub (issues pelo app). JWT do usuário + GITHUB_ALLOWED_USER_ID (só o dono).
+[functions.github]
+verify_jwt = true
+
+# Google Drive (Documentos). JWT do usuário; o refresh token fica cifrado em google_accounts.
+# O consentimento do Drive passa por gmail-connect/gmail-callback ({provider:'drive'}).
+[functions.drive]
+verify_jwt = true

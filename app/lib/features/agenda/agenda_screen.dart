@@ -6,6 +6,8 @@ import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/agenda.dart';
 import '../../domain/calendar_event.dart';
+import '../../domain/ids.dart';
+import '../../domain/recurrence.dart';
 import '../../domain/space.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
@@ -73,8 +75,59 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                   return 'Não foi possível excluir o evento.';
                 }
               },
+        onCreateSeries: (template, rule) async {
+          try {
+            await repo.upsertEvents(SeriesOps.buildSeries(template, rule, newId));
+            return null;
+          } on RepositoryException {
+            return 'Não foi possível salvar os eventos.';
+          }
+        },
+        onSaveScoped: existing?.seriesId == null
+            ? null
+            : (event, scope) async {
+                try {
+                  final series = await _seriesOf(repo, existing!);
+                  await repo.upsertEvents(SeriesOps.applyEdit(series, existing, event, scope));
+                  return null;
+                } on RepositoryException {
+                  return 'Não foi possível salvar o evento.';
+                }
+              },
+        onDeleteScoped: existing?.seriesId == null
+            ? null
+            : (scope) async {
+                try {
+                  final series = await _seriesOf(repo, existing!);
+                  final ids = SeriesOps.deleteIds(series, existing, scope).toSet();
+                  final removed = [for (final e in series) if (ids.contains(e.id)) e];
+                  // Séries longas: apaga por series_id (e início), não por uma lista enorme de ids.
+                  switch (scope) {
+                    case SeriesScope.one:
+                      await repo.deleteEvent(existing.id);
+                    case SeriesScope.following:
+                      await repo.deleteSeries(existing.seriesId!, from: existing.startsAt);
+                    case SeriesScope.all:
+                      await repo.deleteSeries(existing.seriesId!);
+                  }
+                  showUndo(
+                    messenger,
+                    removed.length == 1 ? 'Evento excluído' : '${removed.length} eventos excluídos',
+                    () => repo.upsertEvents(removed),
+                  );
+                  return null;
+                } on RepositoryException {
+                  return 'Não foi possível excluir o evento.';
+                }
+              },
       ),
     );
+  }
+
+  /// Ocorrências da série de [event] (inclusive as que não estão na tela).
+  Future<List<CalendarEvent>> _seriesOf(Repository repo, CalendarEvent event) async {
+    final series = await repo.listSeries(event.seriesId!);
+    return series.any((e) => e.id == event.id) ? series : [...series, event];
   }
 
   String _title(bool desktop) {

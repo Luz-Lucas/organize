@@ -7,6 +7,7 @@ import '../../data/repository.dart';
 import '../../domain/alexa.dart';
 import '../../domain/ids.dart';
 import '../../domain/user_settings.dart';
+import '../../domain/wake_override.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import 'wake_device_actions.dart';
@@ -187,7 +188,11 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
       final stopping = hasMusic && d.musicStopAfterSec != null;
       final theme = Theme.of(context);
       final mobile = MediaQuery.sizeOf(context).width < 720;
-      final next = wakeInLabel(d.days, d.hour, d.minute, ref.watch(clockProvider)());
+      final next = wakeInLabelFor(
+        d,
+        ref.watch(wakeOverridesProvider).value ?? const <WakeOverride>[],
+        ref.watch(clockProvider)(),
+      );
       return Scaffold(
         appBar: AppBar(
           title: Text(_isNew ? 'Novo despertar' : 'Despertar'),

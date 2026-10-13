@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './index.js';
@@ -6,16 +7,28 @@ import {
   startOfLocalDay, toIso,
 } from './util.js';
 import { taskOut } from './tasks.js';
+import { addWallMinutes, expandRepeat, MAX_OCCURRENCES } from './recurrence.js';
 
 const title = z.string().trim().min(1).max(200);
 const when = z.string().min(8).max(40);
+const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use AAAA-MM-DD.');
+const repeatSchema = z.object({
+  freq: z.enum(['daily', 'weekdays', 'weekly', 'biweekly', 'monthly']),
+  days: z.array(z.number().int().min(1).max(7)).max(7).optional()
+    .describe('Dias da semana (1 = seg … 7 = dom) para weekly/biweekly; vazio = o dia da semana do início'),
+  until: ymd.optional().describe('Último dia da repetição (AAAA-MM-DD, inclusivo)'),
+  count: z.number().int().min(1).max(MAX_OCCURRENCES).optional().describe('Quantidade de ocorrências (1 a 366)'),
+}).describe(
+  'Repetição: daily (todo dia), weekdays (seg–sex), weekly, biweekly (a cada 2 semanas), monthly (mesmo dia do mês; ' +
+  'meses sem esse dia são pulados). Termina em `until` ou `count` (o que vier primeiro); sem nenhum dos dois, ' +
+  'repete por 3 meses. Limites: 366 ocorrências e 1 ano a partir do início.');
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 function eventOut(r: Row, tz: string) {
   return {
     id: r.id, title: r.title, startsAt: toIso(r.starts_at, tz), endsAt: toIso(r.ends_at, tz),
-    allDay: r.all_day, location: r.location, spaceId: r.space_id, source: r.source,
+    allDay: r.all_day, location: r.location, spaceId: r.space_id, source: r.source, seriesId: r.series_id ?? null,
   };
 }
 
@@ -69,10 +82,12 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
     title: 'Criar evento',
     description:
       'Cria um evento na agenda. `endsAt` é opcional (padrão: 1 h depois, ou até o fim do dia se `allDay`). ' +
-      'O fim pode atravessar a meia-noite (22:00 → 02:00 do dia seguinte), mas não pode ser antes do início.',
+      'O fim pode atravessar a meia-noite (22:00 → 02:00 do dia seguinte), mas não pode ser antes do início. ' +
+      'Com `repeat`, cria uma série: uma linha por ocorrência, todas com o mesmo `seriesId` e a mesma duração.',
     inputSchema: {
       title, startsAt: when, endsAt: when.optional(), allDay: z.boolean().optional(),
       location: z.string().trim().max(200).optional(), spaceId: z.string().uuid().optional(),
+      repeat: repeatSchema.optional(),
     },
     annotations: { ...WRITE, idempotentHint: false },
   }, safe(async (a) => {
@@ -83,9 +98,34 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
     else ends = allDay ? startOfLocalDay(starts, tz, 1) : new Date(starts.getTime() + 3600_000);
     if (ends < starts) throw new UserError('O fim do evento não pode ser antes do início.');
     if (a.spaceId) await assertOwned(ctx, 'spaces', a.spaceId, 'Espaço');
+    const base = {
+      user_id: ctx.userId, title: a.title, all_day: allDay, location: a.location || null,
+      space_id: a.spaceId ?? null, source: 'manual',
+    };
+    if (a.repeat) {
+      const rule = { freq: a.repeat.freq, days: [...new Set(a.repeat.days ?? [])].sort(), until: a.repeat.until ?? null, count: a.repeat.count ?? null };
+      if (rule.until === null && rule.count === null) {
+        const l = toIso(starts, tz)!;
+        rule.until = new Date(Date.UTC(Number(l.slice(0, 4)), Number(l.slice(5, 7)) - 1 + 3, Number(l.slice(8, 10)))).toISOString().slice(0, 10);
+      }
+      if (rule.until !== null && rule.until < toIso(starts, tz)!.slice(0, 10)) {
+        throw new UserError('A data final da repetição não pode ser antes do início.');
+      }
+      const minutes = Math.round((ends.getTime() - starts.getTime()) / 60000);
+      const seriesId = randomUUID();
+      const rows = expandRepeat(starts, rule, tz).map((s0) => ({
+        ...base, starts_at: s0.toISOString(), ends_at: addWallMinutes(s0, minutes, tz).toISOString(),
+        series_id: seriesId, recurrence: rule,
+      }));
+      if (rows.length === 0) throw new UserError('A repetição não gera nenhuma ocorrência no período.');
+      const created = check(await ctx.db.from('events').insert(rows).select('*').order('starts_at', { ascending: true })) as Row[];
+      return ok({
+        event: eventOut(created[0], tz), seriesId, occurrences: created.length,
+        lastStartsAt: toIso(created[created.length - 1].starts_at, tz),
+      });
+    }
     const row = check(await ctx.db.from('events').insert({
-      user_id: ctx.userId, title: a.title, starts_at: starts.toISOString(), ends_at: ends.toISOString(),
-      all_day: allDay, location: a.location || null, space_id: a.spaceId ?? null, source: 'manual',
+      ...base, starts_at: starts.toISOString(), ends_at: ends.toISOString(),
     }).select('*').single());
     return ok({ event: eventOut(row as Row, tz) });
   }));
@@ -94,7 +134,7 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
     title: 'Editar evento',
     description:
       'Edita campos de um evento. Se só `startsAt` mudar, o fim acompanha mantendo a duração. ' +
-      '`location: null` limpa o local.',
+      '`location: null` limpa o local. Em eventos de série, edita só essa ocorrência.',
     inputSchema: {
       id: z.string().uuid(), title: title.optional(), startsAt: when.optional(), endsAt: when.optional(),
       allDay: z.boolean().optional(), location: z.string().trim().max(200).nullable().optional(),
@@ -120,6 +160,8 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
       if (a.spaceId) await assertOwned(ctx, 'spaces', a.spaceId, 'Espaço');
       patch.space_id = a.spaceId;
     }
+    // A ocorrência editada sai da série (como no app): as demais seguem agrupadas.
+    if (cur.series_id) { patch.series_id = null; patch.recurrence = null; }
     const rows = check(await ctx.db.from('events').update(patch).eq('id', a.id).eq('user_id', ctx.userId).select('*')) as Row[];
     if (rows.length === 0) throw new UserError('Evento não encontrado.');
     return ok({ event: eventOut(rows[0], tz) });
@@ -127,12 +169,26 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
 
   server.registerTool('delete_event', {
     title: 'Apagar evento',
-    description: 'Apaga um evento da agenda pelo id. Irreversível; confirme com o usuário.',
-    inputSchema: { id: z.string().uuid() },
+    description:
+      'Apaga um evento da agenda pelo id. Irreversível; confirme com o usuário. ' +
+      'Em eventos de série, `scope` escolhe o que apagar: `one` (padrão, só este), `following` (este e os seguintes) ' +
+      'ou `all` (todos os eventos da série). Em evento fora de série, `scope` não muda nada.',
+    inputSchema: { id: z.string().uuid(), scope: z.enum(['one', 'following', 'all']).optional() },
     annotations: DESTRUCTIVE,
   }, safe(async (a) => {
-    const rows = check(await ctx.db.from('events').delete().eq('id', a.id).eq('user_id', ctx.userId).select('id')) as Row[];
+    const scope = a.scope ?? 'one';
+    const cur = check(await ctx.db.from('events').select('id, series_id, starts_at').eq('id', a.id).eq('user_id', ctx.userId).maybeSingle()) as Row | null;
+    if (!cur) throw new UserError('Evento não encontrado.');
+    let del = ctx.db.from('events').delete().eq('user_id', ctx.userId);
+    if (scope !== 'one' && cur.series_id) {
+      // Por series_id (e starts_at), não por uma lista de ids: séries longas estouram o tamanho da URL.
+      del = del.eq('series_id', cur.series_id);
+      if (scope === 'following') del = del.gte('starts_at', cur.starts_at);
+    } else {
+      del = del.eq('id', a.id);
+    }
+    const rows = check(await del.select('id')) as Row[];
     if (rows.length === 0) throw new UserError('Evento não encontrado.');
-    return ok({ deleted: a.id });
+    return ok({ deleted: a.id, deletedCount: rows.length, scope });
   }));
 }

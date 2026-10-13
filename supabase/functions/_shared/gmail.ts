@@ -3,13 +3,20 @@
 // Regra de log: nunca registrar assunto, endereços, tokens nem corpo de resposta do Google.
 
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
+/** Drive inteiro (pastas existentes, mover, compartilhar). Refresh token cifrado como o do Gmail. */
+export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
+
+export type GoogleProvider = "gmail" | "drive";
+export const PROVIDERS: readonly GoogleProvider[] = ["gmail", "drive"];
+export const isProvider = (v: unknown): v is GoogleProvider => v === "gmail" || v === "drive";
+export const scopeFor = (p: GoogleProvider): string => p === "drive" ? DRIVE_SCOPE : GMAIL_SCOPE;
 export const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 export const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
 export const INBOX_LIMIT = 15;
 export const STATE_TTL_MS = 10 * 60 * 1000;
-const HTTP_TIMEOUT_MS = 10_000;
+export const HTTP_TIMEOUT_MS = 10_000;
 
 export type FetchFn = typeof fetch;
 
@@ -129,25 +136,30 @@ async function hmacKey(secret: string, usages: KeyUsage[]): Promise<CryptoKey> {
   return await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, usages);
 }
 
-/** state = base64url(userId.expiresAt.nonce) + "." + base64url(HMAC-SHA256(payloadB64)). */
+/**
+ * state = base64url(userId.expiresAt.nonce[.provider]) + "." + base64url(HMAC-SHA256(payloadB64)).
+ * O provider só entra no payload quando não é "gmail" (o formato do Gmail não muda).
+ */
 export async function signState(
   userId: string,
   secret: string,
   now: number = Date.now(),
   ttlMs: number = STATE_TTL_MS,
+  provider: GoogleProvider = "gmail",
 ): Promise<string> {
   const nonce = b64urlEncode(crypto.getRandomValues(new Uint8Array(16)));
-  const payload = b64urlEncode(enc.encode(`${userId}.${now + ttlMs}.${nonce}`));
+  const base = `${userId}.${now + ttlMs}.${nonce}`;
+  const payload = b64urlEncode(enc.encode(provider === "gmail" ? base : `${base}.${provider}`));
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(secret, ["sign"]), enc.encode(payload)));
   return `${payload}.${b64urlEncode(sig)}`;
 }
 
-/** Retorna o userId se a assinatura confere (tempo constante) e não expirou; senão null. */
-export async function verifyState(
+/** Retorna userId e provider se a assinatura confere (tempo constante) e não expirou; senão null. */
+export async function verifyStateInfo(
   state: string,
   secret: string,
   now: number = Date.now(),
-): Promise<string | null> {
+): Promise<{ userId: string; provider: GoogleProvider } | null> {
   try {
     const parts = state.split(".");
     if (parts.length !== 2) return null;
@@ -155,23 +167,38 @@ export async function verifyState(
     const sig = b64urlDecode(sigB64);
     const ok = await crypto.subtle.verify("HMAC", await hmacKey(secret, ["verify"]), sig, enc.encode(payload));
     if (!ok) return null;
-    const [userId, exp, nonce, extra] = new TextDecoder().decode(b64urlDecode(payload)).split(".");
+    const [userId, exp, nonce, provider, extra] = new TextDecoder().decode(b64urlDecode(payload)).split(".");
     if (!userId || !exp || !nonce || extra !== undefined) return null;
+    if (provider !== undefined && !isProvider(provider)) return null;
     if (!/^\d+$/.test(exp) || Number(exp) < now) return null;
-    return userId;
+    return { userId, provider: provider ?? "gmail" };
   } catch {
     return null;
   }
 }
 
+/** Retorna o userId se o state é válido (qualquer provider); senão null. */
+export async function verifyState(
+  state: string,
+  secret: string,
+  now: number = Date.now(),
+): Promise<string | null> {
+  return (await verifyStateInfo(state, secret, now))?.userId ?? null;
+}
+
 // ---------------------------------------------------------------- URL de consentimento
 
-export function buildConsentUrl(cfg: GmailConfig, state: string, loginHint?: string): string {
+export function buildConsentUrl(
+  cfg: GmailConfig,
+  state: string,
+  loginHint?: string,
+  provider: GoogleProvider = "gmail",
+): string {
   const p = new URLSearchParams({
     client_id: cfg.clientId,
     redirect_uri: cfg.redirectUri,
     response_type: "code",
-    scope: GMAIL_SCOPE,
+    scope: scopeFor(provider),
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "false",
@@ -200,7 +227,7 @@ export class GoogleError extends Error {
 
 const RATE_REASONS = new Set(["rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded", "quotaExceeded"]);
 
-async function readJson(res: Response): Promise<Record<string, unknown>> {
+export async function readJson(res: Response): Promise<Record<string, unknown>> {
   try {
     const v = await res.json();
     return v && typeof v === "object" ? v as Record<string, unknown> : {};
@@ -210,7 +237,7 @@ async function readJson(res: Response): Promise<Record<string, unknown>> {
 }
 
 /** Classifica uma resposta de erro do Google (corpo já lido) sem vazar detalhes. */
-function classify(status: number, body: Record<string, unknown>, tokenEndpoint: boolean): GoogleError {
+export function classify(status: number, body: Record<string, unknown>, tokenEndpoint: boolean): GoogleError {
   if (status === 429 || status >= 500) return new GoogleError("transient", status);
   if (tokenEndpoint) {
     // invalid_grant = token revogado/expirado; invalid_client/unauthorized_client = credenciais do app
@@ -230,7 +257,7 @@ function classify(status: number, body: Record<string, unknown>, tokenEndpoint: 
   return new GoogleError("other", status);
 }
 
-async function request(
+export async function request(
   fetchFn: FetchFn,
   url: string,
   init: RequestInit,

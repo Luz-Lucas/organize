@@ -13,6 +13,7 @@ import '../domain/notice.dart';
 import '../domain/space.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
+import '../domain/wake_override.dart';
 
 final repositoryProvider = Provider<Repository>(
   (ref) => throw UnimplementedError('repositoryProvider precisa de override'),
@@ -91,6 +92,9 @@ final alexaRoutinesProvider =
 
 final wakePlansProvider =
     StreamProvider<List<WakePlan>>((ref) => ref.watch(alexaRepositoryProvider).watchWakePlans());
+
+final wakeOverridesProvider =
+    StreamProvider<List<WakeOverride>>((ref) => ref.watch(alexaRepositoryProvider).watchOverrides());
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => throw UnimplementedError('settingsRepositoryProvider precisa de override'),

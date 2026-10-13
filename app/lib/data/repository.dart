@@ -32,6 +32,17 @@ abstract interface class Repository {
   Future<void> upsertEvent(CalendarEvent event);
   Future<void> deleteEvent(String id);
 
+  /// Grava/apaga várias ocorrências de uma vez (séries de eventos).
+  Future<void> upsertEvents(List<CalendarEvent> events);
+  Future<void> deleteEvents(List<String> ids);
+
+  /// Apaga a série por `series_id`; com [from], só as ocorrências que começam em [from] ou depois.
+  /// Evita mandar uma lista enorme de ids em séries longas.
+  Future<void> deleteSeries(String seriesId, {DateTime? from});
+
+  /// Todas as ocorrências da série (inclusive as já passadas), por início.
+  Future<List<CalendarEvent>> listSeries(String seriesId);
+
   Stream<List<Notice>> watchNotices();
   Future<void> upsertNotice(Notice notice);
   Future<void> deleteNotice(String id);

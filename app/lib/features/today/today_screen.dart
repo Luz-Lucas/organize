@@ -17,6 +17,7 @@ import '../../domain/notice.dart';
 import '../../domain/space.dart';
 import '../../domain/system_notices.dart';
 import '../../domain/task_item.dart';
+import '../../domain/wake_override.dart';
 import '../../domain/agenda.dart';
 import '../../ui/common.dart';
 import '../../ui/motif_painter.dart';
@@ -28,6 +29,7 @@ import 'dashboard_cards.dart';
 import 'dashboard_data.dart';
 import 'notice_board.dart';
 import 'notice_dialog.dart';
+import 'wake_card.dart';
 
 /// Largura útil (já descontada a barra lateral) a partir da qual o painel usa
 /// duas colunas.
@@ -295,7 +297,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final spaces = ref.watch(spacesProvider);
     final feed = ref.watch(newsFeedProvider);
     final bridge = ref.watch(bridgeStatusProvider).value;
-    final plans = ref.watch(wakePlansProvider).value ?? const <WakePlan>[];
+    final plansAsync = ref.watch(wakePlansProvider);
+    final plans = plansAsync.value ?? const <WakePlan>[];
     final userNotices = activeNotices(ref.watch(noticesProvider).value ?? const <Notice>[], now);
     final names = {for (final s in spaces.value ?? const <Space>[]) s.id: s.name};
     final taskList = tasks.value ?? const <TaskItem>[];
@@ -309,6 +312,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
 
     final nowNext = NowNextCard(now: now, events: events, spaceNames: names);
+    final wakeCard = WakeCard(
+      now: now,
+      plans: plansAsync,
+      overrides: ref.watch(wakeOverridesProvider).value ?? const <WakeOverride>[],
+    );
     final examCard = exam == null ? null : ExamCard(now: now, info: exam);
     final tasksCard = TasksCard(now: now, tasks: tasks, spaceNames: names);
     final board = NoticeBoard(system: system, notices: userNotices, now: now);
@@ -346,7 +354,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       ],
                       const SizedBox(height: 4),
                       if (!wide)
-                        ...spaced([nowNext, examCard, tasksCard, board, email, news])
+                        ...spaced([nowNext, wakeCard, examCard, tasksCard, board, email, news])
                       else
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,7 +363,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                               flex: 3,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: spaced([nowNext, examCard, tasksCard]),
+                                children: spaced([nowNext, wakeCard, examCard, tasksCard]),
                               ),
                             ),
                             const SizedBox(width: 16),

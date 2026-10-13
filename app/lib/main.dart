@@ -11,14 +11,20 @@ import 'app/app.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
 import 'app_icon/app_icon.dart';
+import 'data/github_repository.dart';
 import 'data/supabase_alexa_repository.dart';
+import 'data/supabase_github_repository.dart';
+import 'data/drive_repository.dart';
 import 'data/email_repository.dart';
 import 'data/location_repository.dart';
+import 'data/share_intent_service.dart';
+import 'data/supabase_drive_repository.dart';
 import 'data/supabase_email_repository.dart';
 import 'data/supabase_location_repository.dart';
 import 'data/supabase_news_repository.dart';
 import 'data/supabase_repository.dart';
 import 'data/supabase_settings_repository.dart';
+import 'features/import/share_listener.dart';
 import 'location/geolocator_location_service.dart';
 import 'location/location_report_sync.dart';
 import 'location/location_service.dart';
@@ -69,6 +75,9 @@ Future<void> main() async {
       settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
       locationRepositoryProvider.overrideWithValue(SupabaseLocationRepository(client)),
       emailRepositoryProvider.overrideWithValue(SupabaseEmailRepository(client)),
+      driveRepositoryProvider.overrideWithValue(SupabaseDriveRepository(client)),
+      if (isAndroid) shareIntentServiceProvider.overrideWithValue(MethodChannelShareIntentService()),
+      githubRepositoryProvider.overrideWithValue(SupabaseGithubRepository(client)),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
       if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
       if (isAndroid) locationServiceProvider.overrideWithValue(const GeolocatorLocationService()),
@@ -76,6 +85,10 @@ Future<void> main() async {
       if (isAndroid) appIconServiceProvider.overrideWithValue(const MethodChannelAppIconService()),
       currentEmailProvider.overrideWithValue(client.auth.currentUser?.email),
     ],
-    child: OrganizacionalApp(router: router),
+    child: ShareIntentListener(
+      router: router,
+      isSignedIn: () => client.auth.currentSession != null,
+      child: OrganizacionalApp(router: router),
+    ),
   ));
 }

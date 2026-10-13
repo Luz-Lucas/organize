@@ -98,6 +98,31 @@ class MemoryRepository implements Repository {
   Future<void> deleteEvent(String id) => _write(() => _events.remove(id));
 
   @override
+  Future<void> upsertEvents(List<CalendarEvent> events) {
+    if (events.isEmpty) return Future.value();
+    return _write(() {
+      for (final e in events) {
+        _events[e.id] = e;
+      }
+    });
+  }
+
+  @override
+  Future<void> deleteEvents(List<String> ids) {
+    if (ids.isEmpty) return Future.value();
+    return _write(() => ids.forEach(_events.remove));
+  }
+
+  @override
+  Future<void> deleteSeries(String seriesId, {DateTime? from}) => _write(() => _events.removeWhere(
+      (_, e) => e.seriesId == seriesId && (from == null || !e.startsAt.isBefore(from))));
+
+  @override
+  Future<List<CalendarEvent>> listSeries(String seriesId) async =>
+      _events.values.where((e) => e.seriesId == seriesId).toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+  @override
   Stream<List<Notice>> watchNotices() => _watch(() {
         final epoch = DateTime(0);
         return _notices.values.toList()

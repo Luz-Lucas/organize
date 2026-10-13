@@ -313,8 +313,15 @@ class _EventBlock extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: style?.copyWith(fontWeight: FontWeight.w600)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: style?.copyWith(fontWeight: FontWeight.w600)),
+                  ),
+                  if (e.seriesId != null) Icon(Icons.repeat, size: 14, color: org.onAccent),
+                ],
+              ),
               if (placed.height >= 40)
                 Text(eventTimeLabel(e, day), maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
             ],

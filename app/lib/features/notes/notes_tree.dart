@@ -10,6 +10,7 @@ import '../../domain/space.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
+import '../import/import_flow.dart';
 import '../spaces/spaces_screen.dart' show iconForKind;
 
 const _accents = {
@@ -137,6 +138,18 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                 visualDensity: mobile ? null : VisualDensity.compact,
                 icon: const Icon(Icons.add, size: 20),
                 onPressed: () => _create(notes),
+              ),
+              PopupMenuButton<String>(
+                key: const Key('notes-menu'),
+                tooltip: 'Mais opções',
+                icon: const Icon(Icons.more_vert, size: 20),
+                padding: EdgeInsets.zero,
+                onSelected: (v) {
+                  if (v == 'import') runBatchImport(context, ref);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(key: Key('notes-import'), value: 'import', child: Text('Importar arquivos')),
+                ],
               ),
             ],
           ),

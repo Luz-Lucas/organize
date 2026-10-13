@@ -83,6 +83,37 @@ class SupabaseRepository implements Repository {
   Future<void> deleteEvent(String id) => _delete('events', id);
 
   @override
+  Future<void> upsertEvents(List<CalendarEvent> events) {
+    if (events.isEmpty) return Future.value();
+    return _guard(() async => await _db.from('events').upsert(events.map((e) => e.toMap()).toList()));
+  }
+
+  @override
+  Future<void> deleteEvents(List<String> ids) {
+    if (ids.isEmpty) return Future.value();
+    return _guard(() async => await _db.from('events').delete().inFilter('id', ids));
+  }
+
+  @override
+  Future<void> deleteSeries(String seriesId, {DateTime? from}) => _guard(() async {
+        var q = _db.from('events').delete().eq('series_id', seriesId);
+        if (from != null) q = q.gte('starts_at', from.toUtc().toIso8601String());
+        await q;
+      });
+
+  @override
+  Future<List<CalendarEvent>> listSeries(String seriesId) async {
+    try {
+      final rows = await _db.from('events').select().eq('series_id', seriesId).order('starts_at', ascending: true);
+      return rows.map<CalendarEvent>(CalendarEvent.fromMap).toList();
+    } on PostgrestException catch (e) {
+      throw RepositoryException(e.message);
+    } catch (e) {
+      throw RepositoryException('Falha de conexão: $e');
+    }
+  }
+
+  @override
   Stream<List<Notice>> watchNotices() => _db
       .from('notices')
       .stream(primaryKey: ['id'])

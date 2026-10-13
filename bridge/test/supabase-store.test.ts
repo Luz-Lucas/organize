@@ -161,4 +161,38 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
       location: { lat: -22.2, lon: -45.6, accuracyM: 12, reportedAt: got.location!.reportedAt },
     });
   });
+
+  it('loadOverrides devolve só as do usuário na janela; purgeOldOverrides apaga as antigas', async () => {
+    const mk = async (tag: string) => {
+      const u = await db.auth.admin.createUser({
+        email: `ponte-ovr-${tag}-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true,
+      });
+      if (u.error) throw u.error;
+      return u.data.user.id;
+    };
+    const uid = await mk('a');
+    const other = await mk('b');
+    const plan = async (u: string) => (await db.from('wake_plans')
+      .insert({ user_id: u, label: 'T', days: [1], time: '07:00', echo_device_id: 'E' }).select().single()).data!.id as string;
+    const mine = await plan(uid);
+    const theirs = await plan(other);
+    const ins = await db.from('wake_overrides').insert([
+      { user_id: uid, plan_id: mine, run_date: '2026-10-01', skip: true, time: null },
+      { user_id: uid, plan_id: mine, run_date: '2026-10-13', skip: true, time: null },
+      { user_id: uid, plan_id: mine, run_date: '2026-10-14', skip: false, time: '06:30' },
+      { user_id: uid, plan_id: mine, run_date: '2026-10-20', skip: false, time: '06:30' },
+      { user_id: other, plan_id: theirs, run_date: '2026-10-13', skip: true, time: null },
+    ]);
+    if (ins.error) throw ins.error;
+    const s = new SupabaseStore(db, uid, () => {});
+    const list = await s.loadOverrides('2026-10-12', '2026-10-14');
+    expect(list).toEqual([
+      { planId: mine, runDate: '2026-10-13', skip: true, time: null },
+      { planId: mine, runDate: '2026-10-14', skip: false, time: '06:30:00' },
+    ]);
+    await s.purgeOldOverrides('2026-10-10');
+    const left = (await db.from('wake_overrides').select('run_date, user_id').in('plan_id', [mine, theirs])).data!;
+    expect(left.map((r) => `${r.user_id === uid ? 'a' : 'b'}:${r.run_date}`).sort())
+      .toEqual(['a:2026-10-13', 'a:2026-10-14', 'a:2026-10-20', 'b:2026-10-13']);
+  });
 });

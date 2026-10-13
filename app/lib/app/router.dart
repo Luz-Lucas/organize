@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../features/agenda/agenda_screen.dart';
 import '../features/auth/login_screen.dart';
+import '../features/documents/documents_screen.dart';
+import '../features/github/github_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/home/wake_plan_screen.dart';
 import '../features/more/more_screen.dart';
@@ -59,6 +61,8 @@ GoRouter buildRouter({
             GoRoute(path: '/notas', builder: (context, state) => const NotesScreen()),
             GoRoute(path: '/mais', builder: (context, state) => const MoreScreen()),
             GoRoute(path: '/ajustes', builder: (context, state) => const SettingsScreen()),
+            GoRoute(path: '/documentos', builder: (context, state) => const DocumentsScreen()),
+            GoRoute(path: '/github', builder: (context, state) => const GithubScreen()),
             GoRoute(path: '/espacos', builder: (context, state) => const SpacesScreen()),
             GoRoute(
               path: '/espacos/:id',

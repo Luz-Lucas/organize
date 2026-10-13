@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../domain/alexa.dart';
+import '../domain/wake_override.dart';
 
 abstract interface class AlexaRepository {
   Stream<BridgeStatus?> watchStatus();
@@ -9,6 +10,15 @@ abstract interface class AlexaRepository {
   Stream<List<WakePlan>> watchWakePlans();
   Future<void> upsertWakePlan(WakePlan plan);
   Future<void> deleteWakePlan(String id);
+
+  /// Exceções de um dia só dos despertares ("só amanhã"), ordenadas por data.
+  Stream<List<WakeOverride>> watchOverrides();
+
+  /// Grava a exceção do dia; substitui a que já existir para o mesmo plano e data.
+  Future<void> setOverride(WakeOverride override);
+
+  /// Volta o despertar ao normal naquele dia (sem erro se não havia exceção).
+  Future<void> clearOverride(String planId, DateTime date);
 
   /// Enfileira um comando para a ponte e devolve o id.
   Future<String> sendCommand(String kind, Map<String, Object?> payload);

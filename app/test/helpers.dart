@@ -6,7 +6,12 @@ import 'package:organizacional/app/back_navigation.dart';
 import 'package:organizacional/app/providers.dart';
 import 'package:organizacional/app/router.dart';
 import 'package:organizacional/data/alexa_repository.dart';
+import 'package:organizacional/data/drive_repository.dart';
 import 'package:organizacional/data/email_repository.dart';
+import 'package:organizacional/data/file_picker_service.dart';
+import 'package:organizacional/data/memory_drive_repository.dart';
+import 'package:organizacional/data/github_repository.dart';
+import 'package:organizacional/data/memory_github_repository.dart';
 import 'package:organizacional/data/memory_email_repository.dart';
 import 'package:organizacional/data/location_repository.dart';
 import 'package:organizacional/data/memory_location_repository.dart';
@@ -32,6 +37,9 @@ Future<void> pumpApp(
   SettingsRepository? settings,
   LocationRepository? locationRepo,
   EmailRepository? emailRepo,
+  DriveRepository? driveRepo,
+  FilePickerService? filePicker,
+  GithubRepository? githubRepo,
   LocationService? locationService,
   void Function()? exitApp,
 }) async {
@@ -48,6 +56,9 @@ Future<void> pumpApp(
       settingsRepositoryProvider.overrideWithValue(settings ?? MemorySettingsRepository()),
       locationRepositoryProvider.overrideWithValue(locationRepo ?? MemoryLocationRepository()),
       emailRepositoryProvider.overrideWithValue(emailRepo ?? MemoryEmailRepository()),
+      driveRepositoryProvider.overrideWithValue(driveRepo ?? MemoryDriveRepository()),
+      if (filePicker != null) filePickerProvider.overrideWithValue(filePicker),
+      githubRepositoryProvider.overrideWithValue(githubRepo ?? MemoryGithubRepository()),
       if (locationService != null) locationServiceProvider.overrideWithValue(locationService),
       googleFontsEnabledProvider.overrideWithValue(false),
       if (exitApp != null) exitAppProvider.overrideWithValue(exitApp),

@@ -7,6 +7,7 @@ import '../../data/repository.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
+import 'drive_card.dart';
 import 'gmail_card.dart';
 import 'home_location_card.dart';
 
@@ -76,6 +77,11 @@ class SettingsScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: GmailCard(),
+            ),
+            const SectionHeader('Documentos'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: DriveCard(),
             ),
             const SectionHeader('Conta'),
             Padding(
