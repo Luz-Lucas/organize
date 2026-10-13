@@ -135,6 +135,23 @@ class PageDoc {
     );
   }
 
+  /// Descarta os tombstones de ids que **não existiam em [before]** (nem vivos,
+  /// nem apagados): itens que nasceram e morreram dentro do mesmo gesto e que
+  /// nenhum outro aparelho jamais viu. A borracha parcial refaz o documento a
+  /// cada movimento (apaga os pedaços do passo anterior e cria outros), e sem
+  /// esta poda cada gesto deixava centenas de tombstones inúteis. Os tombstones
+  /// de [before] e os de itens que existiam lá são mantidos, para que a
+  /// exclusão continue se propagando no merge.
+  PageDoc withoutEphemeralTombstones(PageDoc before) {
+    if (deleted.isEmpty) return this;
+    final keep = {
+      for (final id in deleted)
+        if (before.deleted.contains(id) || before.contains(id)) id,
+    };
+    if (keep.length == deleted.length) return this;
+    return PageDoc._(strokes, texts, images, Set.unmodifiable(keep));
+  }
+
   /// União por id menos tombstones; comutativa, associativa e idempotente.
   /// Itens ficam em ordem canônica (por id).
   PageDoc merge(PageDoc other) {

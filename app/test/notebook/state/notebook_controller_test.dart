@@ -115,10 +115,10 @@ void main() {
     final c = await started(t);
     final statuses = <SaveStatus>[];
     c.statusChanges.listen(statuses.add);
-    c.updatePage(0, docOf(['s1']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1']));
     expect(c.status, SaveStatus.saving);
     await t.pump(const Duration(milliseconds: 1000));
-    c.updatePage(0, docOf(['s1', 's2']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1', 's2']));
     await t.pump(const Duration(milliseconds: 1000)); // 2 s desde o 1º gesto, 1 s desde o último
     expect(repo.saveCount, 0);
     expect(c.status, SaveStatus.saving);
@@ -133,7 +133,7 @@ void main() {
 
   testWidgets('flush() grava na hora, sem esperar o debounce', (t) async {
     final c = await started(t);
-    c.updatePage(0, docOf(['s1']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1']));
     unawaited(c.flush());
     await settle(t);
     expect(repo.saveCount, 1);
@@ -145,9 +145,9 @@ void main() {
 
   testWidgets('editar durante uma gravação em andamento regrava depois, sem perder nada', (t) async {
     final c = await started(t);
-    c.updatePage(0, docOf(['s1']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1']));
     unawaited(c.flush());
-    c.updatePage(0, docOf(['s1', 's2'])); // chegou com a gravação em voo
+    c.updatePage(c.currentPages[0].id, docOf(['s1', 's2'])); // chegou com a gravação em voo
     await settle(t);
     await t.pump(_debounce);
     await settle(t);
@@ -161,8 +161,8 @@ void main() {
     unawaited(b.start());
     await settle(t);
     // Os dois partem da mesma página vazia (versão 0) e desenham coisas diferentes.
-    a.updatePage(0, docOf(['a1', 'a2']));
-    b.updatePage(0, docOf(['b1']));
+    a.updatePage(a.currentPages[0].id, docOf(['a1', 'a2']));
+    b.updatePage(b.currentPages[0].id, docOf(['b1']));
     await t.pump(_debounce);
     await settle(t);
     final want = {'a1', 'a2', 'b1'};
@@ -175,7 +175,7 @@ void main() {
 
   testWidgets('um aparelho apaga o traço e o outro (sem saber) continua desenhando: o apagado não volta', (t) async {
     final a = await started(t);
-    a.updatePage(0, docOf(['x', 'y']));
+    a.updatePage(a.currentPages[0].id, docOf(['x', 'y']));
     await a.flush();
     final b = make();
     unawaited(b.start());
@@ -185,8 +185,8 @@ void main() {
     ]);
     // A apaga x; B, que ainda não recebeu, acrescenta z.
     repo.failWrites = false;
-    a.updatePage(0, a.currentPages.single.doc.without(['x']));
-    b.updatePage(0, b.currentPages.single.doc.withStroke(stroke('z')));
+    a.updatePage(a.currentPages[0].id, a.currentPages.single.doc.without(['x']));
+    b.updatePage(b.currentPages[0].id, b.currentPages.single.doc.withStroke(stroke('z')));
     await a.flush();
     await b.flush();
     await settle(t);
@@ -202,7 +202,7 @@ void main() {
   testWidgets('offline: avisa "sem conexão", guarda no aparelho e envia quando a rede volta', (t) async {
     final c = await started(t);
     repo.failWrites = true;
-    c.updatePage(0, docOf(['s1']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1']));
     await t.pump(_debounce);
     await settle(t);
     expect(c.status, SaveStatus.offline);
@@ -210,7 +210,7 @@ void main() {
     final saved = await pending.load('n1');
     expect(saved, isNotNull); // "salvo no aparelho"
     // Continua desenhando offline: segue offline e atualiza a cópia local.
-    c.updatePage(0, docOf(['s1', 's2']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1', 's2']));
     expect(c.status, SaveStatus.offline);
     // Volta a rede: a próxima tentativa automática envia tudo.
     repo.failWrites = false;
@@ -226,7 +226,7 @@ void main() {
   testWidgets('as tentativas offline espaçam (recuo) e não martelam o servidor', (t) async {
     final c = await started(t);
     repo.failWrites = true;
-    c.updatePage(0, docOf(['s1']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1']));
     await t.pump(_debounce);
     await settle(t);
     var attempts = 0;
@@ -241,7 +241,7 @@ void main() {
   testWidgets('fechar o app offline e reabrir: a tinta guardada no aparelho é enviada', (t) async {
     final c = await started(t);
     repo.failWrites = true;
-    c.updatePage(0, docOf(['s1']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1']));
     await t.pump(_debounce);
     await settle(t);
     c.dispose();
@@ -262,7 +262,7 @@ void main() {
 
   testWidgets('descartar o controller com alterações pendentes guarda tudo no aparelho', (t) async {
     final c = await started(t);
-    c.updatePage(0, docOf(['s1']));
+    c.updatePage(c.currentPages[0].id, docOf(['s1']));
     c.dispose();
     made.remove(c);
     await settle(t);
@@ -279,7 +279,7 @@ void main() {
     expect(c.currentPages, hasLength(2));
     expect(c.currentPages[1].background, PageBackground.dots);
     expect(c.status, SaveStatus.offline);
-    c.updatePage(1, docOf(['n']));
+    c.updatePage(c.currentPages[1].id, docOf(['n']));
     repo.failWrites = false;
     await t.pump(const Duration(seconds: 70));
     await settle(t);
@@ -303,9 +303,9 @@ void main() {
 
   testWidgets('deletePage some na hora, reindexa e apaga no servidor', (t) async {
     final c = await started(t, pages: 3);
-    c.updatePage(2, docOf(['last']));
+    c.updatePage(c.currentPages[2].id, docOf(['last']));
     await c.flush();
-    c.deletePage(0);
+    c.deletePage(c.currentPages[0].id);
     expect(c.currentPages, hasLength(2));
     expect(c.currentPages.map((p) => p.idx), [0, 1]);
     await settle(t);
@@ -317,9 +317,9 @@ void main() {
 
   testWidgets('duplicatePage copia fundo e tinta logo depois, inclusive o que ainda não foi salvo', (t) async {
     final c = await started(t, pages: 2);
-    c.setBackground(0, PageBackground.grid);
-    c.updatePage(0, docOf(['s1']));
-    c.duplicatePage(0);
+    c.setBackground(c.currentPages[0].id, PageBackground.grid);
+    c.updatePage(c.currentPages[0].id, docOf(['s1']));
+    c.duplicatePage(c.currentPages[0].id);
     expect(c.currentPages, hasLength(3));
     expect(c.currentPages[1].background, PageBackground.grid);
     expect({for (final s in c.currentPages[1].doc.strokes) s.id}, {'s1'});
@@ -337,7 +337,7 @@ void main() {
 
   testWidgets('setBackground grava só o fundo (sem reenviar a tinta)', (t) async {
     final c = await started(t);
-    c.setBackground(0, PageBackground.dots);
+    c.setBackground(c.currentPages[0].id, PageBackground.dots);
     await settle(t);
     expect((await repo.listPages('n1')).single.background, PageBackground.dots);
     expect(repo.saveCount, 0);
@@ -346,7 +346,7 @@ void main() {
 
   testWidgets('página criada ou editada em outro aparelho chega e é mesclada ao que está na tela', (t) async {
     final c = await started(t);
-    c.updatePage(0, docOf(['mine']));
+    c.updatePage(c.currentPages[0].id, docOf(['mine']));
     final other = (await repo.listPages('n1')).single;
     await repo.savePage(other.copyWith(data: enc(['theirs'])));
     await repo.addPage('n1');
@@ -370,7 +370,7 @@ void main() {
 
     final second = await started(t, noteId: 'n2', pages: 2);
     final target = (await repo.listPages('n2')).first;
-    second.updatePage(0, docOf(['precious']));
+    second.updatePage(second.currentPages[0].id, docOf(['precious']));
     await repo.deletePage(target.id);
     await settle(t);
     await second.flush();
@@ -379,17 +379,64 @@ void main() {
     expect(left.any((p) => idsOf(p.data).contains('precious')), isTrue);
   });
 
+  testWidgets('as operações usam o id: apagar uma página antes não desloca a tinta das outras', (t) async {
+    final c = await started(t, pages: 3);
+    final ids = [for (final p in c.currentPages) p.id];
+    c.updatePage(ids[2], docOf(['c']));
+    c.deletePage(ids[0]);
+    c.updatePage(ids[1], docOf(['b'])); // o índice 1 agora seria outra página; o id não muda
+    await settle(t);
+    await t.pump(_debounce);
+    await settle(t);
+    expect(c.currentPages.map((p) => p.id), [ids[1], ids[2]]);
+    expect(idsPerPage(c), [
+      {'b'},
+      {'c'},
+    ]);
+    final pages = await repo.listPages('n1');
+    expect(pages.map((p) => p.id), [ids[1], ids[2]]);
+    expect(pages.map((p) => idsOf(p.data)), [
+      {'b'},
+      {'c'},
+    ]);
+  });
+
+  testWidgets('página inserida por outro aparelho no meio mantém ids, ordem e tinta de cada uma', (t) async {
+    final c = await started(t, pages: 2);
+    final ids = [for (final p in c.currentPages) p.id];
+    c.updatePage(ids[0], docOf(['a']));
+    c.updatePage(ids[1], docOf(['b']));
+    await t.pump(_debounce);
+    await settle(t);
+    final inserted = await repo.addPage('n1', at: 1);
+    await settle(t);
+    expect(c.currentPages.map((p) => p.id), [ids[0], inserted.id, ids[1]]);
+    expect(idsPerPage(c), [
+      {'a'},
+      <String>{},
+      {'b'},
+    ]);
+    c.updatePage(ids[1], docOf(['b', 'b2']));
+    await t.pump(_debounce);
+    await settle(t);
+    expect((await repo.listPages('n1')).map((p) => idsOf(p.data)), [
+      {'a'},
+      <String>{},
+      {'b', 'b2'},
+    ]);
+  });
+
   testWidgets('imagens vêm do store injetado', (t) async {
     final c = await started(t);
     expect(await c.images.upload(Uint8List(1), 'png'), 'p.png');
   });
 
-  testWidgets('updatePage/deletePage com idx inválido é ignorado', (t) async {
+  testWidgets('updatePage/deletePage com id desconhecido é ignorado', (t) async {
     final c = await started(t);
-    c.updatePage(5, docOf(['x']));
-    c.deletePage(9);
-    c.setBackground(3, PageBackground.blank);
-    c.duplicatePage(7);
+    c.updatePage('nao-existe', docOf(['x']));
+    c.deletePage('nao-existe');
+    c.setBackground('nao-existe', PageBackground.blank);
+    c.duplicatePage('nao-existe');
     await settle(t);
     expect(c.currentPages, hasLength(1));
     expect(c.status, SaveStatus.saved);

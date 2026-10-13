@@ -31,4 +31,38 @@ void main() {
     await store.clear('n1');
     expect(await store.load('n1'), isNull);
   });
+
+  test('shared_preferences: lista os cadernos com pendência (e só eles)', () async {
+    SharedPreferences.setMockInitialValues({'outra.chave': 'x'});
+    const store = SharedPreferencesNotebookPendingStore();
+    expect(await store.pendingNoteIds(), isEmpty);
+    await store.save('n1', {'v': 1});
+    await store.save('n2', {'v': 1});
+    await store.savePagesCache('n3', {'pages': []});
+    expect((await store.pendingNoteIds())..sort(), ['n1', 'n2']);
+    await store.clear('n1');
+    expect(await store.pendingNoteIds(), ['n2']);
+  });
+
+  test('shared_preferences: cache da lista de páginas por caderno, separado da fila', () async {
+    const store = SharedPreferencesNotebookPendingStore();
+    expect(await store.loadPagesCache('n1'), isNull);
+    await store.savePagesCache('n1', {'pages': [{'id': 'p'}]});
+    expect(await store.loadPagesCache('n1'), {'pages': [{'id': 'p'}]});
+    expect(await store.load('n1'), isNull);
+    await store.clear('n1'); // limpar a fila não apaga o cache
+    expect(await store.loadPagesCache('n1'), isNotNull);
+    await store.clearPagesCache('n1');
+    expect(await store.loadPagesCache('n1'), isNull);
+  });
+
+  test('em memória: pendingNoteIds e cache têm o mesmo contrato', () async {
+    final store = MemoryNotebookPendingStore();
+    await store.save('n1', {'a': 1});
+    await store.savePagesCache('n2', {'pages': []});
+    expect(await store.pendingNoteIds(), ['n1']);
+    expect(await store.loadPagesCache('n2'), {'pages': []});
+    await store.clearPagesCache('n2');
+    expect(await store.loadPagesCache('n2'), isNull);
+  });
 }

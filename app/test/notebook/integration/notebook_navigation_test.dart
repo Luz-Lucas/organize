@@ -134,7 +134,7 @@ void main() {
       await tester.pumpAndSettle();
       final container = ProviderScope.containerOf(tester.element(find.byKey(_notebookScreen)));
       final controller = container.read(notebookControllerProvider('c1'));
-      controller.updatePage(0, docOf(['s1']));
+      controller.updatePage(controller.currentPages[0].id, docOf(['s1']));
       await back(tester); // sai logo, antes dos 1,5 s
       expect(find.byKey(_notebookScreen), findsNothing);
       expect(idsOf((await nb.listPages('c1')).single.data), isEmpty);

@@ -49,12 +49,17 @@ double _xScale(Matrix4 m) => math.sqrt(m.storage[0] * m.storage[0] + m.storage[1
 
 const int kMaxImageBytes = 10 * 1024 * 1024;
 
+/// Estado de uma página na tela. Casado com a sessão **pelo id** da página.
 class _Slot {
-  _Slot(this.doc, this.background);
+  _Slot(this.id, this.doc, this.background, this.notice);
 
+  final String id;
   PageDoc doc;
   PageBackground background;
+  PageNotice notice;
   History history = const History();
+
+  bool get readOnly => notice == PageNotice.newerVersion;
 }
 
 /// Tela do Caderno (rota `/caderno/:id`): páginas A4 em rolagem vertical,
@@ -90,8 +95,10 @@ class _NotebookScreenState extends State<NotebookScreen> {
   late SaveStatus _status = widget.session.status;
 
   ToolSettings _settings = const ToolSettings();
-  int _active = 0;
-  int _selPage = -1;
+
+  /// Página ativa e página da seleção, por id (o índice muda quando a lista muda).
+  String? _activeId;
+  String? _selPageId;
   Set<String> _selIds = const {};
   PageDoc? _clip;
 
@@ -123,6 +130,27 @@ class _NotebookScreenState extends State<NotebookScreen> {
     super.dispose();
   }
 
+  _Slot? _slotById(String? id) {
+    if (id == null) return null;
+    for (final s in _slots) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
+
+  int _indexOfId(String? id) => id == null ? -1 : _slots.indexWhere((s) => s.id == id);
+
+  /// Índice da página ativa (a primeira, se a ativa sumiu).
+  int get _active {
+    final i = _indexOfId(_activeId);
+    return i >= 0 ? i : 0;
+  }
+
+  void _clearSelection() {
+    _selIds = const {};
+    _selPageId = null;
+  }
+
   void _onTransform() {
     final s = _xScale(_tc.value);
     if (s != _zoom.value) _zoom.value = s;
@@ -134,60 +162,68 @@ class _NotebookScreenState extends State<NotebookScreen> {
     if (!mounted) return;
     setState(() {
       _loaded = true;
-      for (var i = 0; i < list.length; i++) {
-        final p = list[i];
-        if (i < _slots.length) {
-          final s = _slots[i];
-          s.background = p.background;
-          if (!identical(p.doc, s.doc)) {
-            final merged = s.doc.merge(p.doc);
-            if (merged != s.doc) s.doc = merged;
-          }
-        } else {
-          _slots.add(_Slot(p.doc, p.background));
+      final known = {for (final s in _slots) s.id: s};
+      final next = <_Slot>[];
+      for (final p in list) {
+        final s = known[p.id];
+        if (s == null) {
+          next.add(_Slot(p.id, p.doc, p.background, p.notice));
+          continue;
         }
+        s.background = p.background;
+        s.notice = p.notice;
+        if (!identical(p.doc, s.doc)) {
+          final merged = s.doc.merge(p.doc);
+          if (merged != s.doc) s.doc = merged;
+        }
+        next.add(s);
       }
-      if (_slots.length > list.length) _slots.removeRange(list.length, _slots.length);
-      _active = _slots.isEmpty ? 0 : _active.clamp(0, _slots.length - 1);
+      _slots
+        ..clear()
+        ..addAll(next);
+      if (_slotById(_activeId) == null) _activeId = _slots.isEmpty ? null : _slots.first.id;
       _cleanSelection();
     });
   }
 
   void _cleanSelection() {
     if (_selIds.isEmpty) return;
-    if (_selPage < 0 || _selPage >= _slots.length) {
-      _selIds = const {};
-      _selPage = -1;
+    final page = _slotById(_selPageId);
+    if (page == null) {
+      _clearSelection();
       return;
     }
-    final doc = _slots[_selPage].doc;
+    final doc = page.doc;
     final keep = {for (final id in _selIds) if (doc.contains(id)) id};
     if (keep.length != _selIds.length) _selIds = keep;
   }
 
-  void _commit(int idx, PageDoc before, PageDoc after) {
-    if (idx >= _slots.length || identical(before, after)) return;
-    final s = _slots[idx];
+  void _commit(String id, PageDoc before, PageDoc after) {
+    final s = _slotById(id);
+    if (s == null || s.readOnly || identical(before, after)) return;
+    // Itens que nasceram e morreram dentro do gesto (pedaços da borracha parcial)
+    // não precisam de tombstone: nenhum outro aparelho os viu.
+    final settled = after.withoutEphemeralTombstones(before);
     setState(() {
-      s.history = s.history.record(before, after);
-      s.doc = identical(s.doc, before) ? after : s.doc.merge(after);
-      _active = idx;
+      s.history = s.history.record(before, settled);
+      s.doc = identical(s.doc, before) ? settled : s.doc.merge(settled);
+      _activeId = id;
     });
-    widget.session.updatePage(idx, s.doc);
+    widget.session.updatePage(id, s.doc);
   }
 
   void _undoRedo({required bool undo}) {
     if (_slots.isEmpty) return;
     final s = _slots[_active];
+    if (s.readOnly) return;
     final step = undo ? s.history.undo(s.doc) : s.history.redo(s.doc);
     if (step == null) return;
     setState(() {
       s.history = step.history;
       s.doc = step.doc;
-      _selIds = const {};
-      _selPage = -1;
+      _clearSelection();
     });
-    widget.session.updatePage(_active, s.doc);
+    widget.session.updatePage(s.id, s.doc);
   }
 
   // ---- ferramentas --------------------------------------------------------
@@ -196,10 +232,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
 
   void _setSettings(ToolSettings s) {
     setState(() {
-      if (s.kind != _settings.kind && s.kind != ToolKind.lasso) {
-        _selIds = const {};
-        _selPage = -1;
-      }
+      if (s.kind != _settings.kind && s.kind != ToolKind.lasso) _clearSelection();
       _settings = s;
     });
   }
@@ -215,60 +248,60 @@ class _NotebookScreenState extends State<NotebookScreen> {
   // ---- seleção ------------------------------------------------------------
 
   void _copySelection() {
-    if (_selPage < 0 || _selIds.isEmpty) return;
-    setState(() => _clip = extractItems(_slots[_selPage].doc, _selIds));
+    final page = _slotById(_selPageId);
+    if (page == null || _selIds.isEmpty) return;
+    setState(() => _clip = extractItems(page.doc, _selIds));
   }
 
   void _deleteSelection() {
-    if (_selPage < 0 || _selIds.isEmpty) return;
-    final idx = _selPage;
+    final page = _slotById(_selPageId);
+    if (page == null || _selIds.isEmpty) return;
     final ids = _selIds;
-    final before = _slots[idx].doc;
-    setState(() {
-      _selIds = const {};
-      _selPage = -1;
-    });
-    _commit(idx, before, before.without(ids));
+    final before = page.doc;
+    setState(_clearSelection);
+    _commit(page.id, before, before.without(ids));
   }
 
   Future<void> _recolorSelection() async {
-    if (_selPage < 0 || _selIds.isEmpty) return;
+    final target = _selPageId;
+    if (_slotById(target) == null || _selIds.isEmpty) return;
     final org = context.org;
     final c = await showDialog<Color>(
       context: context,
       builder: (_) => _ColorDialog(initial: Color(_penArgb(org))),
     );
-    if (c == null || !mounted || _selPage < 0) return;
-    final idx = _selPage;
-    final before = _slots[idx].doc;
+    final page = _slotById(target);
+    if (c == null || !mounted || page == null || _selPageId != target) return;
+    final before = page.doc;
     final r = recolorMapped(before, _selIds, c.toARGB32());
     setState(() => _selIds = {for (final id in _selIds) r.idMap[id] ?? id});
-    _commit(idx, before, r.doc);
+    _commit(page.id, before, r.doc);
   }
 
   void _pasteClip() {
     final clip = _clip;
     if (clip == null || _slots.isEmpty) return;
-    final idx = _active;
-    final before = _slots[idx].doc;
+    final page = _slots[_active];
+    final before = page.doc;
     final r = pasteDocMapped(before, clip, dx: 30, dy: 30);
     setState(() {
-      _selPage = idx;
+      _selPageId = page.id;
       _selIds = r.idMap.values.toSet();
     });
-    _commit(idx, before, r.doc);
+    _commit(page.id, before, r.doc);
   }
 
   // ---- texto --------------------------------------------------------------
 
-  Future<void> _editText(int idx, Offset at, TextBox? existing) async {
+  Future<void> _editText(String pageId, Offset at, TextBox? existing) async {
     final org = context.org;
     final res = await showDialog<_TextResult>(
       context: context,
       builder: (_) => _TextDialog(initial: existing?.text ?? '', canDelete: existing != null),
     );
-    if (res == null || !mounted || idx >= _slots.length) return;
-    final before = _slots[idx].doc;
+    final page = _slotById(pageId);
+    if (res == null || !mounted || page == null) return;
+    final before = page.doc;
     var after = before;
     if (existing != null) after = after.without({existing.id});
     final text = res.text.trim();
@@ -282,7 +315,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
         TextBox(id: newInkId(), x: x, y: y, w: w, text: text, size: size, argb: argb),
       );
     }
-    _commit(idx, before, after);
+    _commit(pageId, before, after);
   }
 
   // ---- imagem -------------------------------------------------------------
@@ -290,7 +323,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
   Future<void> _insertImage() async {
     if (_slots.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
-    final idx = _active;
+    final pageId = _slots[_active].id; // fixa a página já: a lista pode mudar durante o envio
     final picked = await (widget.pickImage ?? pickImageFromSystem)();
     if (picked == null || !mounted) return;
     if (picked.bytes.length > kMaxImageBytes) {
@@ -308,10 +341,11 @@ class _NotebookScreenState extends State<NotebookScreen> {
         codec.dispose();
       }
       final path = await widget.session.images.upload(picked.bytes, picked.ext);
-      if (!mounted || idx >= _slots.length) return;
+      final page = _slotById(pageId);
+      if (!mounted || page == null) return; // a página foi apagada enquanto isso
       final bw = math.min(500.0, w.toDouble());
       final bh = bw * h / math.max(w, 1);
-      final before = _slots[idx].doc;
+      final before = page.doc;
       final box = ImageBox(
         id: newInkId(),
         x: (pageWidth - bw) / 2,
@@ -320,9 +354,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
         h: math.min(bh, pageHeight - 200),
         path: path,
       );
-      _commit(idx, before, before.withImage(box));
+      _commit(pageId, before, before.withImage(box));
       setState(() {
-        _selPage = idx;
+        _selPageId = pageId;
         _selIds = {box.id};
         _settings = _settings.copyWith(kind: ToolKind.lasso);
       });
@@ -333,11 +367,12 @@ class _NotebookScreenState extends State<NotebookScreen> {
 
   // ---- páginas ------------------------------------------------------------
 
-  Future<void> _deletePage(int idx) async {
+  Future<void> _deletePage(String pageId) async {
+    final number = _indexOfId(pageId) + 1;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Apagar a página ${idx + 1}?'),
+        title: Text('Apagar a página $number?'),
         content: const Text('O conteúdo da página será apagado.'),
         actions: [
           TextButton(
@@ -353,18 +388,16 @@ class _NotebookScreenState extends State<NotebookScreen> {
         ],
       ),
     );
-    if (ok != true || !mounted || idx >= _slots.length) return;
+    final idx = _indexOfId(pageId);
+    if (ok != true || !mounted || idx < 0) return;
     setState(() {
       _slots.removeAt(idx);
-      if (_selPage == idx) {
-        _selIds = const {};
-        _selPage = -1;
-      } else if (_selPage > idx) {
-        _selPage--;
+      if (_selPageId == pageId) _clearSelection();
+      if (_activeId == pageId) {
+        _activeId = _slots.isEmpty ? null : _slots[idx.clamp(0, _slots.length - 1)].id;
       }
-      _active = _slots.isEmpty ? 0 : _active.clamp(0, _slots.length - 1);
     });
-    widget.session.deletePage(idx);
+    widget.session.deletePage(pageId);
   }
 
   // ---- zoom / rolagem -----------------------------------------------------
@@ -469,9 +502,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
             onSettings: _setSettings,
             onCustomColor: _pickCustomColor,
             onBackground: (b) {
-              if (slot == null) return;
+              if (slot == null || slot.readOnly) return;
               setState(() => slot.background = b);
-              widget.session.setBackground(_active, b);
+              widget.session.setBackground(slot.id, b);
             },
             onAddPage: widget.session.addPage,
             onInsertImage: _insertImage,
@@ -487,6 +520,8 @@ class _NotebookScreenState extends State<NotebookScreen> {
     SaveStatus.saving => 'Salvando…',
     SaveStatus.saved => 'Salvo',
     SaveStatus.offline => 'Sem conexão (salvo no aparelho)',
+    SaveStatus.problem => 'Algumas alterações não puderam ser salvas',
+    SaveStatus.noteDeleted => 'Este caderno foi excluído em outro aparelho',
   };
 
   Widget _selectionBar(BuildContext context) {
@@ -600,6 +635,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
     final org = context.org;
     final slot = _slots[i];
     return SizedBox(
+      key: ValueKey('nb-block-${slot.id}'),
       width: pageW,
       height: headerH + pageH + gap,
       child: Column(
@@ -612,7 +648,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
                 Text(
                   'Página ${i + 1}',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: i == _active ? org.accentText : org.inkMuted,
+                    color: slot.id == _slots[_active].id ? org.accentText : org.inkMuted,
                   ),
                 ),
                 const Spacer(),
@@ -621,50 +657,95 @@ class _NotebookScreenState extends State<NotebookScreen> {
                   tooltip: 'Duplicar página',
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.copy_all_outlined, size: 20),
-                  onPressed: () => widget.session.duplicatePage(i),
+                  onPressed: () => widget.session.duplicatePage(slot.id),
                 ),
                 IconButton(
                   key: ValueKey('nb-page-del-$i'),
                   tooltip: 'Apagar página',
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.delete_outline, size: 20),
-                  onPressed: _slots.length > 1 ? () => _deletePage(i) : null,
+                  onPressed: _slots.length > 1 ? () => _deletePage(slot.id) : null,
                 ),
               ],
             ),
           ),
           DecoratedBox(
             decoration: BoxDecoration(
-              border: Border.all(color: i == _active ? org.accent : org.line),
+              border: Border.all(color: slot.id == _slots[_active].id ? org.accent : org.line),
               boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 2))],
             ),
             child: SizedBox(
               width: pageW,
               height: pageH,
-              child: FittedBox(
-                fit: BoxFit.fill,
-                child: InkPageView(
-                  index: i,
-                  doc: slot.doc,
-                  background: slot.background,
-                  settings: _settings,
-                  penArgb: penArgb,
-                  selection: i == _selPage ? _selIds : const {},
-                  imageStore: widget.session.images,
-                  onEdit: (b, a) => _commit(i, b, a),
-                  onSelectionChanged: (ids) => setState(() {
-                    _selPage = ids.isEmpty ? -1 : i;
-                    _selIds = ids;
-                  }),
-                  onActivate: () {
-                    if (_active != i) setState(() => _active = i);
-                  },
-                  onTextTap: (at, existing) => _editText(i, at, existing),
-                ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      ignoring: slot.readOnly,
+                      child: FittedBox(
+                        fit: BoxFit.fill,
+                        child: InkPageView(
+                          index: i,
+                          doc: slot.doc,
+                          background: slot.background,
+                          settings: _settings,
+                          penArgb: penArgb,
+                          selection: slot.id == _selPageId ? _selIds : const {},
+                          imageStore: widget.session.images,
+                          onEdit: (b, a) => _commit(slot.id, b, a),
+                          onSelectionChanged: (ids) => setState(() {
+                            _selPageId = ids.isEmpty ? null : slot.id;
+                            _selIds = ids;
+                          }),
+                          onActivate: () {
+                            if (_activeId != slot.id) setState(() => _activeId = slot.id);
+                          },
+                          onTextTap: (at, existing) => _editText(slot.id, at, existing),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (slot.notice != PageNotice.none)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: IgnorePointer(child: _NoticeBanner(notice: slot.notice)),
+                    ),
+                ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Faixa de aviso no topo de uma página.
+class _NoticeBanner extends StatelessWidget {
+  const _NoticeBanner({required this.notice});
+
+  final PageNotice notice;
+
+  static String text(PageNotice n) => switch (n) {
+    PageNotice.none => '',
+    PageNotice.nearLimit => 'Esta página está quase no limite de tamanho — considere continuar em outra página',
+    PageNotice.tooLarge => 'Página grande demais — divida em outra página',
+    PageNotice.newerVersion => 'Esta página foi feita numa versão mais nova do app',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final org = context.org;
+    final severe = notice != PageNotice.nearLimit;
+    return Container(
+      key: ValueKey('nb-notice-${notice.name}'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: severe ? org.accentSoft : org.accentSoft.withValues(alpha: 0.7),
+      child: Text(
+        text(notice),
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: org.accentText),
       ),
     );
   }

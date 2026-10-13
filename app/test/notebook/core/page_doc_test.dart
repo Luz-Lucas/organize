@@ -271,4 +271,49 @@ void main() {
       }
     });
   });
+
+  group('tombstones de um gesto (borracha parcial)', () {
+    // A borracha parcial refaz o documento a cada movimento: cada passo apaga os
+    // pedaços do passo anterior e cria outros. Só o traço original precisa de tombstone.
+    PageDoc sweep(PageDoc before, int moves) {
+      var doc = before;
+      for (var i = 0; i < moves; i++) {
+        final x = 20.0 + i * 12;
+        doc = erasePartial(doc, [Offset(x, 80), Offset(x, 120)], 6, newInkId);
+      }
+      return doc;
+    }
+
+    test('sem poda, 30 movimentos acumulam dezenas de tombstones', () {
+      final before = PageDoc.empty.withStroke(lineStroke('a', const Offset(0, 100), const Offset(400, 100), n: 200));
+      final after = sweep(before, 30);
+      expect(after.deleted.length, greaterThan(20));
+    });
+
+    test('withoutEphemeralTombstones guarda só o que existia antes do gesto', () {
+      final before = PageDoc.empty.withStroke(lineStroke('a', const Offset(0, 100), const Offset(400, 100), n: 200));
+      final after = sweep(before, 30);
+      final pruned = after.withoutEphemeralTombstones(before);
+      expect(pruned.deleted, {'a'});
+      // O conteúdo vivo não muda.
+      expect(pruned.strokes, after.strokes);
+      // E o merge com quem ainda tem o traço original continua apagando-o.
+      expect(before.merge(pruned).strokes.map((s) => s.id).toSet(), after.strokes.map((s) => s.id).toSet());
+    });
+
+    test('tombstones que já existiam antes continuam, inclusive de itens ausentes', () {
+      final before = PageDoc.empty
+          .withStroke(lineStroke('a', const Offset(0, 100), const Offset(400, 100)))
+          .without(['velho', 'a']);
+      final after = before.withStroke(lineStroke('b', const Offset(0, 5), const Offset(50, 5))).without(['b']);
+      final pruned = after.withoutEphemeralTombstones(before);
+      expect(pruned.deleted, {'velho', 'a'});
+    });
+
+    test('devolve o mesmo documento quando não há o que podar', () {
+      final before = PageDoc.empty.withStroke(lineStroke('a', const Offset(0, 100), const Offset(400, 100)));
+      final after = before.without(['a']);
+      expect(identical(after.withoutEphemeralTombstones(before), after), isTrue);
+    });
+  });
 }

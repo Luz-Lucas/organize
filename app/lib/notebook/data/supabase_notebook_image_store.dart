@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/painting.dart' show ImageProvider, NetworkImage;
@@ -30,6 +31,7 @@ class SupabaseNotebookImageStore implements NotebookImageStore, NotebookImagePur
 
   static const bucket = 'notebook-images';
   static const maxBytes = 10 * 1024 * 1024;
+  static const _listPageSize = 100;
   static const _signedFor = Duration(hours: 1);
   static const _renewBefore = Duration(minutes: 10);
 
@@ -97,15 +99,26 @@ class SupabaseNotebookImageStore implements NotebookImageStore, NotebookImagePur
   }
 
   /// Apaga todas as imagens do caderno (`<user>/<nota>/*`).
+  ///
+  /// A listagem do Storage devolve no máximo [_listPageSize] arquivos por chamada,
+  /// então lê página por página (`offset`) até acabar, antes de apagar em lotes.
   @override
   Future<void> purgeAll() async {
     final user = _userId();
     if (user == null) return;
     final folder = '$user/$noteId';
     await _guard(() async {
-      final files = await _db.storage.from(bucket).list(path: folder);
-      final paths = [for (final f in files) if (f.name.isNotEmpty) '$folder/${f.name}'];
-      if (paths.isNotEmpty) await _db.storage.from(bucket).remove(paths);
+      final paths = <String>[];
+      for (var offset = 0;; offset += _listPageSize) {
+        final files = await _db.storage
+            .from(bucket)
+            .list(path: folder, searchOptions: SearchOptions(limit: _listPageSize, offset: offset));
+        paths.addAll([for (final f in files) if (f.name.isNotEmpty) '$folder/${f.name}']);
+        if (files.length < _listPageSize) break;
+      }
+      for (var i = 0; i < paths.length; i += _listPageSize) {
+        await _db.storage.from(bucket).remove(paths.sublist(i, math.min(i + _listPageSize, paths.length)));
+      }
     });
     _signed.removeWhere((path, _) => path.startsWith('$folder/'));
   }

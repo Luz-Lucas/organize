@@ -96,7 +96,8 @@ void main() {
 
   test('duplicatePage insere a cópia logo depois, com id novo e a mesma tinta', () async {
     final p = [for (var i = 0; i < 3; i++) await repo.addPage('n1')];
-    final withInk = await repo.savePage(p[0].copyWith(data: enc(['a']), background: PageBackground.dots));
+    await repo.setBackground(p[0].id, PageBackground.dots);
+    final withInk = await repo.savePage(p[0].copyWith(data: enc(['a'])));
     final copy = await repo.duplicatePage(withInk.id);
     final pages = await repo.listPages('n1');
     expect(pages.map((x) => x.id), [p[0].id, copy.id, p[1].id, p[2].id]);
@@ -167,5 +168,20 @@ void main() {
     await expectLater(repo.addPage('n1'), throwsA(isA<RepositoryException>()));
     repo.failWrites = false;
     expect((await repo.listPages('n1')).single.data, '');
+  });
+
+  test('savePage nunca troca o fundo de uma página que existe (fundo é do setBackground)', () async {
+    final p = await repo.addPage('n1'); // lined
+    await repo.setBackground(p.id, PageBackground.grid);
+    final saved = await repo.savePage(p.copyWith(data: enc(['a']), background: PageBackground.lined));
+    expect(saved.background, PageBackground.grid);
+    expect((await repo.listPages('n1')).single.background, PageBackground.grid);
+  });
+
+  test('savePage de página apagada em outro aparelho recria com o fundo que ela tinha', () async {
+    final p = await repo.addPage('n1', background: PageBackground.dots);
+    await repo.deletePage(p.id);
+    final saved = await repo.savePage(p.copyWith(data: enc(['a'])));
+    expect(saved.background, PageBackground.dots);
   });
 }

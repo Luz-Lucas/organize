@@ -120,6 +120,37 @@ void main() {
     expect((del.json as Map)['prefixes'], ['user-1/note-1/a.png', 'user-1/note-1/b.jpg']);
   });
 
+  test('purgeAll pagina a listagem: mais de 100 imagens são todas apagadas', () async {
+    final names = [for (var i = 0; i < 250; i++) 'img-$i.png'];
+    final listCalls = <Map>[];
+    final deleted = <String>[];
+    final client = SupabaseClient(
+      'http://localhost:54321',
+      'anon',
+      httpClient: MockClient((r) async {
+        final json = jsonDecode(utf8.decode(r.bodyBytes)) as Map;
+        if (r.url.path.contains('/object/list/')) {
+          listCalls.add(json);
+          final limit = (json['limit'] as num?)?.toInt() ?? 100;
+          final offset = (json['offset'] as num?)?.toInt() ?? 0;
+          final page = names.skip(offset).take(limit).toList();
+          return http.Response(jsonEncode([for (final n in page) {'name': n}]), 200,
+              request: r, headers: {'content-type': 'application/json'});
+        }
+        if (r.method == 'DELETE') {
+          deleted.addAll((json['prefixes'] as List).cast<String>());
+          return http.Response('[]', 200, request: r, headers: {'content-type': 'application/json'});
+        }
+        return http.Response('{}', 200, request: r);
+      }),
+    );
+    final big = SupabaseNotebookImageStore(client, noteId: 'note-1', userId: () => 'user-1');
+    await big.purgeAll();
+    expect(deleted.toSet(), {for (final n in names) 'user-1/note-1/$n'});
+    expect(deleted, hasLength(250));
+    expect(listCalls.map((c) => c['offset']), [0, 100, 200]);
+  });
+
   test('falha do Storage vira RepositoryException', () async {
     final failing = SupabaseNotebookImageStore(
       SupabaseClient('http://localhost:54321', 'anon',

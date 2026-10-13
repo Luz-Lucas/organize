@@ -3,12 +3,25 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide TextBox;
+import 'package:flutter/scheduler.dart';
 
 import '../../ui/org_theme.dart';
 import '../core/notebook_core.dart';
+import 'eraser_session.dart';
 import 'ink_painting.dart';
 import 'notebook_session.dart';
+import 'page_images.dart';
+import 'pen_activity.dart';
+import 'stroke_grid.dart';
 import 'tool_settings.dart';
+
+/// Modo de diagnóstico da entrada (escondido): `--dart-define=NB_DEBUG_INPUT=true`
+/// mostra, em cada página, kind, buttons e pressure do último evento do ponteiro.
+const bool kNbDebugInput = bool.fromEnvironment('NB_DEBUG_INPUT');
+
+/// Botões da caneta que viram borracha: o lateral da S Pen (alguns Samsung
+/// informam `BUTTON_SECONDARY`, que é [kSecondaryMouseButton]).
+const int kStylusEraseButtons = kPrimaryStylusButton | kSecondaryStylusButton | kSecondaryMouseButton;
 
 class _Claim extends GestureArenaMember {
   @override
@@ -27,7 +40,12 @@ enum _Mode { none, draw, erase, lasso, move, scale, tap }
 ///   pressionados; `mouse` (botão esquerdo) desenha;
 /// * `touch` só rola/dá zoom (a menos que `fingerDraws`), mas toque curto na
 ///   ferramenta Texto posiciona/edita texto;
-/// * enquanto a caneta está no papel, toque (palma) é ignorado.
+/// * palma ([PenActivity], global a todas as páginas): com a caneta ativa
+///   (no papel, em hover ou até 1,5 s depois de levantar) e sem "dedo desenha",
+///   um dedo é ignorado (nem rola) e dois dedos rolam/dão zoom; com "dedo
+///   desenha", toque grande (`radiusMajor` > [kPalmRadiusMajor]) é palma;
+/// * a caneta tem prioridade: ao encostar, cancela toques em andamento;
+/// * fora da área visível a página fica leve: só o fundo, sem `Picture`.
 ///
 /// Todas as coordenadas internas são **unidades de página** (1000 × 1414): o
 /// `FittedBox` que envolve a página aplica a escala e o Flutter já entrega
@@ -46,6 +64,7 @@ class InkPageView extends StatefulWidget {
     required this.onSelectionChanged,
     required this.onActivate,
     required this.onTextTap,
+    this.debugInput = kNbDebugInput,
   });
 
   final int index;
@@ -65,6 +84,9 @@ class InkPageView extends StatefulWidget {
   final VoidCallback onActivate;
   final void Function(Offset at, TextBox? existing) onTextTap;
 
+  /// Mostra kind, buttons e pressure do último evento (diagnóstico).
+  final bool debugInput;
+
   @override
   State<InkPageView> createState() => _InkPageViewState();
 }
@@ -72,11 +94,29 @@ class InkPageView extends StatefulWidget {
 class _InkPageViewState extends State<InkPageView> {
   final PageInkCache _cache = PageInkCache();
   final LiveInk _live = LiveInk();
-  final Map<String, ui.Image> _images = {};
-  final Map<String, ImageStream> _streams = {};
-  final Map<String, ImageStreamListener> _listeners = {};
+  final PageImageSet _imageSet = PageImageSet();
   final Set<String> _requested = {};
   int _epoch = 0;
+
+  Map<String, ui.Image> get _images => _imageSet.images;
+
+  // Borracha: processada por quadro, com índice espacial e sem regravar tudo.
+  final ErasePreview _erasePreview = ErasePreview();
+  EraseSession? _erase;
+  bool _eraseScheduled = false;
+  PageDoc? _gridDoc;
+  StrokeGrid? _grid;
+
+  // Caneta/palma (estado global compartilhado entre as páginas).
+  late PenActivity _pen;
+  final Map<int, Offset> _palmTouches = {};
+  final Map<int, GestureArenaEntry> _palmEntries = {};
+  bool _palmClaimed = false;
+
+  // Visibilidade: página fora da tela fica leve.
+  TransformationController? _viewer;
+  bool _visible = true;
+  bool _visibilityScheduled = false;
 
   PageDoc? _working;
   Set<String> _hidden = const {};
@@ -94,13 +134,20 @@ class _InkPageViewState extends State<InkPageView> {
   Set<String> _movingIds = const {};
   Offset _anchor = Offset.zero;
   double _startDist = 1;
-  final Set<int> _stylusDown = {};
 
   PageDoc get _doc => _working ?? widget.doc;
 
   @override
   void initState() {
     super.initState();
+    _pen = PenActivity.of(context)..attach();
+    if (widget.debugInput) _pen.debugEnabled = true;
+    final viewer = context.findAncestorWidgetOfExactType<InteractiveViewer>();
+    _viewer = viewer?.transformationController;
+    // Sem o InteractiveViewer da tela não há como saber o que é visível.
+    _visible = _viewer == null || widget.index == 0;
+    _viewer?.addListener(_scheduleVisibility);
+    _scheduleVisibility();
     _requestImages();
   }
 
@@ -115,12 +162,46 @@ class _InkPageViewState extends State<InkPageView> {
 
   @override
   void dispose() {
-    for (final e in _listeners.entries) {
-      _streams[e.key]?.removeListener(e.value);
-    }
+    _viewer?.removeListener(_scheduleVisibility);
+    _pen.detach();
+    _imageSet.dispose();
     _cache.dispose();
     _live.dispose();
+    _erasePreview.dispose();
     super.dispose();
+  }
+
+  // ---- visibilidade -------------------------------------------------------
+
+  void _scheduleVisibility() {
+    if (_visibilityScheduled || !mounted) return;
+    _visibilityScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _visibilityScheduled = false;
+      if (mounted) _updateVisibility();
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
+  /// Aparece com uma folga de meia tela e só se esconde a uma tela inteira de
+  /// distância (histerese: evita piscar na borda).
+  void _updateVisibility() {
+    final box = context.findRenderObject();
+    final view = View.maybeOf(context);
+    if (box is! RenderBox || !box.hasSize || !box.attached || view == null) return;
+    final screen = view.physicalSize / view.devicePixelRatio;
+    final rect = MatrixUtils.transformRect(box.getTransformTo(null), Offset.zero & box.size);
+    final vp = Offset.zero & screen;
+    final show = rect.overlaps(vp.inflate(screen.height * 0.5));
+    final keep = rect.overlaps(vp.inflate(screen.height));
+    if (!_visible && show) {
+      setState(() => _visible = true);
+    } else if (_visible && !keep && _ptr == null) {
+      _cache.dispose(); // solta o Picture; os contornos continuam em cache
+      _grid = null;
+      _gridDoc = null;
+      setState(() => _visible = false);
+    }
   }
 
   // ---- imagens ------------------------------------------------------------
@@ -132,20 +213,10 @@ class _InkPageViewState extends State<InkPageView> {
       widget.imageStore.load(path).then((provider) {
         if (!mounted) return;
         final stream = provider.resolve(ImageConfiguration.empty);
-        late final ImageStreamListener l;
-        l = ImageStreamListener(
-          (info, _) {
-            if (!mounted) return;
-            setState(() {
-              _images[path] = info.image;
-              _epoch++;
-            });
-          },
-          onError: (_, _) {},
-        );
-        _streams[path] = stream;
-        _listeners[path] = l;
-        stream.addListener(l);
+        _imageSet.attach(path, stream, () {
+          if (!mounted) return;
+          setState(() => _epoch++);
+        });
       }, onError: (_) {});
     }
   }
@@ -181,19 +252,31 @@ class _InkPageViewState extends State<InkPageView> {
   }
 
   void _onDown(PointerDownEvent e) {
-    widget.onActivate();
+    _pen.note(e);
     final kind = e.kind;
-    if (kind == PointerDeviceKind.stylus || kind == PointerDeviceKind.invertedStylus) {
-      _stylusDown.add(e.pointer);
+    final s = widget.settings;
+    if (kind == PointerDeviceKind.touch) {
+      final penOn = _pen.isActive;
+      final palm = s.fingerDraws && e.radiusMajor > kPalmRadiusMajor;
+      if (penOn && !s.fingerDraws) {
+        // Um dedo é ignorado (nem rola); dois dedos rolam e dão zoom. Por isso
+        // só seguramos um lugar na arena (impede o InteractiveViewer de ganhar
+        // por ser o único) e decidimos quando o dedo se mexe (ver [_onMove]).
+        _palmTouches[e.pointer] = e.position;
+        final entry = GestureBinding.instance.gestureArena.add(e.pointer, _Claim());
+        _palmEntries[e.pointer] = entry;
+        if (_palmClaimed) entry.resolve(GestureDisposition.accepted);
+        return;
+      }
+      if (penOn || palm) {
+        _claim(e.pointer);
+        return;
+      }
     }
-    // Palma: toque enquanto a caneta está no papel (não desenha nem rola).
-    if (kind == PointerDeviceKind.touch && _stylusDown.isNotEmpty) {
-      _claim(e.pointer);
-      return;
-    }
+    if (!_visible) setState(() => _visible = true);
+    widget.onActivate();
     if (_ptr != null) return;
 
-    final s = widget.settings;
     var erase = false;
     var act = false;
     switch (kind) {
@@ -202,7 +285,7 @@ class _InkPageViewState extends State<InkPageView> {
         erase = true;
       case PointerDeviceKind.stylus:
         act = true;
-        erase = (e.buttons & (kPrimaryStylusButton | kSecondaryStylusButton)) != 0;
+        erase = (e.buttons & kStylusEraseButtons) != 0;
       case PointerDeviceKind.mouse:
         act = e.buttons == kPrimaryMouseButton;
       case PointerDeviceKind.touch:
@@ -246,12 +329,17 @@ class _InkPageViewState extends State<InkPageView> {
         _mode = _Mode.draw;
       case _Mode.erase:
         _mode = _Mode.erase;
-        _working = widget.doc;
+        if (!identical(_gridDoc, widget.doc)) {
+          _grid = StrokeGrid.build(widget.doc.strokes);
+          _gridDoc = widget.doc;
+        }
+        _erase = EraseSession(base: widget.doc, mode: s.eraserMode, index: _grid);
         _live
           ..eraserPos = e.localPosition
           ..eraserRadius = kEraserRadius
           ..changed();
-        _eraseTo(e.localPosition, null);
+        _erase!.add(e.localPosition);
+        _flushErase(); // o primeiro toque apaga na hora
       case _Mode.lasso:
         _startLasso(e.localPosition);
       case _Mode.tap:
@@ -302,19 +390,37 @@ class _InkPageViewState extends State<InkPageView> {
       ..changed();
   }
 
-  void _eraseTo(Offset pos, Offset? from) {
-    final doc = _doc;
-    PageDoc next = doc;
-    if (widget.settings.eraserMode == EraserMode.partial) {
-      next = erasePartial(doc, [from ?? pos, pos], kEraserRadius, newInkId);
-    } else {
-      final ids = hitStrokes(doc, pos, kEraserRadius, from: from);
-      if (ids.isNotEmpty) next = doc.without(ids);
-    }
-    if (!identical(next, doc)) setState(() => _working = next);
+  /// Junta os eventos da borracha por quadro: a S Pen manda ~240/s e a tela só
+  /// desenha 60/s, então um lote (caminho acumulado) por quadro basta.
+  void _scheduleErase() {
+    if (_eraseScheduled) return;
+    _eraseScheduled = true;
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      _eraseScheduled = false;
+      _flushErase();
+    });
+  }
+
+  void _flushErase() {
+    final e = _erase;
+    if (e != null && e.flush()) _erasePreview.show(e);
   }
 
   void _onMove(PointerMoveEvent e) {
+    _pen.note(e);
+    final palmDown = _palmTouches[e.pointer];
+    if (palmDown != null) {
+      // Um dedo sozinho que se mexe com a caneta ativa: ignora (a arena é
+      // fechada antes de o InteractiveViewer aceitar o pan). Com dois dedos
+      // (ou mais) deixa passar: rolam e dão zoom.
+      if (!_palmClaimed && _palmTouches.length == 1 && (e.position - palmDown).distance > 3) {
+        _palmClaimed = true;
+        for (final entry in _palmEntries.values) {
+          entry.resolve(GestureDisposition.accepted);
+        }
+      }
+      return;
+    }
     if (e.pointer != _ptr) return;
     final pos = e.localPosition;
     _travel += (pos - _last).distance;
@@ -330,7 +436,8 @@ class _InkPageViewState extends State<InkPageView> {
         _live
           ..eraserPos = pos
           ..changed();
-        _eraseTo(pos, _last);
+        _erase?.add(pos);
+        _scheduleErase();
       case _Mode.lasso:
         _lasso.add(pos);
         _live
@@ -352,9 +459,8 @@ class _InkPageViewState extends State<InkPageView> {
   }
 
   void _onUp(PointerUpEvent e) {
-    if (e.kind == PointerDeviceKind.stylus || e.kind == PointerDeviceKind.invertedStylus) {
-      _stylusDown.remove(e.pointer);
-    }
+    _pen.note(e);
+    _forgetPalm(e.pointer);
     if (e.pointer != _ptr) return;
     final before = _before ?? widget.doc;
     final mode = _mode;
@@ -371,8 +477,12 @@ class _InkPageViewState extends State<InkPageView> {
           widget.onEdit(before, widget.doc.withStroke(st));
         }
       case _Mode.erase:
-        final w = _working;
-        if (w != null && !identical(w, before)) widget.onEdit(before, w);
+        _flushErase();
+        final w = _erase?.result();
+        if (w != null && !identical(w, before)) {
+          _working = w; // até o pai atualizar `widget.doc`
+          widget.onEdit(before, w);
+        }
       case _Mode.lasso:
         _finishLasso();
       case _Mode.move:
@@ -431,13 +541,21 @@ class _InkPageViewState extends State<InkPageView> {
   }
 
   void _onCancel(PointerCancelEvent e) {
-    _stylusDown.remove(e.pointer);
+    _pen.note(e);
+    _forgetPalm(e.pointer);
     if (e.pointer != _ptr) return;
     _working = null;
     _endGesture();
   }
 
+  void _forgetPalm(int pointer) {
+    _palmEntries.remove(pointer);
+    if (_palmTouches.remove(pointer) != null && _palmTouches.isEmpty) _palmClaimed = false;
+  }
+
   void _endGesture() {
+    _erase = null;
+    _erasePreview.clear();
     _ptr = null;
     _mode = _Mode.none;
     _before = null;
@@ -467,6 +585,7 @@ class _InkPageViewState extends State<InkPageView> {
       onPointerMove: _onMove,
       onPointerUp: _onUp,
       onPointerCancel: _onCancel,
+      onPointerHover: _pen.note,
       child: SizedBox(
         width: pageWidth,
         height: pageHeight,
@@ -482,30 +601,50 @@ class _InkPageViewState extends State<InkPageView> {
                 ),
               ),
             ),
-            RepaintBoundary(
-              child: CustomPaint(
-                key: const ValueKey('nb-committed'),
-                painter: CommittedInkPainter(
-                  cache: _cache,
-                  doc: doc,
-                  hidden: _hidden,
-                  epoch: _epoch,
-                  images: _images,
+            // Fora da tela: só o fundo (sem Picture dos traços, sem camada ao vivo).
+            if (_visible) ...[
+              RepaintBoundary(
+                child: CustomPaint(
+                  key: const ValueKey('nb-committed'),
+                  painter: CommittedInkPainter(
+                    cache: _cache,
+                    doc: doc,
+                    hidden: _hidden,
+                    epoch: _epoch,
+                    images: _images,
+                    erase: _erasePreview,
+                  ),
                 ),
               ),
-            ),
-            RepaintBoundary(
-              child: CustomPaint(
-                key: const ValueKey('nb-live'),
-                painter: LiveInkPainter(
-                  live: _live,
-                  selectionRect: selRect,
-                  accent: org.accent,
-                  pixelRatio: MediaQuery.devicePixelRatioOf(context),
-                  images: _images,
+              RepaintBoundary(
+                child: CustomPaint(
+                  key: const ValueKey('nb-live'),
+                  painter: LiveInkPainter(
+                    live: _live,
+                    selectionRect: selRect,
+                    accent: org.accent,
+                    pixelRatio: MediaQuery.devicePixelRatioOf(context),
+                    images: _images,
+                  ),
                 ),
               ),
-            ),
+            ],
+            if (widget.debugInput)
+              Positioned(
+                left: 12,
+                top: 12,
+                child: IgnorePointer(
+                  child: ValueListenableBuilder<String>(
+                    valueListenable: _pen.lastEvent,
+                    builder: (context, text, _) => Container(
+                      key: const ValueKey('nb-debug-input'),
+                      padding: const EdgeInsets.all(10),
+                      color: const Color(0xCC000000),
+                      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 26)),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

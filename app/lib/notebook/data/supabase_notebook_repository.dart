@@ -27,11 +27,19 @@ class SupabaseNotebookRepository implements NotebookRepository {
     try {
       return await op();
     } on PostgrestException catch (e) {
-      throw RepositoryException(e.message, duplicate: e.code == '23505');
+      throw NotebookRepositoryException(
+        e.message,
+        kind: NotebookRepositoryException.kindOfCode(e.code),
+        code: e.code,
+        duplicate: e.code == '23505',
+      );
     } on RepositoryException {
       rethrow;
+    } on PageDecodeException catch (e) {
+      // Ao mesclar num conflito, o dado do servidor é de uma versão mais nova do app.
+      throw NotebookRepositoryException(e.message, kind: NotebookErrorKind.newerFormat);
     } catch (e) {
-      throw RepositoryException('Falha de conexão: $e');
+      throw NotebookRepositoryException('Falha de conexão: $e');
     }
   }
 
@@ -120,9 +128,9 @@ class SupabaseNotebookRepository implements NotebookRepository {
         var local = page;
         for (var attempt = 0; attempt < _maxSaveAttempts; attempt++) {
           final updated = await _pages
+              // O fundo não entra aqui: quem troca o fundo é o setBackground.
               .update({
                 'data': local.data,
-                'background': local.background.name,
                 'version': local.version + 1,
               })
               .eq('id', local.id)

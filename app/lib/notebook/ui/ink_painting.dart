@@ -6,6 +6,8 @@ import 'package:flutter/material.dart' hide TextBox;
 import 'package:perfect_freehand/perfect_freehand.dart';
 
 import '../core/notebook_core.dart';
+import 'eraser_session.dart' show ErasePreview;
+import 'live_stroke.dart';
 import 'tool_settings.dart' show kEraserRadius;
 
 // ---------------------------------------------------------------------------
@@ -97,64 +99,266 @@ Paint strokePaint(int argb) => Paint()
   ..isAntiAlias = true;
 
 // ---------------------------------------------------------------------------
-// Cache dos traços prontos (um ui.Picture por página).
+// Cache dos traços prontos (Pictures por bloco de traços, compostos numa página).
 // ---------------------------------------------------------------------------
 
-/// Guarda o `ui.Picture` com tudo que já está pronto na página e os contornos
-/// de cada traço (traços são imutáveis por id, então o contorno nunca muda).
-/// O Picture só é regravado quando o `PageDoc` (ou o conjunto escondido, ou as
-/// imagens carregadas) muda — desenhar um traço novo só calcula o contorno dele.
+/// Um bloco de até [PageInkCache.chunkSize] traços consecutivos, com o seu
+/// próprio Picture de marca-texto e de tinta.
+class _Chunk {
+  List<Stroke> src = const [];
+  ui.Picture? hl;
+  ui.Picture? ink;
+
+  void dispose() {
+    hl?.dispose();
+    ink?.dispose();
+    hl = null;
+    ink = null;
+    src = const [];
+  }
+}
+
+/// Uma camada pequena (imagens ou textos) com o seu Picture.
+class _Layer<T> {
+  List<T> src = const [];
+  int epoch = -1;
+  ui.Picture? pic;
+
+  void dispose() {
+    pic?.dispose();
+    pic = null;
+    src = const [];
+    epoch = -1;
+  }
+}
+
+/// Guarda os contornos de cada traço (traços são imutáveis por id, então o
+/// contorno nunca muda) e o `ui.Picture` com tudo que já está pronto na página.
+///
+/// Os traços ficam em blocos de [chunkSize] com um Picture cada; o Picture da
+/// página só compõe (`drawPicture`) os blocos. Esconder um traço (borracha),
+/// acrescentar um no fim ou um pedaço da borracha parcial regrava **só o bloco
+/// afetado** — não os milhares de traços da página — e nunca recalcula contornos.
+/// A ordem de empilhamento é a de antes: imagens, marca-textos, tinta, pedaços
+/// novos e textos.
 class PageInkCache {
+  /// Traços por bloco.
+  static const int chunkSize = 256;
+
   final Map<String, Path> _paths = {};
+  final List<_Chunk> _base = [];
+  final List<_Chunk> _extra = [];
+  final _Layer<ImageBox> _under = _Layer<ImageBox>();
+  final _Layer<TextBox> _over = _Layer<TextBox>();
   ui.Picture? _picture;
   PageDoc? _doc;
   Set<String>? _hidden;
   int _epoch = -1;
+  int _revision = -1;
 
-  /// Quantas vezes o Picture foi regravado (diagnóstico/testes).
+  /// Quantas vezes o Picture da página foi recomposto (diagnóstico/testes).
   int rebuilds = 0;
 
   /// Quantos contornos foram calculados (diagnóstico/testes).
   int outlinesComputed = 0;
+
+  /// Quantos blocos de traços foram regravados (diagnóstico/testes).
+  int chunksRecorded = 0;
 
   Path pathFor(Stroke s) => _paths.putIfAbsent(s.id, () {
     outlinesComputed++;
     return strokeOutlinePath(s.points, s.tool, s.width);
   });
 
+  /// Picture da página. [extra] são traços acrescentados por cima de [doc]
+  /// (pedaços da borracha parcial em andamento) e [revision] identifica o
+  /// estado de [hidden]/[extra] quando eles são mutados no lugar: o Picture só
+  /// é recomposto se algo disso mudou, e só os blocos que mudaram são regravados.
   ui.Picture pictureFor(
     PageDoc doc,
     Set<String> hidden,
     int epoch,
-    Map<String, ui.Image> images,
-  ) {
+    Map<String, ui.Image> images, {
+    List<Stroke> extra = const [],
+    int revision = 0,
+  }) {
     final cached = _picture;
     if (cached != null &&
         identical(_doc, doc) &&
         identical(_hidden, hidden) &&
-        _epoch == epoch) {
+        _epoch == epoch &&
+        _revision == revision) {
       return cached;
     }
     cached?.dispose();
+    _syncChunks(_base, doc.strokes, hidden);
+    _syncChunks(_extra, extra, hidden);
+    _syncImages(doc.images, hidden, epoch, images);
+    _syncTexts(doc.texts, hidden);
+
     final rec = ui.PictureRecorder();
     final canvas = Canvas(rec, const Rect.fromLTWH(0, 0, pageWidth, pageHeight));
-    paintDoc(canvas, doc, hidden: hidden, images: images, pathFor: pathFor);
+    if (_under.pic != null) canvas.drawPicture(_under.pic!);
+    for (final list in [_base, _extra]) {
+      for (final c in list) {
+        if (c.hl != null) canvas.drawPicture(c.hl!);
+      }
+    }
+    for (final list in [_base, _extra]) {
+      for (final c in list) {
+        if (c.ink != null) canvas.drawPicture(c.ink!);
+      }
+    }
+    if (_over.pic != null) canvas.drawPicture(_over.pic!);
     _picture = rec.endRecording();
     _doc = doc;
     _hidden = hidden;
     _epoch = epoch;
+    _revision = revision;
     rebuilds++;
     // Poda contornos de traços que já não existem.
-    if (_paths.length > doc.strokes.length + 64) {
-      final keep = {for (final s in doc.strokes) s.id};
+    if (_paths.length > doc.strokes.length + extra.length + 64) {
+      final keep = {for (final s in doc.strokes) s.id, for (final s in extra) s.id};
       _paths.removeWhere((id, _) => !keep.contains(id));
     }
     return _picture!;
   }
 
+  /// Deixa [chunks] igual a [strokes] sem os escondidos, regravando só os
+  /// blocos cujo conteúdo visível mudou.
+  void _syncChunks(List<_Chunk> chunks, List<Stroke> strokes, Set<String> hidden) {
+    final n = (strokes.length + chunkSize - 1) ~/ chunkSize;
+    while (chunks.length > n) {
+      chunks.removeLast().dispose();
+    }
+    while (chunks.length < n) {
+      chunks.add(_Chunk());
+    }
+    for (var i = 0; i < n; i++) {
+      final c = chunks[i];
+      final from = i * chunkSize;
+      final to = from + chunkSize < strokes.length ? from + chunkSize : strokes.length;
+      var j = 0;
+      var same = true;
+      for (var k = from; k < to; k++) {
+        final s = strokes[k];
+        if (hidden.contains(s.id)) continue;
+        if (j >= c.src.length || !identical(c.src[j], s)) {
+          same = false;
+          break;
+        }
+        j++;
+      }
+      if (same && j == c.src.length) continue;
+      final visible = <Stroke>[
+        for (var k = from; k < to; k++)
+          if (!hidden.contains(strokes[k].id)) strokes[k],
+      ];
+      c.dispose();
+      c.src = visible;
+      c.hl = _recordStrokes(visible, highlighter: true);
+      c.ink = _recordStrokes(visible, highlighter: false);
+      chunksRecorded++;
+    }
+  }
+
+  ui.Picture? _recordStrokes(List<Stroke> strokes, {required bool highlighter}) {
+    if (!strokes.any((s) => (s.tool == PenTool.highlighter) == highlighter)) return null;
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec, const Rect.fromLTWH(0, 0, pageWidth, pageHeight));
+    final paint = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    for (final s in strokes) {
+      if ((s.tool == PenTool.highlighter) != highlighter) continue;
+      canvas.drawPath(pathFor(s), paint..color = Color(s.argb));
+    }
+    return rec.endRecording();
+  }
+
+  void _syncImages(List<ImageBox> all, Set<String> hidden, int epoch, Map<String, ui.Image> images) {
+    final visible = [
+      for (final im in all)
+        if (!hidden.contains(im.id)) im,
+    ];
+    if (_under.epoch == epoch && _sameItems(_under.src, visible)) return;
+    _under.pic?.dispose();
+    _under.src = visible;
+    _under.epoch = epoch;
+    if (visible.isEmpty) {
+      _under.pic = null;
+      return;
+    }
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec, const Rect.fromLTWH(0, 0, pageWidth, pageHeight));
+    for (final im in visible) {
+      paintImage(canvas, im, images[im.path]);
+    }
+    _under.pic = rec.endRecording();
+  }
+
+  void _syncTexts(List<TextBox> all, Set<String> hidden) {
+    final visible = [
+      for (final t in all)
+        if (!hidden.contains(t.id)) t,
+    ];
+    if (_sameItems(_over.src, visible)) return;
+    _over.pic?.dispose();
+    _over.src = visible;
+    if (visible.isEmpty) {
+      _over.pic = null;
+      return;
+    }
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec, const Rect.fromLTWH(0, 0, pageWidth, pageHeight));
+    for (final t in visible) {
+      paintText(canvas, t);
+    }
+    _over.pic = rec.endRecording();
+  }
+
+  static bool _sameItems<T>(List<T> a, List<T> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
   void dispose() {
     _picture?.dispose();
     _picture = null;
+    for (final c in [..._base, ..._extra]) {
+      c.dispose();
+    }
+    _base.clear();
+    _extra.clear();
+    _under.dispose();
+    _over.dispose();
+    _doc = null;
+    _hidden = null;
+  }
+}
+
+/// Desenha uma imagem posicionada (ou o marcador cinza enquanto não carregou).
+void paintImage(Canvas canvas, ImageBox im, ui.Image? img) {
+  final dst = Rect.fromLTWH(im.x, im.y, im.w, im.h);
+  if (img != null) {
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      dst,
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+  } else {
+    canvas.drawRect(dst, Paint()..color = const Color(0x22808080));
+    canvas.drawRect(
+      dst,
+      Paint()
+        ..color = const Color(0x55808080)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
   }
 }
 
@@ -165,35 +369,23 @@ void paintDoc(
   Set<String> hidden = const {},
   Map<String, ui.Image> images = const {},
   Path Function(Stroke)? pathFor,
+  List<Stroke> extraStrokes = const [],
 }) {
   final outline = pathFor ?? (s) => strokeOutlinePath(s.points, s.tool, s.width);
   for (final im in doc.images) {
     if (hidden.contains(im.id)) continue;
-    final dst = Rect.fromLTWH(im.x, im.y, im.w, im.h);
-    final img = images[im.path];
-    if (img != null) {
-      canvas.drawImageRect(
-        img,
-        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-        dst,
-        Paint()..filterQuality = FilterQuality.medium,
-      );
-    } else {
-      canvas.drawRect(dst, Paint()..color = const Color(0x22808080));
-      canvas.drawRect(
-        dst,
-        Paint()
-          ..color = const Color(0x55808080)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
-      );
-    }
+    paintImage(canvas, im, images[im.path]);
   }
+  final paint = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
   for (final pass in const [true, false]) {
-    for (final s in doc.strokes) {
-      if ((s.tool == PenTool.highlighter) != pass) continue;
-      if (hidden.contains(s.id)) continue;
-      canvas.drawPath(outline(s), strokePaint(s.argb));
+    for (final list in [doc.strokes, extraStrokes]) {
+      for (final s in list) {
+        if ((s.tool == PenTool.highlighter) != pass) continue;
+        if (hidden.contains(s.id)) continue;
+        canvas.drawPath(outline(s), paint..color = Color(s.argb));
+      }
     }
   }
   for (final t in doc.texts) {
@@ -281,6 +473,10 @@ class PageBackgroundPainter extends CustomPainter {
 }
 
 /// Traços prontos: reproduz o Picture em cache.
+///
+/// Com [erase] ativo (borracha em andamento) mostra o documento sem os traços
+/// apagados e com os pedaços novos, regravando o Picture no máximo uma vez por
+/// quadro e sem reconstruir widgets.
 class CommittedInkPainter extends CustomPainter {
   CommittedInkPainter({
     required this.cache,
@@ -288,17 +484,23 @@ class CommittedInkPainter extends CustomPainter {
     required this.hidden,
     required this.epoch,
     required this.images,
-  });
+    this.erase,
+  }) : super(repaint: erase);
 
   final PageInkCache cache;
   final PageDoc doc;
   final Set<String> hidden;
   final int epoch;
   final Map<String, ui.Image> images;
+  final ErasePreview? erase;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawPicture(cache.pictureFor(doc, hidden, epoch, images));
+    final e = erase;
+    final pic = e != null && e.active
+        ? cache.pictureFor(doc, e.hidden, epoch, images, extra: e.extra, revision: e.revision)
+        : cache.pictureFor(doc, hidden, epoch, images);
+    canvas.drawPicture(pic);
   }
 
   @override
@@ -306,13 +508,17 @@ class CommittedInkPainter extends CustomPainter {
       !identical(old.doc, doc) ||
       !identical(old.hidden, hidden) ||
       old.epoch != epoch ||
-      !identical(old.cache, cache);
+      !identical(old.cache, cache) ||
+      !identical(old.erase, erase);
 }
 
 /// Estado da camada ao vivo (traço em andamento, borracha, laço, prévia da
 /// seleção). Notifica só essa camada: o resto da página não repinta.
 class LiveInk extends ChangeNotifier {
   List<InkPoint> points = const [];
+
+  /// Contorno incremental de [points] (só a cauda é recalculada a cada evento).
+  final LiveStrokeOutline outline = LiveStrokeOutline();
   PenTool tool = PenTool.fountain;
   int argb = 0xFFFFFFFF;
   double width = 3;
@@ -379,8 +585,23 @@ class LiveInkPainter extends CustomPainter {
     }
     // Traço em andamento.
     if (live.points.isNotEmpty) {
-      final path = strokeOutlinePath(live.points, live.tool, live.width, complete: false);
-      canvas.drawPath(path, strokePaint(live.argb));
+      final paths = live.outline.pathsFor(live.points, live.tool, live.width);
+      final alpha = (live.argb >>> 24) & 0xFF;
+      if (alpha >= 0xFF) {
+        final paint = strokePaint(live.argb);
+        for (final path in paths) {
+          canvas.drawPath(path, paint);
+        }
+      } else {
+        // Traço translúcido em pedaços que se sobrepõem: desenha opaco numa
+        // camada e aplica o alfa uma vez só (sem faixas mais escuras nas junções).
+        canvas.saveLayer(Offset.zero & size, Paint()..color = Color.fromARGB(alpha, 0, 0, 0));
+        final paint = strokePaint(live.argb | 0xFF000000);
+        for (final path in paths) {
+          canvas.drawPath(path, paint);
+        }
+        canvas.restore();
+      }
     }
     // Retângulo e alças da seleção.
     final sel = selectionRect;

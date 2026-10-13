@@ -29,6 +29,7 @@ class FakePostgrest {
   /// Faz a próxima requisição que casar com [when] falhar com [status].
   bool Function(Sent)? failWhen;
   int failStatus = 500;
+  String failCode = 'XX000';
 
   /// Executa antes de cada requisição (para simular outro aparelho gravando no meio).
   void Function(Sent)? beforeRequest;
@@ -62,7 +63,7 @@ class FakePostgrest {
     beforeRequest?.call(s);
     sent.add(s);
     if (failWhen != null && failWhen!(s)) {
-      return _json(req, {'message': 'falhou', 'code': 'XX000'}, failStatus);
+      return _json(req, {'message': 'falhou', 'code': failCode}, failStatus);
     }
     final table = req.url.path.split('/').last;
     final rows = table == 'note_pages' ? pages : notes;

@@ -36,6 +36,11 @@ Importe tudo por `package:organizacional/notebook/core/notebook_core.dart`.
    apagou) são pulados. Chame `record(antes, depois)` a cada gesto concluído.
 6. **`encodePage(PageDoc.empty) == ''`** (página sem itens nem tombstones). Página só
    com tombstones NÃO é vazia (precisa propagar a exclusão).
+7. **`PageDoc.withoutEphemeralTombstones(before)`** descarta os tombstones de ids que
+   não existiam em `before`: itens que nasceram e morreram no mesmo gesto (a borracha
+   parcial refaz o documento a cada movimento; 30 linhas apagadas deixavam 4.440
+   tombstones). A tela chama isso ao fechar cada gesto; os tombstones de itens que já
+   existiam continuam, para a exclusão se propagar no merge.
 
 ## API final
 

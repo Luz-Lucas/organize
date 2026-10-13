@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/data/repository.dart';
 import 'package:organizacional/notebook/core/notebook_core.dart';
 import 'package:organizacional/notebook/data/notebook_page.dart';
+import 'package:organizacional/notebook/data/notebook_repository.dart';
 import 'package:organizacional/notebook/data/supabase_notebook_repository.dart';
 
 import 'fake_postgrest.dart';
@@ -151,6 +152,65 @@ void main() {
     await repo.setBackground('p-b', PageBackground.grid);
     expect((await repo.firstPage('n1'))!.id, 'p-a');
     expect(server.pages['p-b']!['background'], 'grid');
+  });
+
+  test('savePage nunca grava o fundo: a troca feita por setBackground sobrevive a um save com fundo antigo', () async {
+    final base = await repo.addPage('n1', id: 'p-a'); // lined
+    await repo.setBackground('p-a', PageBackground.grid);
+    final saved = await repo.savePage(base.copyWith(data: enc(['a']), background: PageBackground.lined));
+    expect(server.pages['p-a']!['background'], 'grid');
+    expect(saved.background, PageBackground.grid);
+    final patch = writes().where((s) => s.method == 'PATCH' && s.path.endsWith('/note_pages')).last;
+    expect((patch.body as Map).containsKey('background'), isFalse);
+  });
+
+  test('savePage de página apagada em outro aparelho recria com o fundo que tinha', () async {
+    final base = await repo.addPage('n1', id: 'p-a', background: PageBackground.dots);
+    await repo.deletePage('p-a');
+    final saved = await repo.savePage(base.copyWith(data: enc(['a'])));
+    expect(saved.background, PageBackground.dots);
+    expect(idsOf(server.pages['p-a']!['data'] as String), {'a'});
+  });
+
+  test('erro 23514 (limite de 4 MB) vira falha permanente de página grande', () async {
+    final p = await repo.addPage('n1', id: 'p-a');
+    server.failStatus = 400;
+    server.failCode = '23514';
+    server.failWhen = (s) => s.method == 'PATCH' && s.path.endsWith('/note_pages');
+    await expectLater(
+      repo.savePage(p.copyWith(data: enc(['a']))),
+      throwsA(isA<NotebookRepositoryException>().having((e) => e.kind, 'kind', NotebookErrorKind.pageTooLarge)),
+    );
+  });
+
+  test('erros 23503 e 42501 viram "caderno excluído"; outros continuam transitórios', () async {
+    final p = await repo.addPage('n1', id: 'p-a');
+    for (final code in ['23503', '42501']) {
+      server.failStatus = 409;
+      server.failCode = code;
+      server.failWhen = (s) => s.method == 'PATCH' && s.path.endsWith('/note_pages');
+      await expectLater(
+        repo.savePage(p.copyWith(data: enc(['a']))),
+        throwsA(isA<NotebookRepositoryException>().having((e) => e.kind, 'kind', NotebookErrorKind.noteGone)),
+        reason: code,
+      );
+    }
+    server.failStatus = 500;
+    server.failCode = 'XX000';
+    await expectLater(
+      repo.savePage(p.copyWith(data: enc(['a']))),
+      throwsA(isA<NotebookRepositoryException>().having((e) => e.kind, 'kind', NotebookErrorKind.transient)),
+    );
+  });
+
+  test('conflito com dado do servidor ilegível vira "formato mais novo" (não tenta de novo)', () async {
+    final base = await repo.addPage('n1', id: 'p-a');
+    server.pages['p-a']!['data'] = 'isto-nao-e-uma-pagina';
+    server.pages['p-a']!['version'] = 5;
+    await expectLater(
+      repo.savePage(base.copyWith(data: enc(['a']))),
+      throwsA(isA<NotebookRepositoryException>().having((e) => e.kind, 'kind', NotebookErrorKind.newerFormat)),
+    );
   });
 
   test('recognizedTextByNote pede só páginas com texto e junta por caderno', () async {

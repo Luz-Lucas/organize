@@ -51,6 +51,21 @@ final notebookControllerProvider = Provider.autoDispose.family<NotebookControlle
   return controller;
 });
 
+/// Ao iniciar o app, envia a fila local de **todos** os cadernos que ficaram com
+/// alterações não confirmadas (`notebook.pending.*`), sem precisar abrir cada um:
+/// quem mata o app logo depois de escrever não perde a tinta. Cada caderno ganha
+/// um controller que fica vivo até enviar tudo e some em seguida.
+///
+/// Fica de olho (`ref.watch`) na raiz do app.
+final notebookStartupSyncProvider = FutureProvider<void>((ref) async {
+  final ids = await ref.read(notebookPendingStoreProvider).pendingNoteIds();
+  for (final id in ids) {
+    // Escutar mantém o controller (autoDispose) vivo até a fila ser enviada.
+    final sub = ref.listen(notebookControllerProvider(id), (_, _) {});
+    unawaited(sub.read().whenSettled().whenComplete(sub.close));
+  }
+});
+
 /// 1ª página do caderno (para a miniatura). A chave inclui a data da nota: quando o
 /// caderno é salvo, `notes.updated_at` muda e a miniatura é lida de novo.
 final notebookFirstPageProvider =

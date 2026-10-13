@@ -120,10 +120,15 @@ class MemoryNotebookRepository implements NotebookRepository {
       // Apagada em outro aparelho: recria no fim, sem perder a tinta.
       result = page.copyWith(idx: _sorted(page.noteId).length, version: 1, updatedAt: DateTime.now());
     } else {
-      final data = current.version == page.version ? page.data : mergePageData(current.data, page.data);
+      final String data;
+      try {
+        data = current.version == page.version ? page.data : mergePageData(current.data, page.data);
+      } on PageDecodeException catch (e) {
+        throw NotebookRepositoryException(e.message, kind: NotebookErrorKind.newerFormat);
+      }
+      // O fundo não entra aqui: quem troca o fundo é o setBackground.
       result = current.copyWith(
         data: data,
-        background: page.background,
         version: current.version + 1,
         updatedAt: DateTime.now(),
       );

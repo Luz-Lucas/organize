@@ -36,11 +36,15 @@ class FakeImageStore implements NotebookImageStore {
 }
 
 /// Sessão falsa em memória: guarda o que a tela manda e repete `pages`.
+///
+/// As operações por página recebem o **id** da página (como o contrato real);
+/// por conveniência dos testes antigos também aceitam o índice (`int`).
 class FakeSession implements NotebookSession {
   FakeSession({int pageCount = 1, List<PageDoc>? docs}) {
     for (var i = 0; i < pageCount; i++) {
       _pages.add(
         NotebookPageState(
+          id: 'p${_seq++}',
           idx: i,
           background: PageBackground.lined,
           doc: docs != null && i < docs.length ? docs[i] : PageDoc.empty,
@@ -49,17 +53,28 @@ class FakeSession implements NotebookSession {
     }
   }
 
+  int _seq = 0;
   final List<NotebookPageState> _pages = [];
   final _pagesCtl = StreamController<List<NotebookPageState>>.broadcast();
   final _statusCtl = StreamController<SaveStatus>.broadcast();
   SaveStatus _status = SaveStatus.saved;
-  final List<({int idx, PageDoc doc})> updates = [];
+  final List<({int idx, String id, PageDoc doc})> updates = [];
 
   @override
   final FakeImageStore images = FakeImageStore();
 
   List<NotebookPageState> get current => List.unmodifiable(_pages);
   PageDoc docOf(int i) => _pages[i].doc;
+  String idOf(int i) => _pages[i].id;
+  int indexOfId(String id) => _pages.indexWhere((p) => p.id == id);
+
+  int _at(Object key) => key is int ? key : indexOfId(key as String);
+
+  void _reindex() {
+    for (var i = 0; i < _pages.length; i++) {
+      _pages[i] = _pages[i].copyWith(idx: i);
+    }
+  }
 
   @override
   Stream<List<NotebookPageState>> get pages =>
@@ -88,16 +103,37 @@ class FakeSession implements NotebookSession {
     _emit();
   }
 
+  /// Simula uma página nova inserida por outro aparelho na posição [at].
+  String remoteInsert(int at, {PageDoc? doc}) {
+    final id = 'r${_seq++}';
+    _pages.insert(
+      at,
+      NotebookPageState(id: id, idx: at, background: PageBackground.lined, doc: doc ?? PageDoc.empty),
+    );
+    _reindex();
+    _emit();
+    return id;
+  }
+
+  /// Simula outro aparelho trocando o aviso de uma página (página grande, versão nova…).
+  void remoteNotice(int idx, PageNotice notice) {
+    _pages[idx] = _pages[idx].copyWith(notice: notice);
+    _emit();
+  }
+
   @override
-  void updatePage(int idx, PageDoc doc) {
-    updates.add((idx: idx, doc: doc));
-    _pages[idx] = _pages[idx].copyWith(doc: doc);
+  void updatePage(Object id, PageDoc doc) {
+    final i = _at(id);
+    if (i < 0) return;
+    updates.add((idx: i, id: _pages[i].id, doc: doc));
+    _pages[i] = _pages[i].copyWith(doc: doc);
   }
 
   @override
   void addPage({PageBackground background = PageBackground.lined}) {
     _pages.add(
       NotebookPageState(
+        id: 'p${_seq++}',
         idx: _pages.length,
         background: background,
         doc: PageDoc.empty,
@@ -107,27 +143,28 @@ class FakeSession implements NotebookSession {
   }
 
   @override
-  void deletePage(int idx) {
-    _pages.removeAt(idx);
-    for (var i = 0; i < _pages.length; i++) {
-      _pages[i] = _pages[i].copyWith(idx: i);
-    }
+  void deletePage(Object id) {
+    final i = _at(id);
+    if (i < 0) return;
+    _pages.removeAt(i);
+    _reindex();
     _emit();
   }
 
   @override
-  void duplicatePage(int idx) {
-    final src = _pages[idx];
-    _pages.insert(idx + 1, src.copyWith(idx: idx + 1));
-    for (var i = 0; i < _pages.length; i++) {
-      _pages[i] = _pages[i].copyWith(idx: i);
-    }
+  void duplicatePage(Object id) {
+    final i = _at(id);
+    if (i < 0) return;
+    _pages.insert(i + 1, _pages[i].copyWith(id: 'p${_seq++}'));
+    _reindex();
     _emit();
   }
 
   @override
-  void setBackground(int idx, PageBackground background) {
-    _pages[idx] = _pages[idx].copyWith(background: background);
+  void setBackground(Object id, PageBackground background) {
+    final i = _at(id);
+    if (i < 0) return;
+    _pages[i] = _pages[i].copyWith(background: background);
     _emit();
   }
 }

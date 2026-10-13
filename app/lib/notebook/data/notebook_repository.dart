@@ -1,5 +1,47 @@
+import '../../data/repository.dart';
 import '../core/notebook_core.dart';
 import 'notebook_page.dart';
+
+/// Por que uma gravação do caderno falhou. Só [transient] merece nova tentativa;
+/// as outras são **permanentes**: repetir o mesmo envio dá o mesmo erro.
+enum NotebookErrorKind {
+  /// Sem rede, timeout, 5xx… tentar de novo mais tarde pode funcionar.
+  transient,
+
+  /// A página passa do limite de 4 MB do servidor (CHECK 23514).
+  pageTooLarge,
+
+  /// A nota/o caderno não existe mais ou não é mais nosso (FK 23503, RLS 42501).
+  noteGone,
+
+  /// O dado do servidor está num formato que este app não entende (versão mais nova).
+  newerFormat,
+}
+
+/// [RepositoryException] com a classificação do erro ([kind]) e o código do Postgres.
+class NotebookRepositoryException extends RepositoryException {
+  const NotebookRepositoryException(
+    super.message, {
+    this.kind = NotebookErrorKind.transient,
+    this.code,
+    super.duplicate,
+  });
+
+  final NotebookErrorKind kind;
+
+  /// Código SQLSTATE do Postgres, quando houver.
+  final String? code;
+
+  /// Classifica um código SQLSTATE.
+  static NotebookErrorKind kindOfCode(String? code) => switch (code) {
+        '23514' => NotebookErrorKind.pageTooLarge,
+        '23503' || '42501' => NotebookErrorKind.noteGone,
+        _ => NotebookErrorKind.transient,
+      };
+
+  /// Permanente = não adianta repetir o mesmo envio.
+  bool get permanent => kind != NotebookErrorKind.transient;
+}
 
 /// Páginas de um caderno (`note_pages`). Erros viram `RepositoryException`.
 abstract interface class NotebookRepository {
@@ -25,7 +67,9 @@ abstract interface class NotebookRepository {
     int? at,
   });
 
-  /// Grava [page].data contra a versão otimista [page].version. Se outro aparelho
+  /// Grava [page].data contra a versão otimista [page].version. **Não grava o
+  /// fundo** (isso é só de [setBackground]); o `background` de [page] só vale
+  /// quando a página precisa ser recriada. Se outro aparelho
   /// gravou antes, relê, mescla (`decode → merge → encode`) e grava de novo, até
   /// conseguir. Devolve a página como ficou no servidor (dados mesclados, versão nova);
   /// quem chamou deve adotar o resultado. Também "toca" `notes.updated_at`.
