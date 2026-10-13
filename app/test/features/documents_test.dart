@@ -339,4 +339,27 @@ void main() {
     expect(find.byKey(const ValueKey('more-/documentos')), findsOneWidget);
     expect(find.text('Documentos'), findsOneWidget);
   });
+
+  group('listas cortadas pelo servidor', () {
+    testWidgets('mostra "Mostrando os primeiros N itens" na pasta e na busca', (tester) async {
+      final drive = MemoryDriveRepository()..itemLimit = 3;
+      for (var i = 0; i < 6; i++) {
+        drive.addFile('doc $i.pdf', drive.rootFolderId);
+      }
+      await _pump(tester, drive);
+      expect(find.byKey(const Key('docs-truncated')), findsOneWidget);
+      expect(find.text('Mostrando os primeiros 3 itens'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('docs-search')), 'doc');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.text('Mostrando os primeiros 3 itens'), findsOneWidget);
+
+      drive.itemLimit = null;
+      await tester.enterText(find.byKey(const Key('docs-search')), 'doc 1');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('docs-truncated')), findsNothing);
+    });
+  });
 }

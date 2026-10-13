@@ -7,12 +7,15 @@ import {
   isProvider,
   json,
   signState,
+  userAllowed,
   validEmail,
 } from "../_shared/gmail.ts";
 
 export interface ConnectDeps {
   cfg: GmailConfig | null;
   getUserId: (jwt: string) => Promise<string | null>;
+  /** GOOGLE_ALLOWED_USER_ID: se definido, só esse usuário conecta. */
+  allowedUserId?: string;
   now?: () => number;
 }
 
@@ -25,6 +28,7 @@ export async function handle(req: Request, deps: ConnectDeps): Promise<Response>
   const jwt = bearer(req);
   const userId = jwt ? await deps.getUserId(jwt).catch(() => null) : null;
   if (!userId) return json({ error: "não autorizado" }, 401);
+  if (!userAllowed(deps.allowedUserId, userId)) return json({ error: "não permitido" }, 403);
 
   const body = await req.json().catch(() => ({}));
   const hint = (body as { email?: unknown })?.email;

@@ -81,8 +81,11 @@ não afeta uso pessoal.
 
 ## 2. Banco de dados (migração e segredo do cron)
 
-Aplicação das migrações `20261016000000_gmail.sql` e `20261019000000_google_drive.sql` (tabela `drive_state`
-e provider `drive` em `google_accounts`) no projeto na nuvem (só quando você decidir):
+Aplicação das migrações `20261016000000_gmail.sql`, `20261019000000_google_drive.sql` (tabela `drive_state`
+e provider `drive` em `google_accounts`) e `20261020000000_oauth_nonce.sql` (tabela `oauth_state_nonces` e
+função `consume_oauth_nonce`: cada `state` do OAuth só conecta uma vez) no projeto na nuvem (só quando você
+decidir). **Aplique a migração `20261020000000` antes de publicar a nova `gmail-callback`**; sem a tabela, o
+callback recusa a conexão por segurança:
 
 ```bash
 npx supabase db push
@@ -118,6 +121,15 @@ npx supabase secrets set \
 - `CRON_SECRET` já existe (usado pelo `news-fetch`). Confira com
   `npx supabase secrets list --project-ref dgarojxettnppcahedvk`.
 - `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` são fornecidos pela plataforma.
+- `GOOGLE_ALLOWED_USER_ID` (recomendado): o cadastro do Supabase é aberto, então qualquer pessoa que
+  criar uma conta poderia tentar conectar o Google. Com este segredo definido, `gmail-connect` e
+  `gmail-callback` respondem 403 para qualquer outro usuário. O valor é o **UUID do seu usuário no
+  Supabase** (Dashboard → Authentication → Users → coluna *User UID*):
+  ```bash
+  npx supabase secrets set GOOGLE_ALLOWED_USER_ID='UUID_DO_SEU_USUARIO' --project-ref dgarojxettnppcahedvk
+  ```
+  Sem o segredo, tudo continua funcionando como antes (qualquer usuário autenticado pode conectar) e
+  o log das funções registra o aviso `GOOGLE_ALLOWED_USER_ID não definido`.
 - Opcional, `GMAIL_DONE_URL`: se definido, o callback redireciona (302) para
   `<GMAIL_DONE_URL>?gmail=ok` (ou `?gmail=error`) em vez de mostrar a página HTML. Veja a nota
   abaixo.
@@ -165,6 +177,9 @@ Gmail:
 ## 6. Desconectar / revogar
 
 - Pelo app: a função `gmail-disconnect` revoga o token no Google e apaga as linhas do banco.
+  Gmail e Drive usam o mesmo cliente OAuth: se os dois estiverem conectados na **mesma conta Google**,
+  desconectar um apaga só os dados dele e **não revoga** o acesso no Google (senão o outro cairia junto);
+  o acesso só é revogado ao desconectar o último.
   **[Drive]** Em Ajustes → Documentos → Desconectar (ação `disconnect` da função `drive`); os arquivos
   continuam no seu Drive.
 - Pelo Google: https://myaccount.google.com/permissions → Organizacional → **Remover acesso**.

@@ -19,6 +19,10 @@ DriveException driveErrorFrom(int status, Object? details) {
   return DriveException('Falha ao chamar o servidor ($status).');
 }
 
+/// A sessão de upload só vale em `https://www.googleapis.com/...` (sem usuário, senha ou porta).
+bool isGoogleUploadUri(Uri uri) =>
+    uri.scheme == 'https' && uri.host == 'www.googleapis.com' && uri.userInfo.isEmpty && !uri.hasPort;
+
 /// Lê `drive_state` (só o servidor escreve) e fala com as funções `drive` e `gmail-connect`.
 /// O token do Google nunca chega ao app: o upload usa uma URL de sessão criada no servidor.
 class SupabaseDriveRepository implements DriveRepository {
@@ -54,7 +58,8 @@ class SupabaseDriveRepository implements DriveRepository {
     } on PostgrestException catch (e) {
       throw RepositoryException(e.message);
     } catch (e) {
-      throw RepositoryException('Falha de conexão: $e');
+      // Sem `$e`: a exceção pode carregar a URL da sessão de upload (com upload_id) ou outros detalhes.
+      throw const RepositoryException('Falha de conexão. Verifique a internet e tente de novo.');
     }
   }
 
@@ -88,6 +93,7 @@ class SupabaseDriveRepository implements DriveRepository {
     return DriveListing(
       folder: DriveFolder.fromMap(Map<String, dynamic>.from(res['folder'] as Map)),
       items: _items(res['items']),
+      truncated: res['truncated'] == true,
     );
   }
 
@@ -95,7 +101,10 @@ class SupabaseDriveRepository implements DriveRepository {
       [for (final m in (raw as List?) ?? const []) DriveItem.fromMap(Map<String, dynamic>.from(m as Map))];
 
   @override
-  Future<List<DriveItem>> search(String query) async => _items((await _call('search', {'q': query}))['items']);
+  Future<DriveSearchResult> search(String query) async {
+    final res = await _call('search', {'q': query});
+    return DriveSearchResult(items: _items(res['items']), truncated: res['truncated'] == true);
+  }
 
   DriveItem _item(Map<String, dynamic> res) => DriveItem.fromMap(Map<String, dynamic>.from(res['item'] as Map));
 
@@ -160,7 +169,7 @@ class SupabaseDriveRepository implements DriveRepository {
   }) async {
     final session = await _call('upload_session', {'parentId': parentId, 'name': name, 'mimeType': mimeType, 'size': size});
     final uri = Uri.tryParse((session['uploadUrl'] as String?) ?? '');
-    if (uri == null || uri.scheme != 'https' || !uri.host.endsWith('googleapis.com')) {
+    if (uri == null || !isGoogleUploadUri(uri)) {
       throw const RepositoryException('Resposta inesperada do servidor.');
     }
     return _guard(() async {

@@ -20,10 +20,14 @@ export async function handle(req: Request, deps: DisconnectDeps): Promise<Respon
   try {
     const acct = await deps.store.getAccount(userId);
     if (acct && deps.cfg) {
-      try {
-        await revokeToken(await decryptToken(acct.refresh_token_enc, deps.cfg.tokenKey), deps.fetchFn);
-      } catch {
-        // melhor esforço: segue apagando mesmo sem revogar
+      // Gmail e Drive usam o mesmo client OAuth: revogar aqui derrubaria também o Drive da mesma conta Google.
+      const shared = await deps.store.hasSiblingAccount(userId, acct.account_email).catch(() => true);
+      if (!shared) {
+        try {
+          await revokeToken(await decryptToken(acct.refresh_token_enc, deps.cfg.tokenKey), deps.fetchFn);
+        } catch {
+          // melhor esforço: segue apagando mesmo sem revogar
+        }
       }
     }
     // Estado primeiro: se algo falhar adiante, o app já mostra "não conectado".

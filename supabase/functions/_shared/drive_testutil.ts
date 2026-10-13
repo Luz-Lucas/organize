@@ -9,6 +9,12 @@ export const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 export class MemDriveStore implements DriveStore {
   accounts = new Map<string, DriveAccountRow>();
   states = new Map<string, DriveStatePatch & { user_id: string }>();
+  /** E-mails de contas de OUTRO provider (Gmail) do mesmo usuário, simulando a outra linha de google_accounts. */
+  siblings = new Map<string, string[]>();
+
+  hasSiblingAccount(u: string, email: string) {
+    return Promise.resolve((this.siblings.get(u) ?? []).some((e) => e.toLowerCase() === email.toLowerCase()));
+  }
 
   getAccount(u: string) {
     return Promise.resolve(this.accounts.get(u) ?? null);

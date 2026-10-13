@@ -80,3 +80,33 @@ Deno.test("connect recusa provider desconhecido (400)", async () => {
     await res.body?.cancel();
   }
 });
+
+const OUTRO = "99999999-9999-9999-9999-999999999999";
+
+Deno.test("connect com GOOGLE_ALLOWED_USER_ID: outro usuário => 403 sem URL; o dono => 200", async () => {
+  const allowedUserId = OUTRO; // o dono é OUTRO; quem chama é U (jwt-bom)
+  const res = await handle(post({ Authorization: "Bearer jwt-bom" }), { cfg: CFG, getUserId, allowedUserId });
+  assertEquals(res.status, 403);
+  const text = await res.text();
+  assert(!text.includes("accounts.google.com"));
+
+  const dono = await handle(post({ Authorization: "Bearer jwt-bom" }), { cfg: CFG, getUserId, allowedUserId: U });
+  assertEquals(dono.status, 200);
+  await dono.body?.cancel();
+});
+
+Deno.test("connect sem GOOGLE_ALLOWED_USER_ID mantém o comportamento atual e avisa no log", async () => {
+  const warns: string[] = [];
+  const orig = console.warn;
+  console.warn = (...a: unknown[]) => warns.push(a.join(" "));
+  try {
+    const res = await handle(post({ Authorization: "Bearer jwt-bom" }), { cfg: CFG, getUserId });
+    assertEquals(res.status, 200);
+    await res.body?.cancel();
+  } finally {
+    console.warn = orig;
+  }
+  assertEquals(warns.length, 1);
+  assert(warns[0].includes("GOOGLE_ALLOWED_USER_ID"));
+  assert(!warns[0].includes(U));
+});

@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { decryptToken, signState } from "../_shared/gmail.ts";
-import { CFG, fakeFetch, jsonRes, KEY, MemStore, TOKEN_URL } from "../_shared/gmail_testutil.ts";
+import { CFG, fakeFetch, jsonRes, KEY, MemNonceStore, MemStore, TOKEN_URL } from "../_shared/gmail_testutil.ts";
 import { DRIVE, MemDriveStore } from "../_shared/drive_testutil.ts";
 import { handle } from "./handler.ts";
 
@@ -96,4 +96,31 @@ Deno.test("state do gmail com escopo drive no token NÃO grava drive (e vice-ver
   await res.body?.cancel();
   assertEquals(driveStore.accounts.size, 0);
   assertEquals(store.accounts.size, 0);
+});
+
+Deno.test("callback do drive também respeita GOOGLE_ALLOWED_USER_ID e o nonce de uso único", async () => {
+  const mk = async () => {
+    const driveStore = new MemDriveStore();
+    const f = google({ refresh_token: "R", scope: DRIVE_SCOPE });
+    return { driveStore, f };
+  };
+  const state = await signState(U, CFG.stateSecret, Date.now(), undefined, "drive");
+
+  const a = await mk();
+  const denied = await handle(cb({ code: "C", state }), { cfg: CFG, store: new MemStore(), fetchFn: a.f.fn, driveStore: a.driveStore, allowedUserId: "99999999-9999-9999-9999-999999999999" });
+  assertEquals(denied.status, 403);
+  await denied.body?.cancel();
+  assertEquals(a.f.calls.length, 0);
+  assertEquals(a.driveStore.accounts.size, 0);
+
+  const nonceStore = new MemNonceStore();
+  const b = await mk();
+  const ok = await handle(cb({ code: "C", state }), { cfg: CFG, store: new MemStore(), fetchFn: b.f.fn, driveStore: b.driveStore, allowedUserId: U, nonceStore });
+  assertEquals(ok.status, 200);
+  await ok.body?.cancel();
+  const c = await mk();
+  const replay = await handle(cb({ code: "C", state }), { cfg: CFG, store: new MemStore(), fetchFn: c.f.fn, driveStore: c.driveStore, allowedUserId: U, nonceStore });
+  assertEquals(replay.status >= 400, true);
+  await replay.body?.cancel();
+  assertEquals(c.f.calls.length, 0);
 });

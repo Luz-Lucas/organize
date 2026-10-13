@@ -68,6 +68,16 @@ void main() {
     expect(isTextFileName('a.pdf'), isFalse);
   });
 
+  test('texto grande (> 1 MB) não vira nota: vai para o Drive', () {
+    const mb = 1024 * 1024;
+    expect(LocalFile(name: 'a.txt', size: mb).becomesNote, isTrue);
+    expect(LocalFile(name: 'a.md', size: mb + 1).becomesNote, isFalse);
+    expect(LocalFile(name: 'a.txt', size: 0).becomesNote, isTrue);
+    expect(LocalFile(name: 'a.pdf', size: 10).becomesNote, isFalse);
+    expect(LocalFile.memory(name: 'x.txt', bytes: List.filled(mb + 1, 97)).becomesNote, isFalse);
+    expect(maxNoteTextBytes, mb);
+  });
+
   test('LocalFile lê bytes em memória', () async {
     final f = LocalFile.memory(name: 'a.txt', bytes: [104, 105]);
     expect(f.size, 2);

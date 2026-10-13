@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import { decryptToken, signState } from "../_shared/gmail.ts";
-import { API, CFG, fakeFetch, jsonRes, KEY, MemStore, msg, TOKEN_URL } from "../_shared/gmail_testutil.ts";
+import { API, CFG, fakeFetch, jsonRes, KEY, MemNonceStore, MemStore, msg, TOKEN_URL } from "../_shared/gmail_testutil.ts";
 import { handle } from "./handler.ts";
 
 const SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
@@ -108,4 +108,68 @@ Deno.test("callback só aceita GET", async () => {
   const res = await handle(new Request("https://x/", { method: "POST" }), { cfg: CFG, store: new MemStore(), fetchFn: fetch });
   assertEquals(res.status, 405);
   await res.body?.cancel();
+});
+
+Deno.test("callback com GOOGLE_ALLOWED_USER_ID: state de outro usuário => 403, sem falar com o Google nem gravar nada", async () => {
+  const store = new MemStore();
+  const f = google({ refresh_token: "R", scope: SCOPE });
+  const state = await signState(U, CFG.stateSecret);
+  const res = await handle(cb({ code: "C", state }), { cfg: CFG, store, fetchFn: f.fn, allowedUserId: "99999999-9999-9999-9999-999999999999" });
+  assertEquals(res.status, 403);
+  await res.body?.cancel();
+  assertEquals(f.calls.length, 0);
+  assertEquals(store.accounts.size, 0);
+  assertEquals(store.states.size, 0);
+
+  // o dono passa
+  const f2 = google({ refresh_token: "R", scope: SCOPE });
+  const ok = await handle(cb({ code: "C", state: await signState(U, CFG.stateSecret) }), { cfg: CFG, store, fetchFn: f2.fn, allowedUserId: U });
+  assertEquals(ok.status, 200);
+  await ok.body?.cancel();
+  assertEquals(store.accounts.has(U), true);
+});
+
+Deno.test("callback sem GOOGLE_ALLOWED_USER_ID continua aceitando qualquer usuário (com aviso no log)", async () => {
+  const warns: string[] = [];
+  const orig = console.warn;
+  console.warn = (...a: unknown[]) => warns.push(a.join(" "));
+  try {
+    const r = await run((state) => ({ code: "CODE", state }), { refresh_token: "R", scope: SCOPE });
+    assertEquals(r.res.status, 200);
+  } finally {
+    console.warn = orig;
+  }
+  assertEquals(warns.some((w) => w.includes("GOOGLE_ALLOWED_USER_ID")), true);
+});
+
+Deno.test("callback: o nonce do state é de uso único (repetir o mesmo callback é recusado)", async () => {
+  const store = new MemStore();
+  const nonceStore = new MemNonceStore();
+  const state = await signState(U, CFG.stateSecret);
+
+  const f1 = google({ refresh_token: "R1", scope: SCOPE });
+  const first = await handle(cb({ code: "C1", state }), { cfg: CFG, store, fetchFn: f1.fn, nonceStore });
+  assertEquals(first.status, 200);
+  await first.body?.cancel();
+  assertEquals(store.accounts.has(U), true);
+
+  const f2 = google({ refresh_token: "R2", scope: SCOPE });
+  const again = await handle(cb({ code: "C2", state }), { cfg: CFG, store, fetchFn: f2.fn, nonceStore });
+  assertEquals(again.status >= 400, true);
+  assertStringIncludes(await again.text(), "Não foi possível conectar o Gmail");
+  assertEquals(f2.calls.length, 0); // recusado antes de trocar o code
+  assertEquals(await decryptToken(store.accounts.get(U)!.refresh_token_enc, KEY), "R1"); // nada foi sobrescrito
+});
+
+Deno.test("callback: falha do nonceStore (banco) recusa em vez de seguir sem a proteção", async () => {
+  const store = new MemStore();
+  const f = google({ refresh_token: "R", scope: SCOPE });
+  const state = await signState(U, CFG.stateSecret);
+  const res = await handle(cb({ code: "C", state }), {
+    cfg: CFG, store, fetchFn: f.fn, nonceStore: { consume: () => Promise.reject(new Error("db")) },
+  });
+  assertEquals(res.status >= 400, true);
+  await res.body?.cancel();
+  assertEquals(f.calls.length, 0);
+  assertEquals(store.accounts.size, 0);
 });

@@ -6,7 +6,6 @@ import '../../data/drive_repository.dart';
 import '../../data/repository.dart';
 import '../../data/share_intent_service.dart';
 import '../../domain/drive.dart';
-import '../../domain/local_file.dart';
 import '../../domain/space.dart';
 import '../../app/providers.dart';
 import '../../ui/org_theme.dart';
@@ -54,7 +53,7 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
     final summary = ImportSummary();
     String? openId;
     String? textNoteTitle;
-    final usable = [for (final f in _c.files) if (importer.driveReady || isTextFileName(f.name)) f];
+    final usable = [for (final f in _c.files) if (importer.driveReady || f.becomesNote) f];
     try {
       if (_c.hasText) {
         final note = await importer.saveText(_c.text!, spaceId: _spaceId);
@@ -103,9 +102,9 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
     final driveState = ref.watch(driveStateProvider).value;
     final driveReady = driveState?.status == DriveStatus.ok && (driveState?.rootFolderId ?? '').isNotEmpty;
     final spaces = ref.watch(spacesProvider).value ?? const <Space>[];
-    final needDrive = _c.files.any((f) => !isTextFileName(f.name));
+    final needDrive = _c.files.any((f) => !f.becomesNote);
     final driveMissing = needDrive && !driveReady;
-    final canSave = widget.signedIn && (_c.hasText || _c.files.any((f) => isTextFileName(f.name)) || (needDrive && driveReady));
+    final canSave = widget.signedIn && (_c.hasText || _c.files.any((f) => f.becomesNote) || (needDrive && driveReady));
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
@@ -129,7 +128,7 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
               ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(isTextFileName(f.name) ? Icons.article_outlined : Icons.insert_drive_file_outlined, color: org.inkMuted),
+                leading: Icon(f.becomesNote ? Icons.article_outlined : Icons.insert_drive_file_outlined, color: org.inkMuted),
                 title: Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(formatBytes(f.size)),
               ),

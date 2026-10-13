@@ -53,3 +53,37 @@ Deno.test("desconectar sem JWT válido => 401 e nada muda", async () => {
   assert(store.accounts.has("u1"));
   assertEquals(f.calls.length, 0);
 });
+
+Deno.test("desconectar NÃO revoga o token se o Drive do mesmo usuário usa o mesmo e-mail (mesmo client OAuth)", async () => {
+  const store = await setup();
+  store.siblings.set("u1", ["u1@g.com"]);
+  const f = fakeFetch([[REVOKE, () => jsonRes({})]]);
+  const res = await handle(post({ Authorization: "Bearer jwt-u1" }), { cfg: CFG, store, fetchFn: f.fn, getUserId });
+  assertEquals(await res.json(), { ok: true });
+  assertEquals(f.calls.length, 0);
+  // os dados do Gmail saem normalmente
+  assertEquals(store.accounts.has("u1"), false);
+  assertEquals(store.ids("u1"), []);
+  assertEquals(store.states.get("u1")!.status, "not_connected");
+});
+
+Deno.test("desconectar revoga se o Drive do usuário é de outra conta Google", async () => {
+  const store = await setup();
+  store.siblings.set("u1", ["outra@g.com"]);
+  const f = fakeFetch([[REVOKE, () => jsonRes({})]]);
+  const res = await handle(post({ Authorization: "Bearer jwt-u1" }), { cfg: CFG, store, fetchFn: f.fn, getUserId });
+  assertEquals(res.status, 200);
+  await res.body?.cancel();
+  assertEquals(f.calls.length, 1);
+});
+
+Deno.test("se a consulta da outra conta falhar, não revoga (conservador) e ainda apaga os dados", async () => {
+  const store = await setup();
+  store.hasSiblingAccount = () => Promise.reject(new Error("db"));
+  const f = fakeFetch([[REVOKE, () => jsonRes({})]]);
+  const res = await handle(post({ Authorization: "Bearer jwt-u1" }), { cfg: CFG, store, fetchFn: f.fn, getUserId });
+  assertEquals(res.status, 200);
+  await res.body?.cancel();
+  assertEquals(f.calls.length, 0);
+  assertEquals(store.accounts.has("u1"), false);
+});

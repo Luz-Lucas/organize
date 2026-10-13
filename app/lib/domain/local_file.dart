@@ -25,6 +25,9 @@ String mimeForFileName(String name) => _mimeByExt[_ext(name)] ?? 'application/oc
 /// `.txt` e `.md` viram notas; os demais vão para o Drive.
 bool isTextFileName(String name) => const {'txt', 'md'}.contains(_ext(name));
 
+/// Texto acima disso (1 MB) não vira nota: o arquivo vai para o Drive.
+const maxNoteTextBytes = 1024 * 1024;
+
 /// Arquivo escolhido pelo usuário ou recebido de outro app: no disco ([path]) ou em memória.
 class LocalFile {
   LocalFile({required this.name, this.path, List<int>? bytes, int? size, String? mimeType})
@@ -40,6 +43,9 @@ class LocalFile {
   final List<int>? _bytes;
   final int size;
   final String mimeType;
+
+  /// Vira nota de texto (`.txt`/`.md` de até [maxNoteTextBytes]); o resto vai para o Drive.
+  bool get becomesNote => isTextFileName(name) && size <= maxNoteTextBytes;
 
   Stream<List<int>> openRead() {
     final b = _bytes;

@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { CFG, fakeFetch, jsonRes, TOKEN_URL, type Call } from "../_shared/gmail_testutil.ts";
+import { encryptToken } from "../_shared/gmail.ts";
+import { CFG, fakeFetch, jsonRes, KEY, TOKEN_URL, type Call } from "../_shared/gmail_testutil.ts";
 import { connectedStore, DRIVE, UPLOAD } from "../_shared/drive_testutil.ts";
 import { handle } from "./handler.ts";
 
@@ -98,7 +99,8 @@ Deno.test("list usa a pasta raiz Organizacional, ordena pastas primeiro e mapeia
   const list = new URL(api(s.f.calls, `${DRIVE}/files?`)[0].url).searchParams;
   assertEquals(list.get("q"), "'ROOT-U-u1' in parents and trashed = false");
   assertEquals(list.get("orderBy"), "folder,name");
-  assertEquals(list.get("pageSize"), "200");
+  assertEquals(list.get("pageSize"), "1000");
+  assertEquals(body.truncated, false);
   // token de acesso veio do refresh token DESTE usuário
   assertEquals(api(s.f.calls, `${DRIVE}/files?`)[0].headers.get("authorization"), "Bearer ACC1-R-u1");
 });
@@ -388,7 +390,7 @@ Deno.test("disconnect revoga o refresh token, apaga a conta e zera o estado só 
   });
   assertEquals(s.store.accounts.has("u2"), true);
   assertEquals(s.store.states.get("u2")?.status, "ok");
-  assertEquals(s.cache.has("u1"), false);
+  assertEquals([...s.cache.keys()].some((k) => k.startsWith("u1")), false);
 });
 
 Deno.test("disconnect funciona mesmo se a revogação falhar ou não houver conta", async () => {
@@ -402,4 +404,164 @@ Deno.test("disconnect funciona mesmo se a revogação falhar ou não houver cont
   const again = await handle(mk("jwt-u1"), { cfg: CFG, store, fetchFn: f.fn, getUserId, tokenCache: new Map() });
   assertEquals(again.status, 200);
   await again.body?.cancel();
+});
+
+// ---------------------------------------------------------------- desconectar: Gmail e Drive dividem o mesmo client OAuth
+
+Deno.test("disconnect NÃO revoga o token se o mesmo usuário tem Gmail com o mesmo e-mail; só apaga a linha e o estado", async () => {
+  const s = await setup([], ["u1", "u2"]);
+  s.store.siblings.set("u1", ["U1@g.com"]); // mesmo e-mail (sem diferenciar maiúsculas)
+  const r = await s.run("disconnect");
+  assertEquals(await r.json(), { ok: true });
+  assertEquals(s.f.calls.filter((c) => c.url === REVOKE).length, 0);
+  assertEquals(s.store.accounts.has("u1"), false);
+  assertEquals(s.store.states.get("u1")?.status, "not_connected");
+  assertEquals(s.store.accounts.has("u2"), true);
+});
+
+Deno.test("disconnect revoga se a outra conta do usuário é de outro e-mail", async () => {
+  const s = await setup([]);
+  s.store.siblings.set("u1", ["outra-pessoa@g.com"]);
+  await (await s.run("disconnect")).body?.cancel();
+  assertEquals(s.f.calls.filter((c) => c.url === REVOKE).length, 1);
+});
+
+// ---------------------------------------------------------------- cache do token amarrado ao refresh token
+
+Deno.test("trocar o refresh token (reconectar) descarta o access token em cache e usa o novo", async () => {
+  const s = await setup([[`${DRIVE}/files?`, () => files()]]);
+  await (await s.run("search", { q: "a" })).body?.cancel();
+  await (await s.run("search", { q: "a" })).body?.cancel();
+  assertEquals(s.refreshes(), 1); // segunda chamada veio do cache
+  const antes = api(s.f.calls, `${DRIVE}/files?`);
+  assertEquals(antes[1].headers.get("authorization"), "Bearer ACC1-R-u1");
+
+  // o usuário reconecta: a linha ganha outro refresh token cifrado
+  const acct = s.store.accounts.get("u1")!;
+  s.store.accounts.set("u1", { ...acct, refresh_token_enc: await encryptToken("R-novo", KEY) });
+  await (await s.run("search", { q: "a" })).body?.cancel();
+  assertEquals(s.refreshes(), 2);
+  assertEquals(api(s.f.calls, `${DRIVE}/files?`).at(-1)!.headers.get("authorization"), "Bearer ACC2-R-novo");
+});
+
+// ---------------------------------------------------------------- paginação
+
+/** Servidor falso paginado: respeita pageSize/pageToken (token = índice), com no máximo [maxPage] por página. */
+function paged(total: number, key: "files" | "permissions", maxPage: number, mk: (i: number) => Record<string, unknown>) {
+  return (c: Call) => {
+    const q = new URL(c.url).searchParams;
+    const start = Number(q.get("pageToken") ?? 0);
+    const end = Math.min(start + Math.min(Number(q.get("pageSize")), maxPage), total);
+    const rows = Array.from({ length: end - start }, (_, k) => mk(start + k));
+    return jsonRes({ [key]: rows, ...(end < total ? { nextPageToken: String(end) } : {}) });
+  };
+}
+const file = (i: number) => ({ id: `f${i}`, name: `Arquivo ${i}`, mimeType: "text/plain" });
+
+Deno.test("list pagina com nextPageToken, corta em 1000 itens e avisa truncated", async () => {
+  const s = await setup([
+    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organizacional" })],
+    [`${DRIVE}/files?`, paged(1500, "files", 400, file)],
+  ]);
+  const body = await (await s.run("list")).json();
+  assertEquals(body.items.length, 1000);
+  assertEquals(body.truncated, true);
+  assertEquals(body.items[999].id, "f999");
+  const reqs = api(s.f.calls, `${DRIVE}/files?`).map((c) => new URL(c.url).searchParams);
+  assertEquals(reqs.length, 3); // 400 + 400 + 200
+  assertEquals(reqs[1].get("pageToken"), "400");
+  assertEquals(reqs[2].get("pageSize"), "200");
+  assertStringIncludes(reqs[0].get("fields")!, "nextPageToken");
+});
+
+Deno.test("list sem excesso junta as páginas e não marca truncated", async () => {
+  const s = await setup([
+    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organizacional" })],
+    [`${DRIVE}/files?`, paged(700, "files", 300, file)],
+  ]);
+  const body = await (await s.run("list")).json();
+  assertEquals(body.items.length, 700);
+  assertEquals(body.truncated, false);
+});
+
+Deno.test("list com exatamente 1000 itens não marca truncated", async () => {
+  const s = await setup([
+    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organizacional" })],
+    [`${DRIVE}/files?`, paged(1000, "files", 1000, file)],
+  ]);
+  const body = await (await s.run("list")).json();
+  assertEquals(body.items.length, 1000);
+  assertEquals(body.truncated, false);
+});
+
+Deno.test("search pagina até 200 itens e avisa truncated", async () => {
+  const s = await setup([[`${DRIVE}/files?`, paged(500, "files", 100, file)]]);
+  const body = await (await s.run("search", { q: "arq" })).json();
+  assertEquals(body.items.length, 200);
+  assertEquals(body.truncated, true);
+  assertEquals(api(s.f.calls, `${DRIVE}/files?`).length, 2);
+
+  const few = await setup([[`${DRIVE}/files?`, paged(30, "files", 100, file)]]);
+  const b2 = await (await few.run("search", { q: "arq" })).json();
+  assertEquals(b2.items.length, 30);
+  assertEquals(b2.truncated, false);
+});
+
+Deno.test("permissions pagina até 200 itens e avisa truncated", async () => {
+  const perm = (i: number) => ({ id: `p${i}`, type: "user", role: "reader", emailAddress: `u${i}@x.com` });
+  const s = await setup([[`${DRIVE}/files/f1/permissions`, paged(350, "permissions", 100, perm)]]);
+  const body = await (await s.run("permissions", { id: "f1" })).json();
+  assertEquals(body.permissions.length, 200);
+  assertEquals(body.truncated, true);
+  assertStringIncludes(new URL(api(s.f.calls, `${DRIVE}/files/f1/permissions`)[0].url).searchParams.get("fields")!, "nextPageToken");
+});
+
+// ---------------------------------------------------------------- mover
+
+Deno.test("move para a pasta onde o item já está (único pai) não chama o Drive para alterar e responde ok", async () => {
+  const s = await setup([[`${DRIVE}/files/f1?fields=parents`, () => jsonRes({ parents: ["DEST"] })]]);
+  const r = await s.run("move", { id: "f1", toFolderId: "DEST" });
+  assertEquals(await r.json(), { ok: true });
+  assertEquals(s.f.calls.filter((c) => c.method === "PATCH").length, 0);
+});
+
+Deno.test("move nunca remove o destino dos pais quando o item está em várias pastas", async () => {
+  const s = await setup([
+    [`${DRIVE}/files/f1?fields=parents`, () => jsonRes({ parents: ["A", "DEST"] })],
+    [`${DRIVE}/files/f1?`, () => jsonRes({ id: "f1" })],
+  ]);
+  await (await s.run("move", { id: "f1", toFolderId: "DEST" })).body?.cancel();
+  const q = new URL(s.f.calls.find((c) => c.method === "PATCH")!.url).searchParams;
+  assertEquals(q.get("removeParents"), "A");
+  assertEquals(q.has("addParents"), false);
+});
+
+// ---------------------------------------------------------------- upload: mime e URL
+
+Deno.test("upload_session recusa mime com * ou de tipo nativo do Google (application/vnd.google-apps.*)", async () => {
+  const s = await setup([[`${UPLOAD}/files`, () => new Response(null, { status: 200, headers: { Location: "https://www.googleapis.com/upload/drive/v3/files?upload_id=X" } })]]);
+  for (const mimeType of ["*/*", "image/*", "application/vnd.google-apps.document", "Application/Vnd.Google-Apps.folder"]) {
+    const b = await s.run("upload_session", { parentId: "P1", name: "a", mimeType, size: 1 });
+    assertEquals(b.status, 400, mimeType);
+    await b.body?.cancel();
+  }
+  assertEquals(api(s.f.calls, UPLOAD).length, 0);
+  const ok = await s.run("upload_session", { parentId: "P1", name: "a", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", size: 1 });
+  assertEquals(ok.status, 200);
+  await ok.body?.cancel();
+});
+
+Deno.test("upload_session só aceita Location em www.googleapis.com", async () => {
+  for (const loc of [
+    "https://evilgoogleapis.com/up",
+    "https://storage.googleapis.com/up",
+    "https://www.googleapis.com.evil.example/up",
+    "http://www.googleapis.com/up",
+    "https://user:pw@www.googleapis.com/up",
+  ]) {
+    const s = await setup([[`${UPLOAD}/files`, () => new Response(null, { status: 200, headers: { Location: loc } })]]);
+    const r = await s.run("upload_session", { parentId: "P1", name: "a.pdf", mimeType: "application/pdf", size: 10 });
+    assertEquals(r.status >= 400, true, loc);
+    await r.body?.cancel();
+  }
 });

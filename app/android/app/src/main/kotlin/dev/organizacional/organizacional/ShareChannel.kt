@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -138,19 +139,37 @@ class ShareChannel(private val activity: Activity) : MethodChannel.MethodCallHan
     }
 
     private fun copy(uri: Uri, fallbackMime: String?): Map<String, Any?>? {
+        // Só content:// de outro app: nada de file:// nem providers do próprio pacote (arquivos privados).
+        if (!ShareGuard.isAcceptableUri(uri.scheme, uri.authority, activity.packageName)) return null
+        var dir: File? = null
         return try {
             val name = displayName(uri).replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]"), "_").ifBlank { "arquivo" }
-            val dir = File(File(activity.cacheDir, DIR), UUID.randomUUID().toString()).apply { mkdirs() }
-            val target = File(dir, name)
-            val input = activity.contentResolver.openInputStream(uri) ?: return null
-            input.use { src -> target.outputStream().use { dst -> src.copyTo(dst) } }
+                .let { if (it == "." || it == "..") "arquivo" else it }
+            val folder = File(File(activity.cacheDir, DIR), UUID.randomUUID().toString()).apply { mkdirs() }
+            dir = folder
+            val target = File(folder, name)
+            val input = activity.contentResolver.openInputStream(uri) ?: run {
+                folder.deleteRecursively()
+                return null
+            }
+            val complete = input.use { src -> target.outputStream().use { dst -> ShareGuard.copyLimited(src, dst) } }
+            if (!complete) {
+                // Passou de 100 MB: descarta o que já tinha sido copiado.
+                folder.deleteRecursively()
+                return null
+            }
             mapOf(
                 "path" to target.absolutePath,
                 "name" to name,
-                "mimeType" to (activity.contentResolver.getType(uri) ?: fallbackMime),
+                "mimeType" to ShareGuard.resolveMime(
+                    activity.contentResolver.getType(uri),
+                    fallbackMime,
+                    name,
+                ) { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) },
                 "size" to target.length(),
             )
         } catch (e: Exception) {
+            dir?.deleteRecursively()
             null
         }
     }

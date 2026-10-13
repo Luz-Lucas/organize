@@ -46,6 +46,9 @@ class MemoryDriveRepository implements DriveRepository {
   Uri connectUri = Uri.parse('https://accounts.google.com/o/oauth2/v2/auth?drive=1');
   final uploads = <UploadCall>[];
 
+  /// Simula o teto do servidor: list/search devolvem no máximo isso e marcam `truncated`.
+  int? itemLimit;
+
   String get rootFolderId => 'org-root';
 
   void setState(DriveState? state) {
@@ -124,20 +127,26 @@ class MemoryDriveRepository implements DriveRepository {
         if (a.isFolder != b.isFolder) return a.isFolder ? -1 : 1;
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
+    final limit = itemLimit;
+    final cut = limit != null && items.length > limit;
     return DriveListing(
       folder: DriveFolder(id: folder.item.id, name: folder.item.name, parents: [if (folder.parentId != null) folder.parentId!]),
-      items: items,
+      items: cut ? items.sublist(0, limit) : items,
+      truncated: cut,
     );
   }
 
   @override
-  Future<List<DriveItem>> search(String query) async {
+  Future<DriveSearchResult> search(String query) async {
     _check();
     final q = query.toLowerCase();
-    return [
+    final found = [
       for (final n in _nodes.values)
         if (!n.trashed && n.parentId != null && n.item.name.toLowerCase().contains(q)) n.item,
     ];
+    final limit = itemLimit;
+    final cut = limit != null && found.length > limit;
+    return DriveSearchResult(items: cut ? found.sublist(0, limit) : found, truncated: cut);
   }
 
   @override

@@ -54,6 +54,12 @@ export class MemStore implements GmailStore {
   accounts = new Map<string, AccountRow>();
   states = new Map<string, Record<string, unknown>>();
   items = new Map<string, Map<string, EmailItem>>();
+  /** E-mails de contas de OUTRO provider (Drive) do mesmo usuário, simulando a outra linha de google_accounts. */
+  siblings = new Map<string, string[]>();
+
+  hasSiblingAccount(u: string, email: string) {
+    return Promise.resolve((this.siblings.get(u) ?? []).some((e) => e.toLowerCase() === email.toLowerCase()));
+  }
 
   getAccount(u: string) {
     return Promise.resolve(this.accounts.get(u) ?? null);
@@ -89,5 +95,15 @@ export class MemStore implements GmailStore {
   }
   ids(u: string) {
     return [...(this.items.get(u)?.keys() ?? [])].sort();
+  }
+}
+
+/** NonceStore em memória: o primeiro consume de cada nonce vale; os seguintes são recusados. */
+export class MemNonceStore {
+  used = new Set<string>();
+  consume(nonce: string) {
+    if (this.used.has(nonce)) return Promise.resolve(false);
+    this.used.add(nonce);
+    return Promise.resolve(true);
   }
 }

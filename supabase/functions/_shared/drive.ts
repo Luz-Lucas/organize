@@ -6,7 +6,15 @@ export const DRIVE_API = "https://www.googleapis.com/drive/v3";
 export const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
 export const FOLDER_MIME = "application/vnd.google-apps.folder";
 export const ROOT_FOLDER_NAME = "Organizacional";
-export const LIST_LIMIT = 200;
+/** Tetos de itens por consulta: acima disso a resposta vem cortada, com `truncated: true`. */
+export const LIST_LIMIT = 1000;
+export const SEARCH_LIMIT = 200;
+export const PERMISSIONS_LIMIT = 200;
+/** Máximo de itens que o Drive aceita por página em files.list e em permissions.list. */
+const FILES_PAGE_MAX = 1000;
+const PERMISSIONS_PAGE_MAX = 100;
+/** Host aceito na URL de upload devolvida pelo Google. */
+export const UPLOAD_HOST = "www.googleapis.com";
 export const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,webViewLink,iconLink,shared,parents";
 
 // ---------------------------------------------------------------- armazenamento
@@ -36,6 +44,8 @@ export interface DriveStore {
   getAccount(userId: string): Promise<DriveAccountRow | null>;
   upsertAccount(row: DriveAccountRow): Promise<void>;
   deleteAccount(userId: string): Promise<void>;
+  /** Existe outra linha de google_accounts do usuário (outro provider) com o mesmo account_email? */
+  hasSiblingAccount(userId: string, accountEmail: string): Promise<boolean>;
   getState(userId: string): Promise<DriveStateRow | null>;
   setState(userId: string, patch: DriveStatePatch): Promise<void>;
 }
@@ -118,22 +128,79 @@ export async function getAboutEmail(accessToken: string, fetchFn: FetchFn): Prom
   return email;
 }
 
-/** Lista as pastas/arquivos de [parentId] (sem lixeira): pastas primeiro, nome ascendente. */
+/**
+ * Pagina uma coleção do Drive (`files` ou `permissions`) com nextPageToken até [cap] itens.
+ * `truncated` = havia mais itens além do teto. [baseParams] não leva pageSize/pageToken.
+ */
+export async function listPaged(
+  fetchFn: FetchFn,
+  url: string,
+  baseParams: Record<string, string>,
+  key: "files" | "permissions",
+  accessToken: string,
+  cap: number,
+  pageMax: number,
+): Promise<{ rows: Record<string, unknown>[]; truncated: boolean }> {
+  const rows: Record<string, unknown>[] = [];
+  let pageToken: string | undefined;
+  for (let guard = 0; guard < 50; guard++) {
+    const p = new URLSearchParams({ ...baseParams, pageSize: String(Math.min(cap - rows.length, pageMax)) });
+    if (pageToken) p.set("pageToken", pageToken);
+    const j = await driveRequest(fetchFn, `${url}?${p}`, { headers: authz(accessToken) });
+    const page = Array.isArray(j?.[key]) ? j![key] as Record<string, unknown>[] : [];
+    rows.push(...page);
+    const next = typeof j?.nextPageToken === "string" && j.nextPageToken ? j.nextPageToken : undefined;
+    if (!next) return { rows, truncated: false };
+    if (rows.length >= cap) return { rows: rows.slice(0, cap), truncated: true };
+    pageToken = next;
+  }
+  return { rows, truncated: true };
+}
+
+/** Lista as pastas/arquivos de [parentId] (sem lixeira): pastas primeiro, nome ascendente. Até [limit] itens. */
 export async function listChildren(
   accessToken: string,
   parentId: string,
   fetchFn: FetchFn,
   limit = LIST_LIMIT,
-): Promise<DriveItem[]> {
-  const p = new URLSearchParams({
-    q: `'${qEscape(parentId)}' in parents and trashed = false`,
-    orderBy: "folder,name",
-    pageSize: String(limit),
-    fields: `files(${FILE_FIELDS})`,
-  });
-  const j = await driveRequest(fetchFn, `${DRIVE_API}/files?${p}`, { headers: authz(accessToken) });
-  const files = Array.isArray(j?.files) ? j!.files as Record<string, unknown>[] : [];
-  return files.map(toItem);
+): Promise<{ items: DriveItem[]; truncated: boolean }> {
+  const { rows, truncated } = await listPaged(
+    fetchFn,
+    `${DRIVE_API}/files`,
+    {
+      q: `'${qEscape(parentId)}' in parents and trashed = false`,
+      orderBy: "folder,name",
+      fields: `nextPageToken,files(${FILE_FIELDS})`,
+    },
+    "files",
+    accessToken,
+    limit,
+    FILES_PAGE_MAX,
+  );
+  return { items: rows.map(toItem), truncated };
+}
+
+/** Busca por nome (sem lixeira). Até [limit] itens. */
+export async function searchFiles(
+  accessToken: string,
+  text: string,
+  fetchFn: FetchFn,
+  limit = SEARCH_LIMIT,
+): Promise<{ items: DriveItem[]; truncated: boolean }> {
+  const { rows, truncated } = await listPaged(
+    fetchFn,
+    `${DRIVE_API}/files`,
+    {
+      q: `name contains '${qEscape(text)}' and trashed = false`,
+      orderBy: "folder,name",
+      fields: `nextPageToken,files(${FILE_FIELDS})`,
+    },
+    "files",
+    accessToken,
+    limit,
+    FILES_PAGE_MAX,
+  );
+  return { items: rows.map(toItem), truncated };
 }
 
 export async function getFolder(accessToken: string, id: string, fetchFn: FetchFn): Promise<DriveFolder> {
@@ -207,6 +274,8 @@ export async function createUploadSession(
   } catch {
     throw new GoogleError("other");
   }
-  if (url.protocol !== "https:" || !url.hostname.endsWith("googleapis.com")) throw new GoogleError("other");
+  if (url.protocol !== "https:" || url.hostname !== UPLOAD_HOST || url.username || url.password || url.port) {
+    throw new GoogleError("other");
+  }
   return url.toString();
 }

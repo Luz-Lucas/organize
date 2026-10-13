@@ -1,5 +1,6 @@
 // Implementação de DriveStore sobre o supabase-js com a service role.
 import type { createAdminClient } from "./gmail_store.ts";
+import { siblingMatches } from "./gmail.ts";
 import type { DriveAccountRow, DriveStatePatch, DriveStateRow, DriveStore } from "./drive.ts";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -27,6 +28,15 @@ export function createDriveStore(db: Db): DriveStore {
     async deleteAccount(userId) {
       const { error } = await db.from("google_accounts").delete().eq("user_id", userId).eq("provider", "drive");
       if (error) throw fail("deleteAccount");
+    },
+    async hasSiblingAccount(userId, accountEmail) {
+      const { data, error } = await db
+        .from("google_accounts")
+        .select("account_email")
+        .eq("user_id", userId)
+        .neq("provider", "drive");
+      if (error) throw fail("hasSiblingAccount");
+      return siblingMatches(data as { account_email: string }[] | null, accountEmail);
     },
     async getState(userId): Promise<DriveStateRow | null> {
       const { data, error } = await db

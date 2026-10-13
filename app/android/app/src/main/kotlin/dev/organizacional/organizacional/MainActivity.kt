@@ -17,11 +17,14 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Só no primeiro lançamento: ao recriar a activity (rotação) o mesmo intent não vale de novo.
-        if (savedInstanceState == null) share?.handleIntent(intent, true)
+        // Reaberto pelo histórico de recentes, o Android reentrega o intent antigo: não é novo compartilhamento.
+        if (savedInstanceState == null && !ShareGuard.launchedFromHistory(intent.flags)) {
+            share?.handleIntent(intent, true)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        share?.handleIntent(intent, false)
+        if (!ShareGuard.launchedFromHistory(intent.flags)) share?.handleIntent(intent, false)
     }
 }

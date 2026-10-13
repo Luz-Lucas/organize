@@ -162,4 +162,56 @@ void main() {
       throwsA(isA<RepositoryException>()),
     );
   });
+
+  test('list e search repassam truncated do servidor (padrão false)', () async {
+    final repo = _repo([], (c) => switch (c.body['action']) {
+          'list' => {
+              'folder': {'id': 'r', 'name': 'O', 'parents': []},
+              'items': [],
+              'truncated': true,
+            },
+          'search' => {'items': [], 'truncated': true},
+          _ => {},
+        });
+    expect((await repo.list()).truncated, isTrue);
+    expect((await repo.search('x')).truncated, isTrue);
+    final none = _repo([], (c) => c.body['action'] == 'list' ? {'folder': {'id': 'r', 'name': 'O'}, 'items': []} : {'items': []});
+    expect((await none.list()).truncated, isFalse);
+    expect((await none.search('x')).truncated, isFalse);
+  });
+
+  test('upload só aceita URL de sessão em https://www.googleapis.com (sem usuário, porta ou host parecido)', () async {
+    for (final url in [
+      'https://storage.googleapis.com/up',
+      'https://evilgoogleapis.com/up',
+      'https://www.googleapis.com.evil.example/up',
+      'http://www.googleapis.com/up',
+      'https://user:pw@www.googleapis.com/up',
+      'https://www.googleapis.com:8443/up',
+    ]) {
+      final repo = _repo([], (_) => {'uploadUrl': url});
+      await expectLater(
+        repo.upload(parentId: 'P', name: 'a', mimeType: 'a/b', size: 1, data: Stream.value([1])),
+        throwsA(isA<RepositoryException>()),
+        reason: url,
+      );
+    }
+  });
+
+  test('upload: erro de rede não vaza URL nem upload_id na mensagem ao usuário', () async {
+    const secret = 'https://www.googleapis.com/upload/drive/v3/files?upload_id=SEGREDO-123';
+    final client = MockClient.streaming((req, body) async {
+      await body.drain<void>();
+      throw http.ClientException('Connection reset by peer', Uri.parse(secret));
+    });
+    final repo = _repo([], (_) => {'uploadUrl': secret}, client: client);
+    final e = await repo.upload(parentId: 'P', name: 'a', mimeType: 'a/b', size: 1, data: Stream.value([1])).then<Object>((_) => 'sem erro', onError: (Object e) => e);
+    expect(e, isA<RepositoryException>());
+    final msg = (e as RepositoryException).message;
+    expect(msg, isNot(contains('SEGREDO')));
+    expect(msg, isNot(contains('upload_id')));
+    expect(msg, isNot(contains('googleapis')));
+    expect(msg, isNot(contains('Connection reset')));
+    expect(msg, contains('conexão'));
+  });
 }

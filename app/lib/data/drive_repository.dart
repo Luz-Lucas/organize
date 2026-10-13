@@ -25,7 +25,7 @@ abstract interface class DriveRepository {
   /// Conteúdo de uma pasta; [folderId] nulo = raiz "Organizacional"; `'root'` = Meu Drive.
   Future<DriveListing> list({String? folderId});
 
-  Future<List<DriveItem>> search(String query);
+  Future<DriveSearchResult> search(String query);
   Future<DriveItem> createFolder(String parentId, String name);
 
   /// Acha a pasta [name] em [parentId] ou cria.

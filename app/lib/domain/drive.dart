@@ -111,10 +111,21 @@ class DriveFolder {
 }
 
 class DriveListing {
-  const DriveListing({required this.folder, required this.items});
+  const DriveListing({required this.folder, required this.items, this.truncated = false});
 
   final DriveFolder folder;
   final List<DriveItem> items;
+
+  /// O servidor cortou a lista no teto (há mais itens no Drive do que os mostrados).
+  final bool truncated;
+}
+
+/// Resultado de uma busca por nome.
+class DriveSearchResult {
+  const DriveSearchResult({required this.items, this.truncated = false});
+
+  final List<DriveItem> items;
+  final bool truncated;
 }
 
 enum DriveRole {

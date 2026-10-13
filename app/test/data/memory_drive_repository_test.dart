@@ -54,7 +54,7 @@ void main() {
     final t = repo.addFile('edital velho.pdf', root);
     repo.addFile('outro.txt', root);
     await repo.trash(t.id);
-    expect((await repo.search('EDITAL')).map((i) => i.name), ['Edital Concurso.pdf']);
+    expect((await repo.search('EDITAL')).items.map((i) => i.name), ['Edital Concurso.pdf']);
   });
 
   test('compartilhar: link público liga/desliga e convites aparecem em permissions', () async {
@@ -109,5 +109,21 @@ void main() {
       repo.list(),
       throwsA(isA<DriveException>().having((e) => e.code, 'code', 'auth_required')),
     );
+  });
+
+  test('itemLimit corta list e search e marca truncated', () async {
+    final repo = MemoryDriveRepository()..itemLimit = 2;
+    for (var i = 0; i < 5; i++) {
+      repo.addFile('arq $i.pdf', repo.rootFolderId);
+    }
+    final l = await repo.list();
+    expect(l.items.length, 2);
+    expect(l.truncated, isTrue);
+    final s = await repo.search('arq');
+    expect(s.items.length, 2);
+    expect(s.truncated, isTrue);
+    repo.itemLimit = null;
+    expect((await repo.list()).truncated, isFalse);
+    expect((await repo.search('arq')).truncated, isFalse);
   });
 }

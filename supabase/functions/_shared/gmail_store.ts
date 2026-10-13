@@ -1,5 +1,6 @@
 // Implementação de GmailStore sobre o supabase-js com a service role.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { siblingMatches } from "./gmail.ts";
 import type { AccountRow, GmailStore, StatePatch, StateRow } from "./gmail_sync.ts";
 
 export function createAdminClient() {
@@ -23,6 +24,15 @@ export function createStore(db: Db): GmailStore {
         .maybeSingle();
       if (error) throw fail("getAccount");
       return (data as AccountRow | null) ?? null;
+    },
+    async hasSiblingAccount(userId, accountEmail) {
+      const { data, error } = await db
+        .from("google_accounts")
+        .select("account_email")
+        .eq("user_id", userId)
+        .neq("provider", "gmail");
+      if (error) throw fail("hasSiblingAccount");
+      return siblingMatches(data as { account_email: string }[] | null, accountEmail);
     },
     async listAccounts() {
       const { data, error } = await db

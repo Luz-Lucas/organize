@@ -6,7 +6,9 @@ import {
   type GmailConfig,
   type GoogleProvider,
   scopeFor,
-  verifyStateInfo,
+  type NonceStore,
+  userAllowed,
+  verifyStateFull,
 } from "../_shared/gmail.ts";
 import { type GmailStore, syncAccount } from "../_shared/gmail_sync.ts";
 import { ensureFolder, getAboutEmail, ROOT_FOLDER_NAME, type DriveStore } from "../_shared/drive.ts";
@@ -17,6 +19,10 @@ export interface CallbackDeps {
   /** Necessário só para o provider `drive`. */
   driveStore?: DriveStore;
   fetchFn: FetchFn;
+  /** GOOGLE_ALLOWED_USER_ID: se definido, só esse usuário conecta. */
+  allowedUserId?: string;
+  /** Nonces do state já usados (uso único). Sem ele, o state só vale por tempo (testes). */
+  nonceStore?: NonceStore;
   /** Opcional: se definido, em vez da página HTML responde 302 para `${doneUrl}?gmail=ok|error` (ou `?drive=`). */
   doneUrl?: string;
   now?: () => number;
@@ -74,10 +80,23 @@ export async function handle(req: Request, deps: CallbackDeps): Promise<Response
   // `error=access_denied` (usuário negou) cai aqui: sem code não há o que trocar.
   if (params.get("error") || !code || !state) return fail();
 
-  const info = await verifyStateInfo(state, cfg.stateSecret, deps.now?.() ?? Date.now());
+  const info = await verifyStateFull(state, cfg.stateSecret, deps.now?.() ?? Date.now());
   if (!info) return fail();
-  const { userId, provider } = info;
+  const { userId, provider, nonce } = info;
   if (provider === "drive" && !deps.driveStore) return fail(500, provider);
+  // Cadastro aberto: o state assinado não basta, o dono precisa ser o usuário permitido.
+  if (!userAllowed(deps.allowedUserId, userId)) return fail(403, provider);
+  // Uso único: o mesmo state (link de consentimento) não conecta duas vezes.
+  if (deps.nonceStore) {
+    let fresh = false;
+    try {
+      fresh = await deps.nonceStore.consume(nonce);
+    } catch {
+      console.error(`${provider}-callback: falha ao registrar o nonce`);
+      return fail(500, provider);
+    }
+    if (!fresh) return fail(400, provider);
+  }
 
   try {
     const tokens = await exchangeCode(cfg, code, fetchFn);

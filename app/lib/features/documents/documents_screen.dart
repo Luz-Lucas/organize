@@ -43,12 +43,14 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   bool _myDrive = false;
   List<DriveFolder> _trail = const [];
   List<DriveItem> _items = const [];
+  bool _itemsTruncated = false;
   bool _loading = false;
   Object? _error;
   bool _loadedOnce = false;
 
   String _query = '';
   List<DriveItem>? _results;
+  bool _resultsTruncated = false;
 
   String? _uploadName;
   double? _uploadFraction;
@@ -85,6 +87,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       if (!mounted) return;
       setState(() {
         _items = listing.items;
+        _itemsTruncated = listing.truncated;
         _trail = [...?keepTrail, listing.folder];
         _loading = false;
       });
@@ -119,6 +122,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     setState(() {
       _query = '';
       _results = null;
+      _resultsTruncated = false;
     });
   }
 
@@ -134,7 +138,8 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       final r = await _repo.search(text);
       if (!mounted) return;
       setState(() {
-        _results = r;
+        _results = r.items;
+        _resultsTruncated = r.truncated;
         _loading = false;
       });
     } catch (e) {
@@ -462,6 +467,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
 
   Widget _buildBrowser(BuildContext context, ThemeData theme, OrgThemeSpec org) {
     final list = _results ?? _items;
+    final truncated = _searching ? _resultsTruncated : _itemsTruncated;
     return Column(
       children: [
         Padding(
@@ -533,12 +539,25 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
               onRefresh: _reload,
               child: ListView.builder(
                 padding: const EdgeInsets.only(bottom: 88),
-                itemCount: list.length,
-                itemBuilder: (context, i) => _ItemTile(
-                  item: list[i],
-                  onOpen: () => _open(list[i]),
-                  onActions: () => _showActions(list[i]),
-                ),
+                itemCount: list.length + (truncated ? 1 : 0),
+                itemBuilder: (context, i) {
+                  if (i == list.length) {
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Text(
+                        'Mostrando os primeiros ${list.length} itens',
+                        key: const Key('docs-truncated'),
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
+                      ),
+                    );
+                  }
+                  return _ItemTile(
+                    item: list[i],
+                    onOpen: () => _open(list[i]),
+                    onActions: () => _showActions(list[i]),
+                  );
+                },
               ),
             ),
           ),

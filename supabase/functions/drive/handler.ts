@@ -19,11 +19,11 @@ import {
   driveRequest,
   type DriveStore,
   ensureFolder,
-  FILE_FIELDS,
   getFolder,
   listChildren,
-  qEscape,
-  toItem,
+  listPaged,
+  PERMISSIONS_LIMIT,
+  searchFiles,
   validId,
 } from "../_shared/drive.ts";
 
@@ -43,7 +43,6 @@ export interface DriveDeps {
 }
 
 const TOKEN_TTL_MS = 50 * 60 * 1000; // o Google emite 60 min
-const SEARCH_LIMIT = 100;
 const defaultCache = new Map<string, TokenEntry>();
 
 const MSG_AUTH = "O acesso ao Google Drive expirou. Reconecte em Ajustes.";
@@ -56,9 +55,15 @@ class NotConnected extends Error {}
 
 const ROLES = ["reader", "writer", "commenter"] as const;
 type Role = typeof ROLES[number];
-const MIME_RE = /^[A-Za-z0-9][\w.+-]*\/[\w.+*-]+$/;
+const MIME_RE = /^[A-Za-z0-9][\w.+-]*\/[\w.+-]+$/; // sem "*": curinga não é tipo de arquivo
+const GOOGLE_NATIVE_MIME_PREFIX = "application/vnd.google-apps."; // Docs/Sheets/pasta: o upload não cria isso
 
 type Body = Record<string, unknown>;
+
+async function sha256Hex(text: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+  return [...d].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 function id(v: unknown, what = "item"): string {
   if (!validId(v)) throw new BadRequest(`Identificador de ${what} inválido.`);
@@ -92,8 +97,13 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
   const now = deps.now ?? Date.now;
   const { store, fetchFn } = deps;
 
+  /** Esquece todos os access tokens em cache deste usuário (a chave leva o hash do refresh token). */
+  const dropCached = () => {
+    for (const k of [...cache.keys()]) if (k.startsWith(`${userId}:`)) cache.delete(k);
+  };
+
   const markAuthRequired = async () => {
-    cache.delete(userId);
+    dropCached();
     try {
       await store.setState(userId, { status: "auth_required", message: MSG_AUTH });
     } catch {
@@ -102,10 +112,12 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
   };
 
   async function accessToken(force: boolean): Promise<string> {
-    const hit = cache.get(userId!);
-    if (!force && hit && hit.exp > now()) return hit.token;
     const acct = await store.getAccount(userId!);
     if (!acct) throw new NotConnected();
+    // A chave depende do refresh token gravado: reconectar (token novo) nunca reaproveita o access token antigo.
+    const cacheKey = `${userId}:${await sha256Hex(acct.refresh_token_enc)}`;
+    const hit = cache.get(cacheKey);
+    if (!force && hit && hit.exp > now()) return hit.token;
     let refresh: string;
     try {
       refresh = await decryptToken(acct.refresh_token_enc, cfg!.tokenKey);
@@ -113,7 +125,8 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
       throw new GoogleError("auth"); // chave trocada: só reconectando
     }
     const token = await refreshAccessToken(cfg!, refresh, fetchFn);
-    cache.set(userId!, { token, exp: now() + TOKEN_TTL_MS });
+    dropCached(); // só um access token por usuário: os de refresh tokens anteriores saem
+    cache.set(cacheKey, { token, exp: now() + TOKEN_TTL_MS });
     return token;
   }
 
@@ -133,10 +146,14 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
       case "disconnect": {
         const acct = await store.getAccount(userId);
         if (acct && cfg) {
-          try {
-            await revokeToken(await decryptToken(acct.refresh_token_enc, cfg.tokenKey), fetchFn);
-          } catch {
-            // melhor esforço: apagar os dados locais é o que importa
+          // Gmail e Drive usam o mesmo client OAuth: revogar aqui derrubaria também o Gmail da mesma conta Google.
+          const shared = await store.hasSiblingAccount(userId, acct.account_email).catch(() => true);
+          if (!shared) {
+            try {
+              await revokeToken(await decryptToken(acct.refresh_token_enc, cfg.tokenKey), fetchFn);
+            } catch {
+              // melhor esforço: apagar os dados locais é o que importa
+            }
           }
         }
         await store.deleteAccount(userId);
@@ -147,7 +164,7 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
           message: null,
           connected_at: null,
         });
-        cache.delete(userId);
+        dropCached();
         return json({ ok: true });
       }
 
@@ -161,8 +178,8 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
           folderId = id(raw, "pasta");
         }
         const out = await withToken(async (t) => {
-          const [folder, items] = await Promise.all([getFolder(t, folderId, fetchFn), listChildren(t, folderId, fetchFn)]);
-          return { folder, items };
+          const [folder, listing] = await Promise.all([getFolder(t, folderId, fetchFn), listChildren(t, folderId, fetchFn)]);
+          return { folder, items: listing.items, truncated: listing.truncated };
         });
         return json(out);
       }
@@ -170,18 +187,8 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
       case "search": {
         const q = typeof body.q === "string" ? body.q.trim() : "";
         if (q.length < 1 || q.length > 200) throw new BadRequest("Digite o que procurar (até 200 caracteres).");
-        const items = await withToken(async (t) => {
-          const p = new URLSearchParams({
-            q: `name contains '${qEscape(q)}' and trashed = false`,
-            orderBy: "folder,name",
-            pageSize: String(SEARCH_LIMIT),
-            fields: `files(${FILE_FIELDS})`,
-          });
-          const j = await driveRequest(fetchFn, `${DRIVE_API}/files?${p}`, { headers: authz(t) });
-          const files = Array.isArray(j?.files) ? j!.files as Record<string, unknown>[] : [];
-          return files.map(toItem);
-        });
-        return json({ items });
+        const found = await withToken((t) => searchFiles(t, q, fetchFn));
+        return json({ items: found.items, truncated: found.truncated });
       }
 
       case "create_folder": {
@@ -222,8 +229,12 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
         await withToken(async (t) => {
           const cur = await driveRequest(fetchFn, `${DRIVE_API}/files/${fid}?fields=parents`, { headers: authz(t) });
           const parents = Array.isArray(cur?.parents) ? cur!.parents.filter((x): x is string => typeof x === "string") : [];
-          const p = new URLSearchParams({ addParents: to, fields: "id" });
-          if (parents.length) p.set("removeParents", parents.join(","));
+          const already = parents.includes(to);
+          const leaving = parents.filter((x) => x !== to); // o destino nunca sai dos pais
+          if (already && leaving.length === 0) return; // já está só nessa pasta: nada a fazer
+          const p = new URLSearchParams({ fields: "id" });
+          if (!already) p.set("addParents", to);
+          if (leaving.length) p.set("removeParents", leaving.join(","));
           await driveRequest(fetchFn, `${DRIVE_API}/files/${fid}?${p}`, driveJson(t, "PATCH", {}));
         });
         return json({ ok: true });
@@ -255,7 +266,7 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
             await driveRequest(fetchFn, `${DRIVE_API}/files/${fid}/permissions?fields=id`, driveJson(t, "POST", { type: "anyone", role: "reader" }));
           } else {
             const list = await listPermissions(t, fid);
-            for (const perm of list.filter((x) => x.type === "anyone")) {
+            for (const perm of list.permissions.filter((x) => x.type === "anyone")) {
               await driveRequest(fetchFn, `${DRIVE_API}/files/${fid}/permissions/${perm.id}`, { method: "DELETE", headers: authz(t) });
             }
           }
@@ -267,7 +278,8 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
 
       case "permissions": {
         const fid = id(body.id);
-        return json({ permissions: await withToken((t) => listPermissions(t, fid)) });
+        const out = await withToken((t) => listPermissions(t, fid));
+        return json({ permissions: out.permissions, truncated: out.truncated });
       }
 
       case "unshare": {
@@ -283,7 +295,9 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
         const parentId = id(body.parentId, "pasta");
         const n = name(body.name);
         const mimeType = typeof body.mimeType === "string" ? body.mimeType.trim() : "";
-        if (!MIME_RE.test(mimeType) || mimeType.length > 200) throw new BadRequest("Tipo de arquivo inválido.");
+        if (!MIME_RE.test(mimeType) || mimeType.length > 200 || mimeType.toLowerCase().startsWith(GOOGLE_NATIVE_MIME_PREFIX)) {
+          throw new BadRequest("Tipo de arquivo inválido.");
+        }
         const size = body.size;
         if (typeof size !== "number" || !Number.isInteger(size) || size < 0 || size > 5 * 1024 ** 4) {
           throw new BadRequest("Tamanho de arquivo inválido.");
@@ -316,10 +330,16 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
   }
 
   async function listPermissions(t: string, fid: string) {
-    const p = new URLSearchParams({ fields: "permissions(id,emailAddress,role,type)", pageSize: "100" });
-    const j = await driveRequest(fetchFn, `${DRIVE_API}/files/${fid}/permissions?${p}`, { headers: authz(t) });
-    const list = Array.isArray(j?.permissions) ? j!.permissions as Record<string, unknown>[] : [];
-    return list
+    const { rows, truncated } = await listPaged(
+      fetchFn,
+      `${DRIVE_API}/files/${fid}/permissions`,
+      { fields: "nextPageToken,permissions(id,emailAddress,role,type)" },
+      "permissions",
+      t,
+      PERMISSIONS_LIMIT,
+      100,
+    );
+    const permissions = rows
       .filter((x) => typeof x.id === "string")
       .map((x) => ({
         id: x.id as string,
@@ -327,5 +347,6 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
         role: typeof x.role === "string" ? x.role : "reader",
         type: typeof x.type === "string" ? x.type : "user",
       }));
+    return { permissions, truncated };
   }
 }

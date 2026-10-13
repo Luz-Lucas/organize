@@ -42,6 +42,8 @@ export interface GmailStore {
   listAccounts(): Promise<AccountRow[]>;
   upsertAccount(row: AccountRow): Promise<void>;
   deleteAccount(userId: string): Promise<void>;
+  /** Existe outra linha de google_accounts do usuário (outro provider) com o mesmo account_email? */
+  hasSiblingAccount(userId: string, accountEmail: string): Promise<boolean>;
   getState(userId: string): Promise<StateRow | null>;
   /** Upsert parcial: só as colunas presentes no patch são alteradas. */
   setState(userId: string, patch: StatePatch): Promise<void>;

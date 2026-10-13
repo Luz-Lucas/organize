@@ -130,7 +130,7 @@ class Importer {
     for (final file in files) {
       try {
         space ??= await ensureImportSpace();
-        if (isTextFileName(file.name)) {
+        if (file.becomesNote) {
           final raw = await file.readAsString();
           final isMd = file.name.toLowerCase().endsWith('.md');
           final note = await _createNote(_stem(file.name), isMd ? raw.replaceAll('\r\n', '\n').trimRight() : plainTextToMarkdown(raw), space);

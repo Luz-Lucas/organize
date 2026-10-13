@@ -130,6 +130,12 @@ export async function decryptToken(blob: string, keyB64: string): Promise<string
   }
 }
 
+/** Alguma das linhas (de outro provider do mesmo usuário) tem este e-mail? Sem diferenciar maiúsculas. */
+export function siblingMatches(rows: { account_email: string }[] | null, accountEmail: string): boolean {
+  const want = accountEmail.trim().toLowerCase();
+  return (rows ?? []).some((r) => typeof r.account_email === "string" && r.account_email.trim().toLowerCase() === want);
+}
+
 // ---------------------------------------------------------------- state do OAuth
 
 async function hmacKey(secret: string, usages: KeyUsage[]): Promise<CryptoKey> {
@@ -154,12 +160,12 @@ export async function signState(
   return `${payload}.${b64urlEncode(sig)}`;
 }
 
-/** Retorna userId e provider se a assinatura confere (tempo constante) e não expirou; senão null. */
-export async function verifyStateInfo(
+/** Como verifyStateInfo, mas também devolve o nonce (para uso único no callback). */
+export async function verifyStateFull(
   state: string,
   secret: string,
   now: number = Date.now(),
-): Promise<{ userId: string; provider: GoogleProvider } | null> {
+): Promise<{ userId: string; provider: GoogleProvider; nonce: string } | null> {
   try {
     const parts = state.split(".");
     if (parts.length !== 2) return null;
@@ -171,10 +177,38 @@ export async function verifyStateInfo(
     if (!userId || !exp || !nonce || extra !== undefined) return null;
     if (provider !== undefined && !isProvider(provider)) return null;
     if (!/^\d+$/.test(exp) || Number(exp) < now) return null;
-    return { userId, provider: provider ?? "gmail" };
+    return { userId, provider: provider ?? "gmail", nonce };
   } catch {
     return null;
   }
+}
+
+/** Retorna userId e provider se a assinatura confere (tempo constante) e não expirou; senão null. */
+export async function verifyStateInfo(
+  state: string,
+  secret: string,
+  now: number = Date.now(),
+): Promise<{ userId: string; provider: GoogleProvider } | null> {
+  const full = await verifyStateFull(state, secret, now);
+  return full ? { userId: full.userId, provider: full.provider } : null;
+}
+
+/** Guarda de nonces já usados: `consume` devolve true só na primeira vez que o nonce aparece. */
+export interface NonceStore {
+  consume(nonce: string): Promise<boolean>;
+}
+
+/**
+ * O cadastro do Supabase é aberto: com GOOGLE_ALLOWED_USER_ID definido, só esse usuário pode conectar
+ * Google. Sem o segredo, vale qualquer usuário autenticado (comportamento anterior) e o log avisa.
+ */
+export function userAllowed(allowedUserId: string | undefined | null, userId: string): boolean {
+  const allowed = allowedUserId?.trim();
+  if (!allowed) {
+    console.warn("google: GOOGLE_ALLOWED_USER_ID não definido; qualquer usuário autenticado pode conectar o Google");
+    return true;
+  }
+  return allowed.toLowerCase() === userId.toLowerCase();
 }
 
 /** Retorna o userId se o state é válido (qualquer provider); senão null. */

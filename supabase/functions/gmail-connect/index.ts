@@ -7,6 +7,7 @@ const db = createAdminClient();
 Deno.serve((req) =>
   handle(req, {
     cfg: loadConfig((k) => Deno.env.get(k)),
+    allowedUserId: Deno.env.get("GOOGLE_ALLOWED_USER_ID") || undefined,
     getUserId: async (jwt) => {
       const { data, error } = await db.auth.getUser(jwt);
       return error ? null : data.user?.id ?? null;

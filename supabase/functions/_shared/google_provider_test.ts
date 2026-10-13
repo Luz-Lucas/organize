@@ -6,7 +6,9 @@ import {
   DRIVE_SCOPE,
   GMAIL_SCOPE,
   signState,
+  siblingMatches,
   verifyState,
+  verifyStateFull,
   verifyStateInfo,
 } from "./gmail.ts";
 import { CFG } from "./gmail_testutil.ts";
@@ -46,4 +48,23 @@ Deno.test("consentimento do drive pede só o escopo drive; o padrão continua gm
   const g = new URL(buildConsentUrl(CFG, "st.sig")).searchParams;
   assertEquals(g.get("scope"), GMAIL_SCOPE);
   assert(!buildConsentUrl(CFG, "s", undefined, "drive").includes(CFG.clientSecret));
+});
+
+Deno.test("siblingMatches compara o e-mail da outra linha sem diferenciar maiúsculas nem espaços", () => {
+  assertEquals(siblingMatches([{ account_email: " Lucas@Gmail.com " }], "lucas@gmail.com"), true);
+  assertEquals(siblingMatches([{ account_email: "outra@gmail.com" }], "lucas@gmail.com"), false);
+  assertEquals(siblingMatches([], "lucas@gmail.com"), false);
+  assertEquals(siblingMatches(null, "lucas@gmail.com"), false);
+});
+
+Deno.test("verifyStateFull expõe o nonce do state (único por state assinado)", async () => {
+  const a = await signState(U, "segredo", 1000);
+  const b = await signState(U, "segredo", 1000);
+  const ia = await verifyStateFull(a, "segredo", 2000);
+  const ib = await verifyStateFull(b, "segredo", 2000);
+  assertEquals(ia?.userId, U);
+  assertEquals(ia?.provider, "gmail");
+  assert(typeof ia?.nonce === "string" && ia.nonce.length >= 16);
+  assert(ia!.nonce !== ib!.nonce);
+  assertEquals(await verifyStateFull(a, "outro", 2000), null);
 });

@@ -130,4 +130,30 @@ void main() {
     );
     expect(seen.last, (2, 2));
   });
+
+  test('.txt/.md acima de 1 MB vão para o Drive (com nota-link) em vez de virar nota de texto', () async {
+    final repo = MemoryRepository();
+    final drive = MemoryDriveRepository();
+    final imp = _importer(repo, drive);
+    final big = List.filled(1024 * 1024 + 1, 97);
+    final summary = await imp.importFiles([
+      LocalFile.memory(name: 'enorme.txt', bytes: big),
+      LocalFile.memory(name: 'cabe.txt', bytes: List.filled(1024 * 1024, 98)),
+    ]);
+    expect(summary.errors, isEmpty);
+    expect(summary.files, 1);
+    expect(drive.uploads.map((u) => u.name), ['enorme.txt']);
+    final notes = await _notes(repo);
+    expect(notes.firstWhere((n) => n.title == 'enorme.txt').body, contains('Google Drive'));
+    expect(notes.where((n) => n.title == 'cabe').length, 1);
+  });
+
+  test('texto grande sem Drive conectado dá erro e não carrega o arquivo como nota', () async {
+    final repo = MemoryRepository();
+    final imp = _importer(repo, MemoryDriveRepository(), state: const DriveState());
+    final summary = await imp.importFiles([LocalFile.memory(name: 'enorme.md', bytes: List.filled(1024 * 1024 + 1, 97))]);
+    expect(summary.notes, 0);
+    expect(summary.errors.single, contains('enorme.md'));
+    expect(await _notes(repo), isEmpty);
+  });
 }
