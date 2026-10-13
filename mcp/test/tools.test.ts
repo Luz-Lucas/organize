@@ -378,6 +378,88 @@ describe.skipIf(!hasDb)('ferramentas MCP (Supabase local)', () => {
       expect(exact.data.note.body).toContain('integral');
     });
 
+    describe('cadernos (kind=notebook)', () => {
+      let nbId = '';
+      let nbBId = '';
+
+      beforeAll(async () => {
+        const nb = await db.from('notes').insert({ user_id: userA, title: 'Caderno de Física', kind: 'notebook' }).select('id').single();
+        nbId = nb.data!.id;
+        await db.from('note_pages').insert([
+          { user_id: userA, note_id: nbId, idx: 1, recognized_text: 'Segunda página: pêndulo simples' },
+          { user_id: userA, note_id: nbId, idx: 0, recognized_text: 'Primeira página: Cinemática vetorial' },
+        ]);
+        const nbB = await db.from('notes').insert({ user_id: userB, title: 'Caderno secreto do B', kind: 'notebook' }).select('id').single();
+        nbBId = nbB.data!.id;
+        await db.from('note_pages').insert({ user_id: userB, note_id: nbBId, idx: 0, recognized_text: 'tesouro-escondido-do-b' });
+      });
+
+      it('create_note continua criando nota de texto e informa kind', async () => {
+        const c = await call(a.client, 'create_note', { title: 'Texto comum do caderno-teste' });
+        expect(c.isError).toBe(false);
+        expect(c.data.note.kind).toBe('text');
+        const { data } = await db.from('notes').select('kind').eq('id', c.data.note.id).single();
+        expect(data!.kind).toBe('text');
+      });
+
+      it('search_notes acha o caderno pelo texto reconhecido (sem acento/caixa) e indica kind', async () => {
+        const r = await call(a.client, 'search_notes', { query: 'CINEMATICA' });
+        expect(r.isError).toBe(false);
+        const hit = r.data.notes.find((n: any) => n.id === nbId);
+        expect(hit).toBeTruthy();
+        expect(hit.kind).toBe('notebook');
+        expect(hit.snippet).toContain('Cinemática');
+        const r2 = await call(a.client, 'search_notes', { query: 'pendulo' });
+        expect(r2.data.notes.map((n: any) => n.id)).toContain(nbId);
+      });
+
+      it('notas de texto aparecem com kind=text na busca', async () => {
+        await call(a.client, 'create_note', { title: 'Nota de texto sobre cinemática', body: 'cinemática escalar' });
+        const r = await call(a.client, 'search_notes', { query: 'cinematica' });
+        const kinds = Object.fromEntries(r.data.notes.map((n: any) => [n.title, n.kind]));
+        expect(kinds['Nota de texto sobre cinemática']).toBe('text');
+        expect(kinds['Caderno de Física']).toBe('notebook');
+      });
+
+      it('obter o caderno por id traz kind, corpo vazio e o texto reconhecido na ordem das páginas', async () => {
+        const g = await call(a.client, 'search_notes', { id: nbId });
+        expect(g.isError).toBe(false);
+        expect(g.data.note.kind).toBe('notebook');
+        expect(g.data.note.body).toBe('');
+        expect(g.data.note.pageCount).toBe(2);
+        const text = g.data.note.recognizedText as string;
+        expect(text.indexOf('Primeira página')).toBeGreaterThanOrEqual(0);
+        expect(text.indexOf('Primeira página')).toBeLessThan(text.indexOf('Segunda página'));
+      });
+
+      it('busca sem argumentos lista o caderno; página sem texto não quebra a busca', async () => {
+        await db.from('note_pages').insert({ user_id: userA, note_id: nbId, idx: 2 });
+        const r = await call(a.client, 'search_notes', { limit: 200 });
+        expect(r.data.notes.map((n: any) => n.id)).toContain(nbId);
+        const miss = await call(a.client, 'search_notes', { query: 'nada-disso-existe-xyz' });
+        expect(miss.data.notes).toHaveLength(0);
+      });
+
+      it('append_to_note recusa cadernos (o corpo deles é sempre vazio)', async () => {
+        const r = await call(a.client, 'append_to_note', { id: nbId, text: 'não deve entrar' });
+        expect(r.isError).toBe(true);
+        expect(r.text).toMatch(/caderno/i);
+        const { data } = await db.from('notes').select('body').eq('id', nbId).single();
+        expect(data!.body).toBe('');
+      });
+
+      it('não vaza o texto reconhecido do caderno de outro usuário', async () => {
+        const r = await call(a.client, 'search_notes', { query: 'tesouro-escondido-do-b' });
+        expect(r.data.notes).toHaveLength(0);
+        expect(r.text).not.toContain('tesouro-escondido-do-b');
+        const g = await call(a.client, 'search_notes', { id: nbBId });
+        expect(g.isError).toBe(true);
+        expect(g.text).not.toContain('tesouro-escondido-do-b');
+        const mine = await call(a.client, 'search_notes', { limit: 200 });
+        expect(mine.text).not.toContain('tesouro-escondido-do-b');
+      });
+    });
+
     it('create_study_plan cria a nota e N tarefas com prazos crescentes; valida limites', async () => {
       const r = await call(a.client, 'create_study_plan', {
         subject: 'Banco de Dados', startDate: '2027-01-04', topics: ['SQL', 'Normalização', 'Transações'],
