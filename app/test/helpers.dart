@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/app/app.dart';
 import 'package:organizacional/app/back_navigation.dart';
@@ -42,6 +43,7 @@ Future<void> pumpApp(
   GithubRepository? githubRepo,
   LocationService? locationService,
   void Function()? exitApp,
+  List<Override> overrides = const [],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -62,6 +64,7 @@ Future<void> pumpApp(
       if (locationService != null) locationServiceProvider.overrideWithValue(locationService),
       googleFontsEnabledProvider.overrideWithValue(false),
       if (exitApp != null) exitAppProvider.overrideWithValue(exitApp),
+      ...overrides,
     ],
     child: OrganizacionalApp(
       router: buildRouter(initialLocation: location, isSignedIn: () => true),

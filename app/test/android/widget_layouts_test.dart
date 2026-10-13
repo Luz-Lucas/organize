@@ -27,4 +27,53 @@ void main() {
       expect(bad, isEmpty, reason: 'elementos proibidos em RemoteViews: $bad');
     });
   }
+
+  for (final f in layouts) {
+    test('${f.uri.pathSegments.last} tem o ImageView de fundo @+id/bg (transparência vale para todos)', () {
+      final src = f.readAsStringSync();
+      final bg = RegExp(r'<ImageView[^>]*android:id="@\+id/bg"[^>]*>').firstMatch(src);
+      expect(bg, isNotNull);
+      expect(bg!.group(0), contains('@drawable/widget_bg'));
+    });
+  }
+
+  group('widget_agenda_tarefas', () {
+    final src = File('android/app/src/main/res/layout/widget_agenda_tarefas.xml').readAsStringSync();
+
+    String tag(String id) {
+      final m = RegExp('<[A-Za-z]+[^>]*android:id="@\\+id/$id"[^>]*>').firstMatch(src);
+      expect(m, isNotNull, reason: 'faltou @+id/$id');
+      return m!.group(0)!;
+    }
+
+    for (final id in ['section_events', 'section_tasks']) {
+      test('$id ocupa metade da altura (0dp, peso 1)', () {
+        final t = tag(id);
+        expect(t, contains('android:layout_height="0dp"'));
+        expect(t, contains('android:layout_weight="1"'));
+      });
+    }
+
+    test('seis linhas por seção, cada uma com horário e título', () {
+      for (final p in ['ev', 'tk']) {
+        for (var i = 1; i <= 6; i++) {
+          tag('${p}_row$i');
+          tag('${p}_row${i}_time');
+          tag('${p}_row${i}_title');
+        }
+        expect(src, isNot(contains('@+id/${p}_row7')));
+        tag('${p}_more');
+        tag('${p}_empty');
+        tag('${p}_title');
+        tag('${p}_icon');
+      }
+    });
+
+    test('o horário/prazo tem largura fixa para alinhar em coluna', () {
+      for (var i = 1; i <= 6; i++) {
+        expect(tag('ev_row${i}_time'), contains('android:layout_width="52dp"'));
+        expect(tag('tk_row${i}_time'), contains('android:layout_width="52dp"'));
+      }
+    });
+  });
 }

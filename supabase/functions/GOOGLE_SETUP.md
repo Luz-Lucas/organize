@@ -2,9 +2,10 @@
 
 O mesmo projeto do Google Cloud e o **mesmo cliente OAuth** servem aos dois recursos:
 
-- **Gmail (somente leitura):** o app mostra a contagem de não lidos e as últimas mensagens (remetente,
-  assunto, data) do Gmail `seu-contato@exemplo.com`. Escopo `gmail.metadata` (só cabeçalhos: nunca
-  corpo nem anexos).
+- **Gmail:** o app mostra a contagem de não lidos e as últimas mensagens (remetente, assunto, data) do
+  Gmail `seu-contato@exemplo.com` e permite marcá-las como lidas. Escopo `gmail.modify` (o app só
+  lê cabeçalhos e só remove o rótulo "não lida"; nunca guarda corpo nem anexos). Contas conectadas antes
+  com `gmail.metadata` continuam sincronizando, mas precisam reconectar para marcar como lida.
 - **Google Drive (Documentos):** o app navega, renomeia, move, compartilha e envia arquivos na conta
   `sua-conta@exemplo.com`. Escopo `https://www.googleapis.com/auth/drive` (o Drive inteiro: pastas
   existentes, mover, compartilhar). Cria a pasta **Organizacional** no Meu Drive; os arquivos importados
@@ -45,7 +46,7 @@ Acesse https://console.cloud.google.com/ com a conta `seu-contato@exemplo.com`.
 5. **Acesso a dados** (Data Access) → **Adicionar ou remover escopos**. Em "Adicionar escopos
    manualmente", cole:
    ```
-   https://www.googleapis.com/auth/gmail.metadata
+   https://www.googleapis.com/auth/gmail.modify
    https://www.googleapis.com/auth/drive
    ```
    (**[Drive]** o segundo é o do Drive; se o console o marcar como "restrito", é esperado.) Clique em

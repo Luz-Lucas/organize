@@ -43,6 +43,26 @@ Future<void> _pump(WidgetTester tester, MemoryAlexaRepository alexa, {Size size 
 
 Finder _inCard(Finder f) => find.descendant(of: find.byKey(const Key('wake-card')), matching: f);
 
+
+Future<void> _enterTime(WidgetTester tester, int h, int m) async {
+  await tester.tap(find.byIcon(Icons.keyboard_outlined));
+  await tester.pumpAndSettle();
+  final fields = find.descendant(of: find.byType(Dialog), matching: find.byType(TextField));
+  await tester.enterText(fields.at(0), '$h');
+  await tester.enterText(fields.at(1), '$m');
+  await tester.tap(find.text('OK'));
+  await tester.pumpAndSettle();
+}
+
+Future<WakePlan> _plan(MemoryAlexaRepository alexa, [String id = 'p1']) async =>
+    (await alexa.watchWakePlans().first).firstWhere((p) => p.id == id);
+
+Future<void> _menu(WidgetTester tester, String planId, String itemKey) async {
+  await _tap(tester, find.byKey(Key('wake-menu-$planId')));
+  await tester.tap(find.byKey(Key(itemKey)));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('cartão Despertares na Início', () {
     testWidgets('aparece logo depois de "Agora e a seguir" e resume o despertar', (tester) async {
@@ -53,7 +73,8 @@ void main() {
       // nada entre os dois: o cartão de tarefas fica depois
       expect(tester.getTopLeft(find.byKey(const Key('card-tasks'))).dy, greaterThan(wake));
       expect(_inCard(find.text('Aula cedo')), findsOneWidget);
-      expect(_inCard(find.text('07:00 · Dias úteis')), findsOneWidget);
+      expect(_inCard(find.text('07:00')), findsOneWidget);
+      expect(_inCard(find.text('Dias úteis')), findsOneWidget);
       expect(_inCard(find.text('Toca amanhã às 07:00 · em 21 h')), findsOneWidget);
       expect(tester.widget<Switch>(find.byKey(const Key('wake-toggle-p1'))).value, isTrue);
     });
@@ -154,7 +175,9 @@ void main() {
     testWidgets('exceção de horário aparece no horário e no texto de amanhã', (tester) async {
       final alexa = _alexa(overrides: [WakeOverride.at('p1', _tomorrow, 5, 30)]);
       await _pump(tester, alexa);
-      expect(_inCard(find.text('07:00 · Dias úteis · amanhã 05:30')), findsOneWidget);
+      expect(_inCard(find.text('07:00')), findsOneWidget);
+      expect(_inCard(find.text('Dias úteis')), findsOneWidget);
+      expect(_inCard(find.text('amanhã 05:30')), findsOneWidget);
       expect(_inCard(find.text('Toca amanhã às 05:30 · em 19 h 30 min')), findsOneWidget);
     });
 
@@ -208,6 +231,166 @@ void main() {
     });
   });
 
+
+  group('editar o despertar direto no cartão', () {
+    testWidgets('tocar no horário grava o novo horário padrão e oferece Desfazer', (tester) async {
+      final alexa = _alexa();
+      await _pump(tester, alexa, size: const Size(800, 1000));
+      await _tap(tester, find.byKey(const Key('wake-time-p1')));
+      await _enterTime(tester, 6, 15);
+      final p = await _plan(alexa);
+      expect((p.hour, p.minute), (6, 15));
+      expect(p.days, [1, 2, 3, 4, 5]);
+      expect(find.text('Despertar às 06:15'), findsOneWidget);
+      await tester.tap(find.text('Desfazer'));
+      await tester.pumpAndSettle();
+      final back = await _plan(alexa);
+      expect((back.hour, back.minute), (7, 0));
+    });
+
+    testWidgets('mudar o horário mantém a exceção "só amanhã" com horário', (tester) async {
+      final alexa = _alexa(overrides: [WakeOverride.at('p1', _tomorrow, 5, 30)]);
+      await _pump(tester, alexa, size: const Size(800, 1000));
+      await _tap(tester, find.byKey(const Key('wake-time-p1')));
+      await _enterTime(tester, 6, 15);
+      expect(await alexa.watchOverrides().first, [WakeOverride.at('p1', _tomorrow, 5, 30)]);
+      expect(_inCard(find.text('amanhã 05:30')), findsOneWidget);
+    });
+
+    testWidgets('cancelar o seletor de hora não grava nada', (tester) async {
+      final alexa = _alexa();
+      await _pump(tester, alexa);
+      await _tap(tester, find.byKey(const Key('wake-time-p1')));
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect((await _plan(alexa)).hour, 7);
+      expect(find.textContaining('Despertar às'), findsNothing);
+    });
+
+    testWidgets('falha na validação mostra a mensagem e não grava', (tester) async {
+      const semEcho = WakePlan(id: 'x', label: 'Sem Echo', days: [1], hour: 7, minute: 0, echoDeviceId: '');
+      final alexa = _alexa(plans: const [semEcho]);
+      await _pump(tester, alexa, size: const Size(800, 1000));
+      await _tap(tester, find.byKey(const Key('wake-time-x')));
+      await _enterTime(tester, 6, 15);
+      expect(find.text('Escolha em qual Echo tocar.'), findsOneWidget);
+      expect((await _plan(alexa, 'x')).hour, 7);
+    });
+
+    testWidgets('erro de gravação ao mudar o horário avisa', (tester) async {
+      final alexa = _alexa();
+      await _pump(tester, alexa, size: const Size(800, 1000));
+      alexa.failWrites = true;
+      await _tap(tester, find.byKey(const Key('wake-time-p1')));
+      await _enterTime(tester, 6, 15);
+      expect(find.text('Não foi possível alterar o despertar.'), findsOneWidget);
+      expect((await _plan(alexa)).hour, 7);
+    });
+
+    testWidgets('tocar nos dias abre chips Dom…Sáb e Salvar grava os dias', (tester) async {
+      final alexa = _alexa();
+      await _pump(tester, alexa);
+      await _tap(tester, find.byKey(const Key('wake-days-p1')));
+      final chips = [for (var d = 1; d <= 7; d++) find.byKey(Key('wake-days-chip-$d'))];
+      for (final c in chips) {
+        expect(c, findsOneWidget);
+      }
+      // a semana começa no domingo
+      expect(tester.getTopLeft(chips[6]).dx, lessThan(tester.getTopLeft(chips[0]).dx));
+      expect(tester.getTopLeft(chips[0]).dx, lessThan(tester.getTopLeft(chips[1]).dx));
+      expect(find.descendant(of: chips[6], matching: find.text('Dom')), findsOneWidget);
+      expect(tester.widget<FilterChip>(chips[0]).selected, isTrue);
+      expect(tester.widget<FilterChip>(chips[5]).selected, isFalse);
+      await _tap(tester, chips[5]); // Sáb
+      await _tap(tester, find.byKey(const Key('wake-days-save')));
+      expect((await _plan(alexa)).days, [1, 2, 3, 4, 5, 6]);
+      expect(_inCard(find.text('Seg, Ter, Qua, Qui, Sex, Sáb')), findsOneWidget);
+    });
+
+    testWidgets('Cancelar na folha de dias não grava', (tester) async {
+      final alexa = _alexa();
+      await _pump(tester, alexa);
+      await _tap(tester, find.byKey(const Key('wake-days-p1')));
+      await _tap(tester, find.byKey(const Key('wake-days-chip-6')));
+      await _tap(tester, find.byKey(const Key('wake-days-cancel')));
+      expect((await _plan(alexa)).days, [1, 2, 3, 4, 5]);
+      expect(find.byKey(const Key('wake-days-save')), findsNothing);
+    });
+
+    testWidgets('sem nenhum dia: "Escolha pelo menos um dia", folha continua e nada grava', (tester) async {
+      final alexa = _alexa(plans: const [WakePlan(id: 'q', label: 'Um dia', days: [3], hour: 7, minute: 0, echoDeviceId: 'E')]);
+      await _pump(tester, alexa);
+      await _tap(tester, find.byKey(const Key('wake-days-q')));
+      await _tap(tester, find.byKey(const Key('wake-days-chip-3')));
+      await _tap(tester, find.byKey(const Key('wake-days-save')));
+      expect(find.text('Escolha pelo menos um dia'), findsOneWidget);
+      expect(find.byKey(const Key('wake-days-save')), findsOneWidget);
+      expect((await _plan(alexa, 'q')).days, [3]);
+    });
+
+    testWidgets('menu: "Editar tudo…" abre o editor completo', (tester) async {
+      await _pump(tester, _alexa());
+      await _menu(tester, 'p1', 'wake-menu-edit');
+      expect(_editorPlanId(tester), 'p1');
+    });
+
+    testWidgets('menu: "Só amanhã…" abre a folha existente', (tester) async {
+      await _pump(tester, _alexa());
+      await _menu(tester, 'p1', 'wake-menu-tomorrow');
+      expect(find.byKey(const Key('wake-tomorrow-skip')), findsOneWidget);
+    });
+
+    testWidgets('menu: "Duplicar" cria "<nome> (cópia)" desligada, mantendo o original', (tester) async {
+      final alexa = _alexa();
+      await _pump(tester, alexa, size: const Size(360, 1200));
+      await _menu(tester, 'p1', 'wake-menu-duplicate');
+      final plans = await alexa.watchWakePlans().first;
+      expect(plans, hasLength(2));
+      final copy = plans.firstWhere((p) => p.id != 'p1');
+      expect(copy.label, 'Aula cedo (cópia)');
+      expect(copy.enabled, isFalse);
+      expect((copy.hour, copy.minute, copy.echoDeviceId), (7, 0, 'E'));
+      expect(copy.days, [1, 2, 3, 4, 5]);
+      expect((await _plan(alexa)).enabled, isTrue);
+      expect(_inCard(find.text('Aula cedo (cópia)')), findsOneWidget);
+    });
+
+    testWidgets('menu: "Excluir" pede confirmação; cancelar não exclui', (tester) async {
+      final alexa = _alexa();
+      await _pump(tester, alexa);
+      await _menu(tester, 'p1', 'wake-menu-delete');
+      expect(find.text('Excluir despertar?'), findsOneWidget);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(await alexa.watchWakePlans().first, hasLength(1));
+    });
+
+    testWidgets('menu: "Excluir" confirmado remove e Desfazer devolve o despertar e suas exceções', (tester) async {
+      final alexa = _alexa(overrides: [WakeOverride.skip('p1', _tomorrow)]);
+      await _pump(tester, alexa);
+      await _menu(tester, 'p1', 'wake-menu-delete');
+      await tester.tap(find.byKey(const Key('wake-delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(await alexa.watchWakePlans().first, isEmpty);
+      expect(await alexa.watchOverrides().first, isEmpty);
+      expect(_inCard(find.text('Nenhum despertar')), findsOneWidget);
+      await tester.tap(find.text('Desfazer'));
+      await tester.pumpAndSettle();
+      expect((await _plan(alexa)).label, 'Aula cedo');
+      expect(await alexa.watchOverrides().first, [WakeOverride.skip('p1', _tomorrow)]);
+    });
+
+    testWidgets('erro ao excluir avisa e mantém o despertar', (tester) async {
+      final alexa = _alexa();
+      await _pump(tester, alexa);
+      await _menu(tester, 'p1', 'wake-menu-delete');
+      alexa.failWrites = true;
+      await tester.tap(find.byKey(const Key('wake-delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('Não foi possível excluir o despertar.'), findsOneWidget);
+    });
+  });
+
   group('layout', () {
     for (final scale in [1.0, 1.3]) {
       testWidgets('360 dp com texto em ${scale}x, com 4 despertares e exceções, sem estouro', (tester) async {
@@ -230,6 +413,29 @@ void main() {
           final rect = tester.getRect(find.byKey(Key('wake-tomorrow-$id')));
           expect(rect.height, greaterThanOrEqualTo(48), reason: 'área de toque de $id');
           expect(rect.right, lessThanOrEqualTo(360));
+        }
+      });
+    }
+
+
+    for (final scale in [1.0, 1.3]) {
+      testWidgets('alvos de toque de horário, dias e menu têm 48 dp a 360 dp com ${scale}x', (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        const plans = [
+          WakePlan(id: 'a', label: 'Despertar com um nome bem comprido para quebrar linha', days: [1, 2, 3, 4, 5, 6], hour: 6, minute: 45, echoDeviceId: 'E'),
+          WakePlan(id: 'b', label: 'Cedo', days: [1, 2, 3, 4, 5, 6, 7], hour: 6, minute: 0, echoDeviceId: 'E'),
+        ];
+        await _pump(tester, _alexa(plans: plans, overrides: [WakeOverride.at('b', _tomorrow, 5, 5)]),
+            size: const Size(360, 2400));
+        expect(tester.takeException(), isNull);
+        for (final id in ['a', 'b']) {
+          for (final k in ['wake-time', 'wake-days', 'wake-menu']) {
+            final rect = tester.getRect(find.byKey(Key('$k-$id')));
+            expect(rect.height, greaterThanOrEqualTo(48), reason: '$k-$id altura');
+            expect(rect.width, greaterThanOrEqualTo(48), reason: '$k-$id largura');
+            expect(rect.right, lessThanOrEqualTo(360), reason: '$k-$id dentro da tela');
+          }
         }
       });
     }

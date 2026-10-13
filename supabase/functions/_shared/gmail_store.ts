@@ -70,6 +70,21 @@ export function createStore(db: Db): GmailStore {
       const { error } = await db.from("email_items").upsert(rows, { onConflict: "user_id,gmail_id" });
       if (error) throw fail("upsertItems");
     },
+    async listUnreadIds(userId, limit) {
+      const { data, error } = await db
+        .from("email_items")
+        .select("gmail_id")
+        .eq("user_id", userId)
+        .eq("unread", true)
+        .order("received_at", { ascending: false })
+        .limit(limit);
+      if (error) throw fail("listUnreadIds");
+      return ((data as { gmail_id: string }[] | null) ?? []).map((r) => r.gmail_id);
+    },
+    async markItemsRead(userId, ids) {
+      const { error } = await db.from("email_items").update({ unread: false }).eq("user_id", userId).in("gmail_id", ids);
+      if (error) throw fail("markItemsRead");
+    },
     async deleteItemsNotIn(userId, keepIds) {
       let q = db.from("email_items").delete().eq("user_id", userId);
       const safe = keepIds.filter((id) => /^[A-Za-z0-9_-]+$/.test(id));

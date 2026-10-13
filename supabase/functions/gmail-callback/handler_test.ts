@@ -3,7 +3,8 @@ import { decryptToken, signState } from "../_shared/gmail.ts";
 import { API, CFG, fakeFetch, jsonRes, KEY, MemNonceStore, MemStore, msg, TOKEN_URL } from "../_shared/gmail_testutil.ts";
 import { handle } from "./handler.ts";
 
-const SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
+const SCOPE = "https://www.googleapis.com/auth/gmail.metadata"; // conta antiga
+const MODIFY = "https://www.googleapis.com/auth/gmail.modify";
 const U = "11111111-1111-1111-1111-111111111111";
 const cb = (q: Record<string, string>) => new Request(`https://x/functions/v1/gmail-callback?${new URLSearchParams(q)}`);
 
@@ -172,4 +173,23 @@ Deno.test("callback: falha do nonceStore (banco) recusa em vez de seguir sem a p
   await res.body?.cancel();
   assertEquals(f.calls.length, 0);
   assertEquals(store.accounts.size, 0);
+});
+
+Deno.test("callback com gmail.modify: aceita, guarda o escopo e marca can_modify=true", async () => {
+  const { res, store } = await run((state) => ({ code: "C", state }), { refresh_token: "R", scope: `openid ${MODIFY}` });
+  assertEquals(res.status, 200);
+  assertEquals(store.accounts.get(U)!.scopes, `openid ${MODIFY}`);
+  assertEquals(store.states.get(U)!.status, "ok");
+  assertEquals(store.states.get(U)!.can_modify, true);
+});
+
+Deno.test("callback com o escopo antigo gmail.metadata continua aceito, com can_modify=false", async () => {
+  const { res, store } = await run((state) => ({ code: "C", state }), { refresh_token: "R", scope: SCOPE });
+  assertEquals(res.status, 200);
+  assertEquals(store.states.get(U)!.status, "ok");
+  assertEquals(store.states.get(U)!.can_modify, false);
+});
+
+Deno.test("callback recusa escopo gmail.modify parecido (sufixo)", async () => {
+  await assertRejected(await run((state) => ({ code: "C", state }), { refresh_token: "R", scope: MODIFY + ".x" }));
 });

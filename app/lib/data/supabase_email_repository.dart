@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/email.dart';
@@ -23,6 +24,30 @@ class SupabaseEmailRepository implements EmailRepository {
       throw RepositoryException('Falha de conexão: $e');
     }
   }
+
+  /// 409 `{error:'reconnect'}` da função gmail-action => [EmailNeedsReconnect]; o resto segue o fluxo normal.
+  @visibleForTesting
+  static Object? mapActionError(FunctionException e) {
+    final d = e.details;
+    if (e.status == 409 && d is Map && d['error'] == 'reconnect') return const EmailNeedsReconnect();
+    return null;
+  }
+
+  Future<void> _action(Map<String, Object?> body) => _guard(() async {
+        try {
+          await _db.functions.invoke('gmail-action', body: body);
+        } on FunctionException catch (e) {
+          final mapped = mapActionError(e);
+          if (mapped is EmailNeedsReconnect) throw mapped;
+          rethrow;
+        }
+      });
+
+  @override
+  Future<void> markRead(List<String> ids) => _action({'action': 'mark_read', 'ids': ids});
+
+  @override
+  Future<void> markAllRead() => _action({'action': 'mark_all_read'});
 
   @override
   Stream<EmailState?> watchState() => _db

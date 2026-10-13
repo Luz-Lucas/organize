@@ -27,7 +27,7 @@ Deno.test("desconectar revoga o token, apaga os dados do usuário e marca not_co
   assertEquals(store.accounts.has("u1"), false);
   assertEquals(store.ids("u1"), []);
   assertEquals(store.states.get("u1"), {
-    status: "not_connected", unread_count: 0, account_email: null, last_synced_at: null, message: null,
+    status: "not_connected", unread_count: 0, account_email: null, last_synced_at: null, message: null, can_modify: false,
   });
   // outro usuário intacto
   assert(store.accounts.has("u2"));

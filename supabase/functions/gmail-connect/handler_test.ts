@@ -19,7 +19,7 @@ Deno.test("connect devolve a URL do Google com state assinado do usuário e logi
   const u = new URL(url);
   assertEquals(u.origin + u.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
   assertEquals(u.searchParams.get("login_hint"), "seu-contato@exemplo.com");
-  assertEquals(u.searchParams.get("scope"), "https://www.googleapis.com/auth/gmail.metadata");
+  assertEquals(u.searchParams.get("scope"), "https://www.googleapis.com/auth/gmail.modify");
   assertEquals(u.searchParams.get("access_type"), "offline");
   assertEquals(u.searchParams.get("prompt"), "consent");
   assertEquals(await verifyState(u.searchParams.get("state")!, CFG.stateSecret), U);
@@ -68,7 +68,7 @@ Deno.test("connect com provider gmail explícito ou ausente continua sendo gmail
   for (const body of [{ provider: "gmail" }, { provider: null }, {}] as unknown[]) {
     const res = await handle(post({ Authorization: "Bearer jwt-bom" }, body), { cfg: CFG, getUserId });
     const u = new URL((await res.json()).url);
-    assertEquals(u.searchParams.get("scope"), "https://www.googleapis.com/auth/gmail.metadata");
+    assertEquals(u.searchParams.get("scope"), "https://www.googleapis.com/auth/gmail.modify");
     assertEquals((await verifyStateInfo(u.searchParams.get("state")!, CFG.stateSecret))?.provider, "gmail");
   }
 });

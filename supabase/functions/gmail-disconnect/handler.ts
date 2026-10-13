@@ -34,6 +34,7 @@ export async function handle(req: Request, deps: DisconnectDeps): Promise<Respon
     await deps.store.setState(userId, {
       account_email: null,
       unread_count: 0,
+      can_modify: false,
       status: "not_connected",
       last_synced_at: null,
       message: null,

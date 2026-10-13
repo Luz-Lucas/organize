@@ -432,6 +432,10 @@ verify_jwt = false
 [functions.gmail-disconnect]
 verify_jwt = true
 
+# Marcar e-mails como lidos (gmail.modify). JWT do usuário + GOOGLE_ALLOWED_USER_ID.
+[functions.gmail-action]
+verify_jwt = true
+
 # GitHub (issues pelo app). JWT do usuário + GITHUB_ALLOWED_USER_ID (só o dono).
 [functions.github]
 verify_jwt = true

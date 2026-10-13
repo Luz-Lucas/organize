@@ -13,6 +13,14 @@ class MemoryEmailRepository implements EmailRepository {
   final _changes = StreamController<void>.broadcast(sync: true);
 
   bool failActions = false;
+
+  /// Simula uma conta sem a permissão de alterar (o servidor responde 409).
+  bool needsReconnect = false;
+
+  /// Se definido, markRead/markAllRead esperam por ele antes de aplicar (testa a atualização otimista).
+  Completer<void>? markGate;
+  final List<List<String>> markReadCalls = [];
+  int markAllReadCalls = 0;
   int syncCalls = 0;
   int disconnectCalls = 0;
   String? lastConnectEmail;
@@ -61,6 +69,38 @@ class MemoryEmailRepository implements EmailRepository {
   Future<void> syncNow() async {
     _check();
     syncCalls++;
+  }
+
+  Future<void> _markUnread(Iterable<String>? ids) async {
+    _check();
+    if (needsReconnect) throw const EmailNeedsReconnect();
+    await markGate?.future;
+    final marked = _items.where((m) => m.unread && (ids == null || ids.contains(m.id))).length;
+    _items = [for (final m in _items) if (m.unread && (ids == null || ids.contains(m.id))) m.copyWith(unread: false) else m];
+    final s = _state;
+    if (s != null) {
+      _state = EmailState(
+        accountEmail: s.accountEmail,
+        unreadCount: (s.unreadCount - marked).clamp(0, 1 << 30),
+        status: s.status,
+        lastSyncedAt: s.lastSyncedAt,
+        message: s.message,
+        canModify: s.canModify,
+      );
+    }
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> markRead(List<String> ids) {
+    markReadCalls.add(List.of(ids));
+    return _markUnread(ids);
+  }
+
+  @override
+  Future<void> markAllRead() {
+    markAllReadCalls++;
+    return _markUnread(null);
   }
 
   @override

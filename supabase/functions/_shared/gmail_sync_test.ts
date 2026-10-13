@@ -55,6 +55,7 @@ Deno.test("sync feliz: itens gravados, obsoletos apagados, contagem e estado ok"
     status: "ok",
     last_synced_at: NOW.toISOString(),
     message: null,
+    can_modify: false,
   });
 });
 
@@ -199,4 +200,15 @@ Deno.test("syncAll processa em sequência e respeita o orçamento de tempo", asy
 
   const all = await syncAll(deps(s1.store, f.fn), [s1.acct, s2.acct], 60_000);
   assertEquals(all, { accounts: 2, ok: 2, auth_required: 0, error: 0, skipped: 0 });
+});
+
+Deno.test("sync grava can_modify conforme o escopo salvo da conta", async () => {
+  const { store, acct } = await setup();
+  const f = gmailRoutes(["m1"], 1);
+  await syncAccount(deps(store, f.fn), acct); // escopo antigo (metadata)
+  assertEquals(store.states.get("u1")!.can_modify, false);
+
+  const novo = { ...acct, scopes: "openid https://www.googleapis.com/auth/gmail.modify" };
+  await syncAccount(deps(store, gmailRoutes(["m1"], 1).fn), novo);
+  assertEquals(store.states.get("u1")!.can_modify, true);
 });

@@ -8,7 +8,7 @@ import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 import '../email/email_card.dart';
 
-/// Ajustes > "E-mail (Gmail)": conectar (somente leitura) e desconectar.
+/// Ajustes > "E-mail (Gmail)": conectar, reconectar (para marcar como lida) e desconectar.
 class GmailCard extends ConsumerStatefulWidget {
   const GmailCard({super.key});
 
@@ -89,7 +89,7 @@ class _GmailCardState extends ConsumerState<GmailCard> {
           Text('E-mail (Gmail)', style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'Mostra não lidos e remetente/assunto na Início. Acesso somente leitura aos cabeçalhos: o app nunca lê o corpo nem os anexos.',
+            'Mostra não lidos e remetente/assunto na Início e permite marcar como lida. O app guarda só remetente, assunto e data; nunca o corpo nem os anexos.',
             style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
           ),
           const SizedBox(height: 12),
@@ -113,6 +113,12 @@ class _GmailCardState extends ConsumerState<GmailCard> {
                   key: const Key('gmail-connect'),
                   onPressed: _busy ? null : _connect,
                   child: Text(status == EmailStatus.authRequired ? 'Reconectar' : 'Conectar Gmail'),
+                ),
+              if ((status == EmailStatus.ok || status == EmailStatus.error) && !(state?.canModify ?? false))
+                FilledButton.tonal(
+                  key: const Key('gmail-upgrade-scope'),
+                  onPressed: _busy ? null : _connect,
+                  child: const Text('Reconectar para permitir marcar como lida'),
                 ),
               if (status != EmailStatus.notConnected)
                 OutlinedButton(key: const Key('gmail-disconnect'), onPressed: _busy ? null : _disconnect, child: const Text('Desconectar')),

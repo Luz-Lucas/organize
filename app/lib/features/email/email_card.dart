@@ -30,6 +30,9 @@ class EmailCard extends ConsumerStatefulWidget {
 class _EmailCardState extends ConsumerState<EmailCard> {
   bool _syncing = false;
 
+  /// Mensagens que o usuário acabou de marcar como lidas (atualização otimista); some se o servidor recusar.
+  final Set<String> _readIds = {};
+
   Future<void> _sync() async {
     setState(() => _syncing = true);
     try {
@@ -43,12 +46,43 @@ class _EmailCardState extends ConsumerState<EmailCard> {
     }
   }
 
+  /// Esconde o não lido já na hora; se o servidor falhar, volta e avisa.
+  Future<void> _markRead(List<String> ids, {required bool all}) async {
+    if (ids.isEmpty) return;
+    setState(() => _readIds.addAll(ids));
+    try {
+      final repo = ref.read(emailRepositoryProvider);
+      await (all ? repo.markAllRead() : repo.markRead(ids));
+    } on EmailNeedsReconnect {
+      _undo(ids);
+      _snack('Reconecte o Gmail em Ajustes para marcar como lida', action: 'Ajustes');
+    } catch (_) {
+      _undo(ids);
+      _snack('Não foi possível marcar como lida.');
+    }
+  }
+
+  void _undo(List<String> ids) {
+    if (mounted) setState(() => _readIds.removeAll(ids));
+  }
+
+  void _snack(String text, {String? action}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(text),
+      action: action == null ? null : SnackBarAction(label: action, onPressed: () => context.go('/ajustes')),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final org = context.org;
     final state = ref.watch(emailStateProvider).value;
-    final items = ref.watch(emailItemsProvider).value ?? const <EmailItem>[];
+    final serverItems = ref.watch(emailItemsProvider).value ?? const <EmailItem>[];
+    final items = [for (final m in serverItems) if (m.unread && _readIds.contains(m.id)) m.copyWith(unread: false) else m];
+    final unreadShown = items.where((m) => m.unread).toList();
+    final locallyRead = serverItems.where((m) => m.unread).length - unreadShown.length;
     final now = ref.watch(clockProvider)();
     final status = state?.status ?? EmailStatus.notConnected;
 
@@ -81,12 +115,12 @@ class _EmailCardState extends ConsumerState<EmailCard> {
           if (items.isEmpty)
             Text('Nenhuma mensagem recente', style: theme.textTheme.bodyMedium?.copyWith(color: org.inkMuted))
           else
-            for (final m in items) _EmailRow(item: m, now: now),
+            for (final m in items) _EmailRow(item: m, now: now, onRead: () => _markRead([m.id], all: false)),
         ],
       );
     }
 
-    final unread = state?.unreadCount ?? 0;
+    final unread = ((state?.unreadCount ?? 0) - locallyRead).clamp(0, 1 << 30);
     return OrgCard(
       key: const Key('email-card'),
       padding: const EdgeInsets.fromLTRB(16, 4, 8, 12),
@@ -119,6 +153,19 @@ class _EmailCardState extends ConsumerState<EmailCard> {
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.refresh),
                   ),
+                  if (unread > 0)
+                    PopupMenuButton<String>(
+                      key: const Key('email-menu'),
+                      tooltip: 'Mais opções',
+                      onSelected: (_) => _markRead([for (final m in unreadShown) m.id], all: true),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem<String>(
+                          key: Key('email-read-all'),
+                          value: 'read-all',
+                          child: Text('Marcar todas como lidas'),
+                        ),
+                      ],
+                    ),
                 ],
               ],
             ),
@@ -152,17 +199,18 @@ class _Invite extends StatelessWidget {
 }
 
 class _EmailRow extends StatelessWidget {
-  const _EmailRow({required this.item, required this.now});
+  const _EmailRow({required this.item, required this.now, required this.onRead});
 
   final EmailItem item;
   final DateTime now;
+  final VoidCallback onRead;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final org = context.org;
     final weight = item.unread ? FontWeight.w700 : FontWeight.w400;
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,8 +240,33 @@ class _EmailRow extends StatelessWidget {
               child: Text(emailAgoLabel(item.receivedAt!, now),
                   style: theme.textTheme.labelSmall?.copyWith(color: org.inkMuted)),
             ),
+          if (item.unread)
+            IconButton(
+              key: Key('email-read-${item.id}'),
+              tooltip: 'Marcar como lida',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              onPressed: onRead,
+              icon: const Icon(Icons.mark_email_read_outlined),
+            ),
         ],
       ),
+    );
+    if (!item.unread) return row;
+    // Deslizar para a direita só marca como lida: a linha volta ao lugar (confirmDismiss => false).
+    return Dismissible(
+      key: Key('email-swipe-${item.id}'),
+      direction: DismissDirection.startToEnd,
+      confirmDismiss: (_) async {
+        onRead();
+        return false;
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 16),
+        color: org.accent.withValues(alpha: 0.15),
+        child: Icon(Icons.mark_email_read_outlined, color: org.accentText),
+      ),
+      child: row,
     );
   }
 }

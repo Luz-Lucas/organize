@@ -4,7 +4,10 @@ import {
   b64urlEncode,
   buildConsentUrl,
   DRIVE_SCOPE,
+  GMAIL_LEGACY_SCOPE,
   GMAIL_SCOPE,
+  hasModifyScope,
+  scopeGranted,
   signState,
   siblingMatches,
   verifyState,
@@ -37,7 +40,7 @@ Deno.test("state com provider desconhecido ou adulterado é recusado", async () 
   assertEquals(await verifyStateInfo(s, "outro", 2000), null);
 });
 
-Deno.test("consentimento do drive pede só o escopo drive; o padrão continua gmail.metadata", () => {
+Deno.test("consentimento do drive pede só o escopo drive; o padrão é gmail.modify", () => {
   const d = new URL(buildConsentUrl(CFG, "st.sig", "contato@gmail.com", "drive")).searchParams;
   assertEquals(d.get("scope"), DRIVE_SCOPE);
   assertEquals(DRIVE_SCOPE, "https://www.googleapis.com/auth/drive");
@@ -47,6 +50,7 @@ Deno.test("consentimento do drive pede só o escopo drive; o padrão continua gm
   assertEquals(d.get("login_hint"), "contato@gmail.com");
   const g = new URL(buildConsentUrl(CFG, "st.sig")).searchParams;
   assertEquals(g.get("scope"), GMAIL_SCOPE);
+  assertEquals(GMAIL_SCOPE, "https://www.googleapis.com/auth/gmail.modify");
   assert(!buildConsentUrl(CFG, "s", undefined, "drive").includes(CFG.clientSecret));
 });
 
@@ -67,4 +71,27 @@ Deno.test("verifyStateFull expõe o nonce do state (único por state assinado)",
   assert(typeof ia?.nonce === "string" && ia.nonce.length >= 16);
   assert(ia!.nonce !== ib!.nonce);
   assertEquals(await verifyStateFull(a, "outro", 2000), null);
+});
+
+Deno.test("scopeGranted: gmail aceita modify e o antigo metadata; drive só o drive; escopo parecido não conta", () => {
+  assertEquals(GMAIL_LEGACY_SCOPE, "https://www.googleapis.com/auth/gmail.metadata");
+  assertEquals(scopeGranted("gmail", `openid ${GMAIL_SCOPE}`), true);
+  assertEquals(scopeGranted("gmail", GMAIL_LEGACY_SCOPE), true);
+  assertEquals(scopeGranted("gmail", `${GMAIL_SCOPE}.x`), false);
+  assertEquals(scopeGranted("gmail", "openid email"), false);
+  assertEquals(scopeGranted("gmail", ""), false);
+  assertEquals(scopeGranted("gmail", DRIVE_SCOPE), false);
+  assertEquals(scopeGranted("drive", DRIVE_SCOPE), true);
+  assertEquals(scopeGranted("drive", GMAIL_SCOPE), false);
+  assertEquals(scopeGranted("drive", GMAIL_LEGACY_SCOPE), false);
+});
+
+Deno.test("hasModifyScope só é verdadeiro com gmail.modify exato na lista", () => {
+  assertEquals(hasModifyScope(GMAIL_SCOPE), true);
+  assertEquals(hasModifyScope(`${GMAIL_LEGACY_SCOPE} ${GMAIL_SCOPE}`), true);
+  assertEquals(hasModifyScope(GMAIL_LEGACY_SCOPE), false);
+  assertEquals(hasModifyScope(`${GMAIL_SCOPE}.x`), false);
+  assertEquals(hasModifyScope(""), false);
+  assertEquals(hasModifyScope(null), false);
+  assertEquals(hasModifyScope(undefined), false);
 });

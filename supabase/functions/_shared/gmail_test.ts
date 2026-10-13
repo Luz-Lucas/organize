@@ -167,7 +167,7 @@ Deno.test("URL de consentimento tem os parâmetros certos e nenhum segredo", () 
   assertEquals(p.get("response_type"), "code");
   assertEquals(p.get("access_type"), "offline");
   assertEquals(p.get("prompt"), "consent");
-  assertEquals(p.get("scope"), "https://www.googleapis.com/auth/gmail.metadata");
+  assertEquals(p.get("scope"), "https://www.googleapis.com/auth/gmail.modify");
   assertEquals(p.get("include_granted_scopes"), "false");
   assertEquals(p.get("login_hint"), "contato@gmail.com");
   assertEquals(p.get("state"), "st4te.sig");

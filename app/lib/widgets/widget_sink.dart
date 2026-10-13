@@ -4,6 +4,9 @@ import 'package:home_widget/home_widget.dart';
 abstract interface class WidgetSink {
   Future<void> save(Map<String, String> data);
   Future<void> refresh();
+
+  /// Lê de volta um valor gravado com [save] (ou `null` se não existir).
+  Future<String?> read(String key);
 }
 
 const _pkg = 'dev.organizacional.organizacional.widgets';
@@ -25,6 +28,9 @@ class HomeWidgetSink implements WidgetSink {
   }
 
   @override
+  Future<String?> read(String key) => HomeWidget.getWidgetData<String>(key);
+
+  @override
   Future<void> refresh() async {
     for (final name in widgetProviderNames) {
       await HomeWidget.updateWidget(qualifiedAndroidName: name);
@@ -40,4 +46,7 @@ class NoopWidgetSink implements WidgetSink {
 
   @override
   Future<void> refresh() async {}
+
+  @override
+  Future<String?> read(String key) async => null;
 }

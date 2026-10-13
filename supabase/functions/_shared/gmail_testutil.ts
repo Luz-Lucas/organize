@@ -93,6 +93,14 @@ export class MemStore implements GmailStore {
     if (m) for (const id of [...m.keys()]) if (!keep.includes(id)) m.delete(id);
     return Promise.resolve();
   }
+  listUnreadIds(u: string, limit: number) {
+    return Promise.resolve([...(this.items.get(u)?.values() ?? [])].filter((i) => i.unread).map((i) => i.gmail_id).slice(0, limit));
+  }
+  markItemsRead(u: string, ids: string[]) {
+    const m = this.items.get(u);
+    if (m) for (const id of ids) if (m.has(id)) m.set(id, { ...m.get(id)!, unread: false });
+    return Promise.resolve();
+  }
   ids(u: string) {
     return [...(this.items.get(u)?.keys() ?? [])].sort();
   }

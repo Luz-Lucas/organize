@@ -10,6 +10,7 @@ import '../../ui/org_widgets.dart';
 import 'drive_card.dart';
 import 'gmail_card.dart';
 import 'home_location_card.dart';
+import 'widgets_card.dart';
 
 /// Ajustes: escolha do tema (10 sistemas de design) e conta.
 class SettingsScreen extends ConsumerWidget {
@@ -83,6 +84,13 @@ class SettingsScreen extends ConsumerWidget {
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: DriveCard(),
             ),
+            if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...const [
+              SectionHeader('Widgets'),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: WidgetsCard(),
+              ),
+            ],
             const SectionHeader('Conta'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),

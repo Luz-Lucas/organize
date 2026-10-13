@@ -22,6 +22,7 @@ class EmailState {
     this.status = EmailStatus.notConnected,
     this.lastSyncedAt,
     this.message,
+    this.canModify = false,
   });
 
   final String? accountEmail;
@@ -29,6 +30,9 @@ class EmailState {
   final EmailStatus status;
   final DateTime? lastSyncedAt;
   final String? message;
+
+  /// A conta conectada já deu a permissão de marcar como lida (escopo gmail.modify).
+  final bool canModify;
 
   bool get connected => status == EmailStatus.ok || status == EmailStatus.authRequired || status == EmailStatus.error;
 
@@ -38,6 +42,7 @@ class EmailState {
         status: EmailStatus.parse(m['status']),
         lastSyncedAt: parseDate(m['last_synced_at']),
         message: m['message'] as String?,
+        canModify: m['can_modify'] as bool? ?? false,
       );
 }
 
@@ -58,6 +63,15 @@ class EmailItem {
   final String? subject;
   final DateTime? receivedAt;
   final bool unread;
+
+  EmailItem copyWith({bool? unread}) => EmailItem(
+        id: id,
+        fromName: fromName,
+        fromAddr: fromAddr,
+        subject: subject,
+        receivedAt: receivedAt,
+        unread: unread ?? this.unread,
+      );
 
   /// Remetente para exibição: nome, senão o endereço.
   String get sender {

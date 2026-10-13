@@ -1,8 +1,11 @@
-// Helpers compartilhados das Edge Functions do Gmail (somente leitura).
-// Escopo único: gmail.metadata (cabeçalhos; nunca corpo nem anexos).
+// Helpers compartilhados das Edge Functions do Gmail.
+// Escopo pedido: gmail.modify (permite marcar como lida). O app continua lendo só cabeçalhos
+// (format=metadata) e guardando remetente, assunto e data; nunca corpo nem anexos.
 // Regra de log: nunca registrar assunto, endereços, tokens nem corpo de resposta do Google.
 
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+/** Escopo das contas conectadas antes do "marcar como lida": ainda vale para ler, mas não para alterar. */
+export const GMAIL_LEGACY_SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
 /** Drive inteiro (pastas existentes, mover, compartilhar). Refresh token cifrado como o do Gmail. */
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 
@@ -10,6 +13,18 @@ export type GoogleProvider = "gmail" | "drive";
 export const PROVIDERS: readonly GoogleProvider[] = ["gmail", "drive"];
 export const isProvider = (v: unknown): v is GoogleProvider => v === "gmail" || v === "drive";
 export const scopeFor = (p: GoogleProvider): string => p === "drive" ? DRIVE_SCOPE : GMAIL_SCOPE;
+
+const scopeList = (scopes: string | null | undefined): string[] => (scopes ?? "").split(/\s+/).filter(Boolean);
+
+/** O `scope` devolvido pelo Google basta para o provider? Gmail aceita modify e o antigo metadata. */
+export function scopeGranted(p: GoogleProvider, scopes: string | null | undefined): boolean {
+  const list = scopeList(scopes);
+  if (p === "drive") return list.includes(DRIVE_SCOPE);
+  return list.includes(GMAIL_SCOPE) || list.includes(GMAIL_LEGACY_SCOPE);
+}
+
+/** A conta tem permissão para alterar mensagens (gmail.modify)? */
+export const hasModifyScope = (scopes: string | null | undefined): boolean => scopeList(scopes).includes(GMAIL_SCOPE);
 export const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
@@ -249,7 +264,8 @@ export function validEmail(v: unknown): v is string {
 
 // ---------------------------------------------------------------- chamadas ao Google
 
-export type GoogleErrorKind = "auth" | "transient" | "other";
+/** "scope" = o token não tem a permissão pedida (só vem de batchModifyRead). */
+export type GoogleErrorKind = "auth" | "transient" | "other" | "scope";
 
 /** Mensagem sempre genérica: nunca inclui corpo da resposta nem tokens. */
 export class GoogleError extends Error {
@@ -386,6 +402,39 @@ export async function getInboxUnread(accessToken: string, fetchFn: FetchFn): Pro
   const j = await request(fetchFn, `${GMAIL_API}/users/me/labels/INBOX`, { headers: authz(accessToken) });
   const n = j?.messagesUnread;
   return typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+
+/** 403 por falta de escopo (≠ limite de taxa, ≠ token revogado). */
+function insufficientScope(body: Record<string, unknown>): boolean {
+  const err = body.error as { errors?: { reason?: string }[]; details?: { reason?: string }[] } | undefined;
+  const reasons = [...(Array.isArray(err?.errors) ? err!.errors! : []), ...(Array.isArray(err?.details) ? err!.details! : [])]
+    .map((e) => e?.reason);
+  return reasons.includes("insufficientPermissions") || reasons.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT");
+}
+
+/**
+ * Tira o rótulo UNREAD de até 100 mensagens (messages.batchModify; responde 204).
+ * Lança GoogleError("scope") quando o token não tem gmail.modify.
+ */
+export async function batchMarkRead(accessToken: string, ids: string[], fetchFn: FetchFn): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetchFn(`${GMAIL_API}/users/me/messages/batchModify`, {
+      method: "POST",
+      headers: { ...authz(accessToken), "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, removeLabelIds: ["UNREAD"] }),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    });
+  } catch {
+    throw new GoogleError("transient");
+  }
+  if (res.ok) {
+    await res.body?.cancel().catch(() => {});
+    return;
+  }
+  const body = await readJson(res);
+  if (res.status === 403 && insufficientScope(body)) throw new GoogleError("scope", 403);
+  throw classify(res.status, body, false);
 }
 
 /** Não usa o parâmetro `q`: o escopo metadata o proíbe. */

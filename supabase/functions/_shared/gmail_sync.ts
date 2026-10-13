@@ -9,6 +9,7 @@ import {
   getInboxUnread,
   getMessageMeta,
   GoogleError,
+  hasModifyScope,
   type GmailConfig,
   INBOX_LIMIT,
   listInboxIds,
@@ -27,6 +28,8 @@ export type EmailStatus = "not_connected" | "ok" | "auth_required" | "error";
 export interface StatePatch {
   account_email?: string | null;
   unread_count?: number;
+  /** A conta tem gmail.modify (pode marcar como lida)? */
+  can_modify?: boolean;
   status: EmailStatus;
   last_synced_at?: string | null;
   message?: string | null;
@@ -50,6 +53,10 @@ export interface GmailStore {
   upsertItems(userId: string, items: EmailItem[]): Promise<void>;
   /** Apaga as linhas do usuário cujo gmail_id não está em keepIds (vazio = apaga todas). */
   deleteItemsNotIn(userId: string, keepIds: string[]): Promise<void>;
+  /** gmail_id das mensagens não lidas do usuário (no máximo `limit`). */
+  listUnreadIds(userId: string, limit: number): Promise<string[]>;
+  /** unread=false nas mensagens do usuário com esses ids. */
+  markItemsRead(userId: string, ids: string[]): Promise<void>;
 }
 
 export const MSG_AUTH = "Reconecte o Gmail.";
@@ -91,13 +98,14 @@ export async function syncAccount(deps: SyncDeps, acct: AccountRow): Promise<Syn
     await store.setState(acct.user_id, {
       account_email: acct.account_email,
       unread_count: unread,
+      can_modify: hasModifyScope(acct.scopes),
       status: "ok",
       last_synced_at: now().toISOString(),
       message: null,
     });
     return "ok";
   } catch (e) {
-    const auth = e instanceof GoogleError && e.kind === "auth";
+    const auth = e instanceof GoogleError && (e.kind === "auth" || e.kind === "scope");
     // Só o tipo do erro vai para o log; nada de conteúdo de e-mail, endereço ou token.
     console.error("gmail-sync: falha", e instanceof GoogleError ? e.message : "interno");
     try {

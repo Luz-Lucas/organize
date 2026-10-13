@@ -5,7 +5,8 @@ import {
   getProfileEmail,
   type GmailConfig,
   type GoogleProvider,
-  scopeFor,
+  hasModifyScope,
+  scopeGranted,
   type NonceStore,
   userAllowed,
   verifyStateFull,
@@ -100,7 +101,7 @@ export async function handle(req: Request, deps: CallbackDeps): Promise<Response
 
   try {
     const tokens = await exchangeCode(cfg, code, fetchFn);
-    if (!tokens.scope.split(/\s+/).includes(scopeFor(provider)) || !tokens.refreshToken) return fail(400, provider);
+    if (!scopeGranted(provider, tokens.scope) || !tokens.refreshToken) return fail(400, provider);
 
     if (provider === "drive") {
       await connectDrive(deps.driveStore!, cfg, userId, tokens.accessToken, tokens.refreshToken, tokens.scope, fetchFn);
@@ -118,6 +119,7 @@ export async function handle(req: Request, deps: CallbackDeps): Promise<Response
     await store.setState(userId, {
       account_email: email,
       unread_count: 0,
+      can_modify: hasModifyScope(tokens.scope),
       status: "ok",
       last_synced_at: null,
       message: null,

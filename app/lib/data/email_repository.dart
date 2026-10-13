@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/email.dart';
+import 'repository.dart';
 
 abstract interface class EmailRepository {
   /// Situação da conta (null = nunca conectou).
@@ -17,6 +18,18 @@ abstract interface class EmailRepository {
 
   /// Revoga o acesso e apaga os dados do e-mail.
   Future<void> disconnect();
+
+  /// Marca as mensagens (ids do Gmail) como lidas. Lança [EmailNeedsReconnect] se a conta
+  /// ainda não deu a permissão de alterar.
+  Future<void> markRead(List<String> ids);
+
+  /// Marca como lidas todas as mensagens não lidas guardadas no app.
+  Future<void> markAllRead();
+}
+
+/// A conta foi conectada só com leitura: é preciso reconectar para marcar como lida.
+class EmailNeedsReconnect extends RepositoryException {
+  const EmailNeedsReconnect() : super('Reconecte o Gmail para permitir marcar como lida.');
 }
 
 final emailRepositoryProvider = Provider<EmailRepository>(
