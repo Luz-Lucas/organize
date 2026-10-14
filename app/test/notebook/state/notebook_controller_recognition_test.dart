@@ -148,6 +148,7 @@ void main() {
     await elapse(t, const Duration(seconds: 4));
     expect(seen, ['${pageId(c)}:texto 1']);
     expect(c.transcriptOf(pageId(c))?.text, 'texto 1');
+    expect(c.recognizedTextOf(pageId(c)), 'texto 1');
   });
 
   testWidgets('chave desligada: não reconhece, a tinta salva normalmente', (t) async {
@@ -213,6 +214,10 @@ void main() {
     await elapse(t, const Duration(seconds: 10));
     expect(rec.calls, isEmpty);
     expect(await serverText(), 'já tinha');
+    // "Copiar texto da página" usa o texto do servidor até haver uma transcrição local.
+    expect(c.transcriptOf(c.currentPages.single.id), isNull);
+    expect(c.recognizedTextOf(c.currentPages.single.id), 'já tinha');
+    expect(c.recognizedTextOf('não-existe'), '');
   });
 
   testWidgets('editar o texto de outra página não altera as demais', (t) async {

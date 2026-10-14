@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../app/providers.dart';
 import '../features/notes/note_screen.dart';
+import 'intelligence/model_manager.dart';
+import 'state/handwriting_providers.dart';
+import 'state/notebook_controller.dart';
 import 'state/notebook_providers.dart';
 import 'ui/notebook_screen.dart';
 
@@ -71,6 +74,22 @@ class NotebookScreenHost extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(settingsProvider.select((s) => s.value?.notebookPrefs)) ?? const {};
+    final recognizer = ref.watch(inkRecognizerProvider);
+    final ignored = ref.watch(ignoredWordsProvider);
+    final s = session;
+    final controller = s is NotebookController ? s : null;
+    final intelligence = NotebookIntelligence(
+      recognizer: recognizer,
+      spellChecker: ref.watch(spellCheckerProvider),
+      gestures: ref.watch(editGesturesEnabledProvider),
+      // O sublinhado depende da transcrição, que só existe com o reconhecedor.
+      spellCheck: recognizer.supported && ref.watch(spellCheckEnabledProvider),
+      transcripts: controller?.transcripts ?? const Stream.empty(),
+      transcriptOf: controller?.transcriptOf,
+      recognizedTextOf: controller?.recognizedTextOf,
+      ignoredWords: ignored,
+      onIgnoreWord: (w) => ref.read(ignoredWordsProvider.notifier).add(w),
+    );
     return NotebookScreen(
       key: const Key('notebook-screen'),
       noteId: noteId,
@@ -79,6 +98,7 @@ class NotebookScreenHost extends ConsumerWidget {
       pickImage: pickImage,
       prefs: prefs,
       onPrefsChanged: (m) => ref.read(settingsRepositoryProvider).setNotebookPrefs(m),
+      intelligence: intelligence,
     );
   }
 }

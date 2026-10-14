@@ -12,13 +12,19 @@ import 'package:flutter/services.dart';
 
 import '../../ui/org_theme.dart';
 import '../core/notebook_core.dart';
+import '../intelligence/gestures.dart';
+import '../intelligence/ink_to_text.dart';
+import '../intelligence/straighten.dart';
+import '../intelligence/transcript.dart';
 import 'ink_page_view.dart';
+import 'notebook_intelligence.dart';
 import 'notebook_prefs.dart';
 import 'notebook_session.dart';
 import 'notebook_toolbar.dart';
 import 'notebook_tools_menu.dart';
 import 'tool_settings.dart';
 
+export 'notebook_intelligence.dart';
 export 'notebook_session.dart';
 
 /// Imagem escolhida pelo usuário (galeria/arquivo).
@@ -79,6 +85,7 @@ class NotebookScreen extends StatefulWidget {
     this.pickImage,
     this.prefs = const {},
     this.onPrefsChanged,
+    this.intelligence = NotebookIntelligence.off,
   });
 
   final String noteId;
@@ -95,6 +102,9 @@ class NotebookScreen extends StatefulWidget {
   /// Chamado com os favoritos novos quando o usuário os edita. Se falhar, a tela
   /// avisa e mantém a edição neste aparelho.
   final Future<void> Function(Map<String, dynamic> prefs)? onPrefsChanged;
+
+  /// Conversão em texto, corretor e gestos (fase 2). Padrão: tudo desligado.
+  final NotebookIntelligence intelligence;
 
   @override
   State<NotebookScreen> createState() => _NotebookScreenState();
@@ -128,10 +138,25 @@ class _NotebookScreenState extends State<NotebookScreen> {
   EdgeInsets _margin = const EdgeInsets.all(48);
   int? _middlePointer;
 
+  // ---- escrita à mão (fase 2) ----
+  NotebookIntelligence get _intel => widget.intelligence;
+  StreamSubscription<({String pageId, PageTranscript transcript})>? _transcriptSub;
+
+  /// Palavras sublinhadas pelo corretor, por página (da última transcrição).
+  final Map<String, List<SpellMark>> _marks = {};
+  final Map<String, int> _markGen = {};
+
+  /// Palavras ignoradas nesta tela antes de o dicionário pessoal voltar atualizado.
+  final Set<String> _ignoredHere = {};
+
+  /// Uma conversão em texto em andamento.
+  bool _busy = false;
+
   @override
   void initState() {
     super.initState();
     _tc.addListener(_onTransform);
+    _transcriptSub = _intel.transcripts.listen((e) => _refreshMarks(e.pageId, e.transcript));
     _pagesSub = widget.session.pages.listen(_onPages);
     _statusSub = widget.session.statusChanges.listen((s) {
       if (mounted) setState(() => _status = s);
@@ -148,6 +173,16 @@ class _NotebookScreenState extends State<NotebookScreen> {
         if (mounted) _touch();
       });
     }
+    final was = old.intelligence, now = widget.intelligence;
+    if (was.transcripts != now.transcripts) {
+      _transcriptSub?.cancel();
+      _transcriptSub = now.transcripts.listen((e) => _refreshMarks(e.pageId, e.transcript));
+    }
+    if (was.spellCheck && !now.spellCheck) {
+      _marks.clear();
+    } else if (!was.spellCheck && now.spellCheck) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAllMarks());
+    }
   }
 
   @override
@@ -155,6 +190,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
     _rev.dispose();
     _pagesSub?.cancel();
     _statusSub?.cancel();
+    _transcriptSub?.cancel();
     _tc.removeListener(_onTransform);
     _tc.dispose();
     _zoom.dispose();
@@ -191,6 +227,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
 
   void _onPages(List<NotebookPageState> list) {
     if (!mounted) return;
+    final fresh = <String>[];
     setState(() {
       _loaded = true;
       final known = {for (final s in _slots) s.id: s};
@@ -199,6 +236,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
         final s = known[p.id];
         if (s == null) {
           next.add(_Slot(p.id, p.doc, p.background, p.notice));
+          fresh.add(p.id);
           continue;
         }
         s.background = p.background;
@@ -214,8 +252,13 @@ class _NotebookScreenState extends State<NotebookScreen> {
         ..addAll(next);
       if (_slotById(_activeId) == null) _activeId = _slots.isEmpty ? null : _slots.first.id;
       _cleanSelection();
+      _marks.removeWhere((id, _) => _slotById(id) == null);
     });
     _touch();
+    for (final id in fresh) {
+      final t = _intel.transcriptOf?.call(id);
+      if (t != null) unawaited(_refreshMarks(id, t));
+    }
   }
 
   void _cleanSelection() {
@@ -353,6 +396,14 @@ class _NotebookScreenState extends State<NotebookScreen> {
           onZoomIn: () => _zoomBy(1.25),
           onZoomOut: () => _zoomBy(0.8),
           onPrefs: _updatePrefs,
+          canConvert: _intel.recognizer.supported && !_busy,
+          onConvertPage: slot == null || slot.readOnly ? null : () => unawaited(_convert(slot.id, _allInk(slot.doc))),
+          onStraightenPage: slot == null || slot.readOnly
+              ? null
+              : () {
+                  if (_straighten(slot.id, _allInk(slot.doc)) != null) setState(_clearSelection);
+                },
+          onCopyPageText: slot == null ? null : () => unawaited(_copyPageText(slot.id)),
         );
       },
     );
@@ -450,6 +501,289 @@ class _NotebookScreenState extends State<NotebookScreen> {
       _selIds = r.idMap.values.toSet();
     });
     _commit(page.id, before, r.doc);
+  }
+
+  // ---- escrita à mão: gestos, conversão, corretor -------------------------
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  /// Ids dos traços de caneta (não marca-texto) de [ids] em [doc].
+  static Set<String> _inkIds(PageDoc doc, Iterable<String> ids) => {
+    for (final id in ids)
+      if (doc.strokeById(id) case final s? when s.tool != PenTool.highlighter) id,
+  };
+
+  static Set<String> _allInk(PageDoc doc) => _inkIds(doc, [for (final s in doc.strokes) s.id]);
+
+  /// Um gesto da página terminou. Com a caneta, o traço novo pode ser um toque
+  /// no sublinhado do corretor (abre as sugestões, nada é gravado) ou um gesto de
+  /// edição (aplica o gesto no lugar da tinta); senão grava como sempre.
+  void _onPageEdit(String pageId, PageDoc before, PageDoc after) {
+    final drawn = _drawnStroke(before, after);
+    if (drawn != null) {
+      if (_isDot(drawn) && _tapWord(pageId, drawn.bounds.center, underlineOnly: true)) return;
+      if (_intel.gestures) {
+        final g = gestureEdit(before, drawn);
+        if (g != null) {
+          _commit(pageId, before, g.doc);
+          _gestureDone(g.gesture);
+          return;
+        }
+      }
+    }
+    _commit(pageId, before, after);
+  }
+
+  /// O traço que a caneta acabou de acrescentar (e só isso), ou `null`.
+  Stroke? _drawnStroke(PageDoc before, PageDoc after) {
+    if (_settings.kind != ToolKind.draw) return null;
+    if (after.strokes.length != before.strokes.length + 1 ||
+        after.deleted.length != before.deleted.length ||
+        after.texts.length != before.texts.length ||
+        after.images.length != before.images.length) {
+      return null;
+    }
+    for (final s in after.strokes.reversed) {
+      if (before.strokeById(s.id) == null) return s;
+    }
+    return null;
+  }
+
+  /// Toque curto da caneta (um pingo).
+  static bool _isDot(Stroke s) {
+    final b = s.bounds.deflate(s.width / 2);
+    return b.width <= 6 && b.height <= 6;
+  }
+
+  void _gestureDone(InkGesture g) {
+    final text = switch (g) {
+      ScratchOut() => 'Apagado com o rabisco',
+      InsertSpace() => 'Espaço aberto',
+      SplitWord() => 'Palavra separada',
+      JoinWords() => 'Palavras juntadas',
+    };
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          key: const ValueKey('nb-gesture-done'),
+          content: Text(text),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(label: 'Desfazer', onPressed: () => _undoRedo(undo: true)),
+        ),
+      );
+  }
+
+  /// Converte a escrita de [ids] da página [pageId] em texto. Avisa quando falta o
+  /// modelo ou nada foi reconhecido.
+  Future<InkToTextResult?> _convert(String pageId, Set<String> ids) async {
+    final rec = _intel.recognizer;
+    if (!rec.supported || _busy || ids.isEmpty) return null;
+    setState(() => _busy = true);
+    try {
+      bool ready;
+      try {
+        ready = await rec.isModelReady();
+      } catch (_) {
+        ready = false;
+      }
+      if (!ready) {
+        _snack('Baixe o modelo de escrita em Ajustes → Escrita à mão.');
+        return null;
+      }
+      final page = _slotById(pageId);
+      if (page == null || page.readOnly) return null;
+      final before = page.doc;
+      final r = await convertInkToText(before, ids, rec);
+      if (!mounted || _slotById(pageId) == null) return null;
+      if (r.converted == 0) {
+        _snack('Não deu para reconhecer a escrita.');
+        return r;
+      }
+      _commit(pageId, before, r.doc);
+      if (r.failed > 0) {
+        _snack(r.failed == 1
+            ? '1 linha não foi reconhecida e ficou como escrita.'
+            : '${r.failed} linhas não foram reconhecidas e ficaram como escrita.');
+      }
+      return r;
+    } catch (_) {
+      _snack('Não foi possível converter a escrita.');
+      return null;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _convertSelection() async {
+    final page = _slotById(_selPageId);
+    if (page == null || _selIds.isEmpty) return;
+    final r = await _convert(page.id, _inkIds(page.doc, _selIds));
+    if (r == null || r.textIds.isEmpty || !mounted || _slotById(page.id) == null) return;
+    final keep = {for (final id in _selIds) if (page.doc.contains(id)) id};
+    setState(() {
+      _selPageId = page.id;
+      _selIds = {...keep, ...r.textIds};
+    });
+  }
+
+  /// Endireita a escrita de [ids]; devolve os ids que a seleção deve ter depois.
+  Set<String>? _straighten(String pageId, Set<String> ids) {
+    final page = _slotById(pageId);
+    if (page == null || page.readOnly) return null;
+    final before = page.doc;
+    final after = straighten(before, _inkIds(before, ids), newInkId);
+    if (identical(after, before)) {
+      _snack('A escrita já está reta.');
+      return null;
+    }
+    _commit(pageId, before, after);
+    return {
+      for (final id in ids)
+        if (after.contains(id)) id,
+      for (final s in after.strokes)
+        if (before.strokeById(s.id) == null) s.id,
+    };
+  }
+
+  void _straightenSelection() {
+    final pageId = _selPageId;
+    if (pageId == null || _selIds.isEmpty) return;
+    final next = _straighten(pageId, _selIds);
+    if (next != null) setState(() => _selIds = next);
+  }
+
+  Future<void> _copyPageText(String pageId) async {
+    final page = _slotById(pageId);
+    if (page == null) return;
+    var text = _intel.recognizedTextOf?.call(pageId) ?? _intel.transcriptOf?.call(pageId)?.text ?? '';
+    final rec = _intel.recognizer;
+    if (text.trim().isEmpty && rec.supported) {
+      try {
+        if (await rec.isModelReady()) text = (await transcribe(page.doc, rec)).text;
+      } catch (_) {
+        // Sem texto: o aviso abaixo cobre.
+      }
+    }
+    if (!mounted) return;
+    if (text.trim().isEmpty) {
+      _snack('Ainda não há texto reconhecido nesta página.');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    _snack('Texto da página copiado.');
+  }
+
+  Set<String> get _ignored => {..._intel.ignoredWords, ..._ignoredHere};
+
+  /// Recalcula o sublinhado da página a partir de [t] (a transcrição mais recente).
+  Future<void> _refreshMarks(String pageId, PageTranscript t) async {
+    if (!_intel.spellCheck || !mounted) return;
+    final slot = _slotById(pageId);
+    if (slot == null) return;
+    final gen = (_markGen[pageId] ?? 0) + 1;
+    _markGen[pageId] = gen;
+    final marks = await findSpellMarks(slot.doc, t, _intel.spellChecker, ignored: _ignored);
+    if (!mounted || _markGen[pageId] != gen) return;
+    setState(() => _marks[pageId] = marks);
+  }
+
+  void _refreshAllMarks() {
+    if (!mounted) return;
+    for (final s in _slots) {
+      final t = _intel.transcriptOf?.call(s.id);
+      if (t != null) unawaited(_refreshMarks(s.id, t));
+    }
+  }
+
+  /// Marcas ainda válidas: a palavra continua na página e não foi ignorada.
+  List<SpellMark> _visibleMarks(_Slot s) {
+    if (!_intel.spellCheck) return const [];
+    final all = _marks[s.id];
+    if (all == null || all.isEmpty) return const [];
+    final ignored = _ignored;
+    return [
+      for (final m in all)
+        if (!ignored.contains(ignoreKey(m.text)) && m.word.strokeIds.every((id) => s.doc.strokeById(id) != null)) m,
+    ];
+  }
+
+  /// Toque em [at]: se cai numa palavra sublinhada, abre as sugestões. Com a
+  /// caneta só vale o toque **no sublinhado** (abaixo da palavra), para não
+  /// roubar o pingo do "i" nem a pontuação.
+  bool _tapWord(String pageId, Offset at, {required bool underlineOnly}) {
+    final slot = _slotById(pageId);
+    if (slot == null || slot.readOnly) return false;
+    for (final m in _visibleMarks(slot)) {
+      final b = m.bounds;
+      final zone = underlineOnly ? Rect.fromLTRB(b.left - 4, b.bottom - 4, b.right + 4, b.bottom + 16) : b.inflate(6);
+      if (zone.contains(at)) {
+        unawaited(_showSuggestions(pageId, m));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static const _kIgnore = '\u0000ignorar';
+
+  Future<void> _showSuggestions(String pageId, SpellMark m) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) {
+        final text = Theme.of(ctx).textTheme;
+        return SafeArea(
+          child: SingleChildScrollView(
+            key: const ValueKey('nb-spell-sheet'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ListTile(
+                  title: Text('“${m.text}”', style: text.titleMedium),
+                  subtitle: Text(
+                    m.suggestions.isEmpty ? 'O corretor não tem sugestões.' : 'Toque numa sugestão para trocar a palavra.',
+                  ),
+                ),
+                for (var i = 0; i < m.suggestions.length && i < 6; i++)
+                  ListTile(
+                    key: ValueKey('nb-spell-sug-$i'),
+                    leading: const Icon(Icons.spellcheck),
+                    title: Text(m.suggestions[i]),
+                    onTap: () => Navigator.pop(ctx, m.suggestions[i]),
+                  ),
+                ListTile(
+                  key: const ValueKey('nb-spell-ignore'),
+                  leading: const Icon(Icons.block),
+                  title: const Text('Ignorar'),
+                  subtitle: const Text('Não marcar mais esta palavra neste aparelho'),
+                  onTap: () => Navigator.pop(ctx, _kIgnore),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (choice == null || !mounted) return;
+    if (choice == _kIgnore) {
+      final key = ignoreKey(m.text);
+      setState(() => _ignoredHere.add(key));
+      _intel.onIgnoreWord?.call(key);
+      return;
+    }
+    final slot = _slotById(pageId);
+    if (slot == null || slot.readOnly) return;
+    final before = slot.doc;
+    if (!m.word.strokeIds.every((id) => before.strokeById(id) != null)) return;
+    final r = replaceWordWithText(before, m.line, m.word, choice);
+    setState(() => _marks[pageId] = [for (final x in _marks[pageId] ?? const <SpellMark>[]) if (!identical(x, m)) x]);
+    _commit(pageId, before, r.doc);
   }
 
   // ---- texto --------------------------------------------------------------
@@ -706,6 +1040,8 @@ class _NotebookScreenState extends State<NotebookScreen> {
   Widget _selectionBar(BuildContext context) {
     final org = context.org;
     final has = _selIds.isNotEmpty;
+    final selPage = _slotById(_selPageId);
+    final hasInk = selPage != null && !selPage.readOnly && _inkIds(selPage.doc, _selIds).isNotEmpty;
     Widget b(String key, IconData i, String label, VoidCallback? f) => TextButton.icon(
       key: ValueKey(key),
       onPressed: f,
@@ -723,6 +1059,20 @@ class _NotebookScreenState extends State<NotebookScreen> {
             b('nb-sel-paste', Icons.paste, 'Colar', _clip != null ? _pasteClip : null),
             b('nb-sel-color', Icons.palette_outlined, 'Cor', has ? _recolorSelection : null),
             b('nb-sel-delete', Icons.delete_outline, 'Apagar', has ? _deleteSelection : null),
+            b('nb-sel-straighten', Icons.format_align_left, 'Endireitar', hasInk ? _straightenSelection : null),
+            if (_intel.recognizer.supported)
+              b('nb-sel-convert', Icons.text_fields, 'Converter em texto', hasInk && !_busy ? _convertSelection : null)
+            else
+              Center(
+                key: const ValueKey('nb-sel-convert-hint'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'Converter em texto: disponível no Android',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: org.inkMuted),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -802,6 +1152,15 @@ class _NotebookScreenState extends State<NotebookScreen> {
     );
   }
 
+  Widget? _spellOverlay(BuildContext context, int i, _Slot slot) {
+    final marks = _visibleMarks(slot);
+    if (marks.isEmpty) return null;
+    return CustomPaint(
+      key: ValueKey('nb-spell-$i'),
+      painter: _SpellPainter(marks, Theme.of(context).colorScheme.error),
+    );
+  }
+
   Widget _pageBlock(
     BuildContext context,
     int i,
@@ -871,7 +1230,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
                           penArgb: penArgb,
                           selection: slot.id == _selPageId ? _selIds : const {},
                           imageStore: widget.session.images,
-                          onEdit: (b, a) => _commit(slot.id, b, a),
+                          onEdit: (b, a) => _onPageEdit(slot.id, b, a),
+                          onInkTap: (at) => _tapWord(slot.id, at, underlineOnly: false),
+                          overlay: _spellOverlay(context, i, slot),
                           onSelectionChanged: (ids) => setState(() {
                             _selPageId = ids.isEmpty ? null : slot.id;
                             _selIds = ids;
@@ -899,6 +1260,40 @@ class _NotebookScreenState extends State<NotebookScreen> {
       ),
     );
   }
+}
+
+/// Sublinhado ondulado das palavras que o corretor marcou (unidades de página).
+class _SpellPainter extends CustomPainter {
+  _SpellPainter(this.marks, this.color);
+
+  final List<SpellMark> marks;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    for (final m in marks) {
+      final b = m.bounds;
+      final y = b.bottom + 4;
+      final path = Path()..moveTo(b.left, y);
+      var x = b.left;
+      var up = true;
+      while (x < b.right) {
+        final nx = math.min(x + 4, b.right);
+        path.quadraticBezierTo((x + nx) / 2, y + (up ? -3 : 3), nx, y);
+        x = nx;
+        up = !up;
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SpellPainter old) => old.color != color || !listEquals(old.marks, marks);
 }
 
 /// Faixa de aviso no topo de uma página.

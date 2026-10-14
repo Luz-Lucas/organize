@@ -133,3 +133,71 @@ final editGesturesEnabledProvider =
 /// O corretor ortográfico desta plataforma. Padrão: [NoopSpellChecker]; `main.dart`
 /// troca por `PlatformSpellChecker` no Android.
 final spellCheckerProvider = Provider<SpellChecker>((ref) => const NoopSpellChecker());
+
+/// Dicionário pessoal do corretor ("Ignorar"): palavras em minúsculas, sem
+/// pontuação, guardadas **por aparelho** (como as chaves acima).
+abstract interface class IgnoredWordsStore {
+  Future<Set<String>> load();
+  Future<void> save(Set<String> words);
+}
+
+class MemoryIgnoredWordsStore implements IgnoredWordsStore {
+  Set<String> value = {};
+
+  @override
+  Future<Set<String>> load() async => {...value};
+
+  @override
+  Future<void> save(Set<String> words) async => value = {...words};
+}
+
+class SharedPreferencesIgnoredWordsStore implements IgnoredWordsStore {
+  const SharedPreferencesIgnoredWordsStore();
+
+  static const _key = 'handwriting.ignored';
+
+  @override
+  Future<Set<String>> load() async =>
+      {...?(await SharedPreferences.getInstance()).getStringList(_key)};
+
+  @override
+  Future<void> save(Set<String> words) async =>
+      (await SharedPreferences.getInstance()).setStringList(_key, [...words]..sort());
+}
+
+/// Os testes usam a memória; `main.dart` troca por [SharedPreferencesIgnoredWordsStore].
+final ignoredWordsStoreProvider = Provider<IgnoredWordsStore>((ref) => MemoryIgnoredWordsStore());
+
+class IgnoredWordsNotifier extends Notifier<Set<String>> {
+  final _added = <String>{};
+
+  @override
+  Set<String> build() {
+    unawaited(_restore());
+    return const {};
+  }
+
+  Future<void> _restore() async {
+    try {
+      final saved = await ref.read(ignoredWordsStoreProvider).load();
+      if (ref.mounted) state = {...saved, ..._added};
+    } catch (_) {
+      // Sem dicionário guardado: começa vazio.
+    }
+  }
+
+  /// Acrescenta [word] (já normalizada: minúsculas, sem pontuação).
+  Future<void> add(String word) async {
+    if (word.isEmpty || state.contains(word)) return;
+    _added.add(word);
+    state = {...state, word};
+    try {
+      await ref.read(ignoredWordsStoreProvider).save(state);
+    } catch (_) {
+      // Vale nesta sessão mesmo que não dê para guardar.
+    }
+  }
+}
+
+final ignoredWordsProvider =
+    NotifierProvider<IgnoredWordsNotifier, Set<String>>(IgnoredWordsNotifier.new);

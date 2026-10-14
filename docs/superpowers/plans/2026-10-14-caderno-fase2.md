@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:test-driven-development. Spec: `docs/superpowers/specs/2026-10-13-caderno-spen-design.md` (seção Fase 2) — aprovada pelo usuário com as quatro correções: endireitar, ortografia, converter em texto, gestos. Regras comuns: pt-BR, sem commit, sem nuvem/VM, arquivos compartilhados com edição pequena e ancorada; `cd app && flutter analyze` limpo e `TZ=America/Sao_Paulo flutter test --exclude-tags integration` verde no fim. Núcleo em `app/lib/notebook/core/` (leia o `README.md` dele — API, `newInkId()`, merge com tombstones; editar = apagar + criar com id novo).
 
+> **Status (2026-10-14):** Tasks A, B e C implementadas e testadas (`flutter analyze` limpo; suíte sem integração verde). Decisões da Task C: (1) `TextBox.font` opcional (`kHandwritingFont` = Caveat embutida, OFL), gravado só quando existe, compatível com páginas e versões antigas; (2) com a caneta, só o toque **no sublinhado** abre as sugestões (o pingo do "i" e a pontuação continuam sendo tinta); com o laço, o toque na palavra; (3) o retorno do gesto é um aviso com "Desfazer" (sem animação própria); (4) a palavra corrigida e o texto convertido ficam na linha de base da escrita, com o tamanho tirado da altura-x. Falta só o que exige o aparelho: `flutter build apk` e testar o ML Kit e o corretor do Android num celular de verdade.
+
 Ondas: **Onda 1** = Tasks A e B em paralelo. **Onda 2** = Task C (depende das APIs de A e B, fixadas abaixo).
 
 ## API fixa (A e B implementam; C usa)

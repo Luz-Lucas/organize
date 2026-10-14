@@ -322,6 +322,14 @@ class NotebookController implements NotebookSession {
   /// A última transcrição feita neste aparelho para a página (`null` se ainda não houve).
   PageTranscript? transcriptOf(String pageId) => _byId(pageId)?.transcript;
 
+  /// Texto reconhecido da página: o deste aparelho ou, se ainda não houve, o que veio
+  /// do servidor (reconhecido no celular). Vazio se ninguém reconheceu ainda.
+  String recognizedTextOf(String pageId) {
+    final l = _byId(pageId);
+    if (l == null) return '';
+    return l.transcript?.text ?? l.text;
+  }
+
   /// Páginas como a tela as vê agora.
   List<NotebookPageState> get currentPages => [
         for (var i = 0; i < _pages.length; i++)

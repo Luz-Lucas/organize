@@ -73,6 +73,10 @@ void main() {
         expect(t.w, greaterThanOrEqualTo(t.text.length * t.size * 0.55));
       }
       expect(texts[0].y, lessThan(texts[1].y));
+      final lines = segmentLines(p.doc);
+      for (var i = 0; i < 2; i++) {
+        expect(texts[i].y + texts[i].size * 0.95, closeTo(lineBaselineAt(lines[i], lines[i].bounds.left), 2));
+      }
       // Os traços antigos viram tombstones (a exclusão se propaga no merge).
       expect(r.doc.deleted, containsAll(ids));
     });
@@ -130,6 +134,8 @@ void main() {
       // Altura parecida com a da escrita (nem minúscula nem gigante).
       final xh = lineXHeight(p.doc, line);
       expect(t.size, inInclusiveRange(xh * 1.5, xh * 3.5));
+      // A linha de base do texto (≈ 0,95 do tamanho abaixo do topo) cai na da escrita.
+      expect(t.y + t.size * 0.95, closeTo(lineBaselineAt(line, word.bounds.left), 2));
     });
   });
 

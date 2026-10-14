@@ -103,6 +103,7 @@ Future<void> main() async {
       notebookRepositoryProvider.overrideWithValue(SupabaseNotebookRepository(client)),
       notebookPendingStoreProvider.overrideWithValue(const SharedPreferencesNotebookPendingStore()),
       handwritingPrefsStoreProvider.overrideWithValue(const SharedPreferencesHandwritingPrefsStore()),
+      ignoredWordsStoreProvider.overrideWithValue(const SharedPreferencesIgnoredWordsStore()),
       inkDownloadPolicyProvider.overrideWithValue(inkPolicy),
       if (isAndroid) inkRecognizerProvider.overrideWithValue(MlKitInkRecognizer(policy: inkPolicy)),
       if (isAndroid) spellCheckerProvider.overrideWithValue(PlatformSpellChecker()),

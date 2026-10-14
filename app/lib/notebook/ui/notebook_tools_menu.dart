@@ -33,6 +33,10 @@ class NotebookToolsMenu extends StatefulWidget {
     required this.onZoomIn,
     required this.onZoomOut,
     required this.onPrefs,
+    this.onConvertPage,
+    this.canConvert = false,
+    this.onStraightenPage,
+    this.onCopyPageText,
   });
 
   final ToolSettings settings;
@@ -53,6 +57,17 @@ class NotebookToolsMenu extends StatefulWidget {
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
   final ValueChanged<NotebookPrefs> onPrefs;
+
+  /// "Converter página em texto". Só aparece com [canConvert] (há reconhecedor);
+  /// sem ele, o lugar mostra a dica "disponível no Android".
+  final VoidCallback? onConvertPage;
+  final bool canConvert;
+
+  /// "Endireitar página" (`null` esconde).
+  final VoidCallback? onStraightenPage;
+
+  /// "Copiar texto da página" (`null` esconde).
+  final VoidCallback? onCopyPageText;
 
   @override
   State<NotebookToolsMenu> createState() => _NotebookToolsMenuState();
@@ -316,6 +331,60 @@ class _NotebookToolsMenuState extends State<NotebookToolsMenu> {
             selected: false,
             onTap: widget.canDeletePage ? () => _closeThen(widget.onDeletePage) : null,
           ),
+        ],
+      ),
+      ..._writingSection(context),
+    ];
+  }
+
+  // ---- escrita à mão (fase 2) -------------------------------------------------
+
+  List<Widget> _writingSection(BuildContext context) {
+    final convert = widget.onConvertPage;
+    final straighten = widget.onStraightenPage;
+    final copy = widget.onCopyPageText;
+    if (convert == null && straighten == null && copy == null) return const [];
+    return [
+      _title('Escrita à mão'),
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (convert != null && widget.canConvert)
+            toolIconButton(
+              context,
+              key: 'nb-page-convert',
+              icon: Icons.text_fields,
+              tip: 'Converter página em texto',
+              selected: false,
+              onTap: () => _closeThen(convert),
+            )
+          else if (convert != null)
+            Tooltip(
+              key: const ValueKey('nb-page-convert-hint'),
+              message: 'Converter em texto: disponível no Android',
+              child: IconButton(
+                icon: const Icon(Icons.text_fields, size: 22),
+                onPressed: null,
+              ),
+            ),
+          if (straighten != null)
+            toolIconButton(
+              context,
+              key: 'nb-page-straighten',
+              icon: Icons.format_align_left,
+              tip: 'Endireitar página',
+              selected: false,
+              onTap: () => _closeThen(straighten),
+            ),
+          if (copy != null)
+            toolIconButton(
+              context,
+              key: 'nb-page-copy-text',
+              icon: Icons.content_copy,
+              tip: 'Copiar texto da página',
+              selected: false,
+              onTap: () => _closeThen(copy),
+            ),
         ],
       ),
     ];

@@ -69,6 +69,7 @@ Future<InkToTextResult> convertInkToText(
       line.bounds,
       words.join(' '),
       size: _fontSize(lineXHeight(sub, line), handwriting: false),
+      baselineY: lineBaselineAt(line, line.bounds.left),
       newId: newId,
     );
     out = out.without(line.strokeIds).withText(box);
@@ -93,6 +94,7 @@ Future<InkToTextResult> convertInkToText(
     Rect.fromLTRB(word.bounds.left, line.bounds.top, word.bounds.right, line.bounds.bottom),
     text,
     size: _fontSize(lineXHeight(doc, line), handwriting: true),
+    baselineY: lineBaselineAt(line, word.bounds.left),
     font: kHandwritingFont,
     newId: newId,
   );
@@ -100,9 +102,13 @@ Future<InkToTextResult> convertInkToText(
 }
 
 /// Tamanho da fonte para a altura-x [xh] da escrita (a altura-x da fonte padrão
-/// é ~0,5 do tamanho; a da Caveat, ~0,4).
+/// é ~0,5 do tamanho; a da Caveat, 0,36 — medida no arquivo da fonte).
 double _fontSize(double xh, {required bool handwriting}) =>
-    (xh / (handwriting ? 0.4 : 0.5)).clamp(10.0, 120.0).toDouble();
+    (xh / (handwriting ? 0.36 : 0.5)).clamp(10.0, 120.0).toDouble();
+
+/// Distância do topo da caixa até a linha de base do texto, em tamanhos de fonte,
+/// com a altura de linha 1,25 usada para desenhar (Caveat: 0,952; padrão: ~0,95).
+const double _baselineRatio = 0.95;
 
 TextBox _boxFor(
   PageDoc doc,
@@ -110,6 +116,7 @@ TextBox _boxFor(
   Rect area,
   String text, {
   required double size,
+  required double baselineY,
   required String Function() newId,
   String? font,
 }) {
@@ -125,7 +132,8 @@ TextBox _boxFor(
   // A caixa de texto quebra linha pela largura: precisa caber o texto todo.
   final need = text.length * size * 0.55 + size;
   final x = area.left.clamp(0.0, pageWidth - 40).toDouble();
-  final y = area.top.clamp(0.0, pageHeight - size).toDouble();
+  // A linha de base do texto fica na da escrita (não no topo das letras altas).
+  final y = (baselineY - size * _baselineRatio).clamp(0.0, pageHeight - size).toDouble();
   final w = math.max(area.width, need).clamp(40.0, pageWidth - x).toDouble();
   return TextBox(id: newId(), x: x, y: y, w: w, text: text, size: size, argb: argb, font: font);
 }

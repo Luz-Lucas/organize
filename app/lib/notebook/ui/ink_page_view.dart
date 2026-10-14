@@ -64,6 +64,8 @@ class InkPageView extends StatefulWidget {
     required this.onSelectionChanged,
     required this.onActivate,
     required this.onTextTap,
+    this.onInkTap,
+    this.overlay,
     this.debugInput = kNbDebugInput,
   });
 
@@ -83,6 +85,15 @@ class InkPageView extends StatefulWidget {
 
   final VoidCallback onActivate;
   final void Function(Offset at, TextBox? existing) onTextTap;
+
+  /// Toque curto (sem arrasto) com o laço, em [at] (unidades de página). Se
+  /// devolver `true` o toque foi usado (ex.: abrir as sugestões do corretor) e a
+  /// seleção fica como está.
+  final bool Function(Offset at)? onInkTap;
+
+  /// Camada desenhada por cima da tinta, em unidades de página, sem receber toques
+  /// (o sublinhado do corretor).
+  final Widget? overlay;
 
   /// Mostra kind, buttons e pressure do último evento (diagnóstico).
   final bool debugInput;
@@ -542,6 +553,7 @@ class _InkPageViewState extends State<InkPageView> {
     final pts = _lasso;
     final box = pts.length < 3 ? Rect.zero : _bounds(pts);
     if (box.width < 4 && box.height < 4) {
+      if (widget.onInkTap?.call(pts.isEmpty ? _downPos : pts.first) ?? false) return;
       if (widget.selection.isNotEmpty) widget.onSelectionChanged(const {});
       return;
     }
@@ -681,6 +693,8 @@ class _InkPageViewState extends State<InkPageView> {
                 ),
               ),
             ],
+            if (_visible && widget.overlay != null)
+              Positioned.fill(child: IgnorePointer(child: widget.overlay!)),
             if (widget.debugInput)
               Positioned(
                 left: 12,
