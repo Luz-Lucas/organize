@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status (2026-10-14):** implementado e no ar (a coleta agendada na nuvem traz manchetes do dia). Aberto: só o teste manual do Step 8 da Task 5.
+
 **Goal:** Coletar notícias de fontes confiáveis por RSS (catálogo + feeds próprios), filtrá-las pelos interesses e bloqueios configurados no app e mostrá-las numa aba Notícias e em Hoje.
 
 **Architecture:** Uma Edge Function Deno (`news-fetch`), disparada por `pg_cron` a cada 20 minutos, baixa os feeds assinados, decodifica o charset, faz o parse de RSS/Atom e grava em `news_items`. A regra de filtragem vive numa função SQL (`news_feed`), reutilizada depois pelo app, pela ponte da Alexa (Fase 3) e pelo MCP (Fase 4). No app, uma interface `NewsRepository` (implementações em memória e Supabase) alimenta as telas.
@@ -91,12 +93,12 @@ app/
   - `fetchFeed(url: string, fetcher?: typeof fetch): Promise<FeedItem[]>`, `USER_AGENT`
   - `CATALOG: { name: string; section: string; feedUrl: string }[]`
 
-- [ ] **Step 1: Instalar o Deno (se `deno --version` falhar)**
+- [x] **Step 1: Instalar o Deno (se `deno --version` falhar)**
 
 Run: `curl -fsSL https://deno.land/install.sh | sh && export PATH="$HOME/.deno/bin:$PATH" && deno --version`
 Expected: `deno 2.x`.
 
-- [ ] **Step 2: Escrever os testes**
+- [x] **Step 2: Escrever os testes**
 
 Create `supabase/functions/news-fetch/feed_test.ts`:
 ```ts
@@ -175,12 +177,12 @@ Deno.test("normalizeUrl remove utm_* e fragmento e recusa esquemas estranhos", (
 });
 ```
 
-- [ ] **Step 3: Rodar e ver falhar**
+- [x] **Step 3: Rodar e ver falhar**
 
 Run: `cd /home/only/organizacional && deno test supabase/functions/news-fetch/feed_test.ts`
 Expected: FAIL com `Module not found "file:///.../feed.ts"`.
 
-- [ ] **Step 4: Implementar o parser**
+- [x] **Step 4: Implementar o parser**
 
 Create `supabase/functions/news-fetch/feed.ts`:
 ```ts
@@ -331,12 +333,12 @@ export async function fetchFeed(url: string, fetcher: typeof fetch = fetch): Pro
 }
 ```
 
-- [ ] **Step 5: Rodar e ver passar**
+- [x] **Step 5: Rodar e ver passar**
 
 Run: `deno test supabase/functions/news-fetch/feed_test.ts`
 Expected: `ok | 8 passed | 0 failed`.
 
-- [ ] **Step 6: Catálogo e script de verificação**
+- [x] **Step 6: Catálogo e script de verificação**
 
 Create `supabase/functions/news-fetch/catalog.ts`:
 ```ts
@@ -385,12 +387,12 @@ for (const s of CATALOG) {
 Deno.exit(failures === 0 ? 0 : 1);
 ```
 
-- [ ] **Step 7: Verificar os feeds reais**
+- [x] **Step 7: Verificar os feeds reais**
 
 Run: `deno run --allow-net supabase/functions/news-fetch/check_feeds.ts`
 Expected: uma linha `OK` por feed, com títulos legíveis e acentos corretos. Para cada linha `FALHA`/`VAZIO`: abra o site da fonte, procure o link "RSS" e troque a URL em `catalog.ts`. Se a fonte não tiver RSS, remova a linha. Repita até o script sair com código 0. **Anote a lista final.** A Task 2 insere exatamente essas URLs.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add supabase/functions/news-fetch
@@ -409,7 +411,7 @@ git commit -m "feat: parser de feeds RSS/Atom com charset e catálogo verificado
 - Consumes: `public.touch_updated_at()` (Fase 1).
 - Produces: tabelas `news_sources(id, user_id null=catálogo, name, section, feed_url)`, `news_subscriptions(user_id, source_id)`, `news_prefs(user_id pk, keywords text[], blocked text[], max_age_hours int, briefing_count int)`, `news_items(id, user_id, source_id, url, title, summary, image_url, published_at, fetched_at)`; funções `public.news_term_match(haystack text, term text) → boolean` e `public.news_feed(p_user uuid default auth.uid(), p_limit int default 50) → table(id uuid, source_id uuid, source_name text, title text, summary text, url text, image_url text, published_at timestamptz, highlighted boolean)`.
 
-- [ ] **Step 1: Escrever o teste pgTAP**
+- [x] **Step 1: Escrever o teste pgTAP**
 
 Create `supabase/tests/database/news_test.sql`:
 ```sql
@@ -468,12 +470,12 @@ select * from finish();
 rollback;
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `npx supabase test db`
 Expected: FAIL em `news_test.sql` com `relation "news_sources" does not exist`.
 
-- [ ] **Step 3: Escrever a migration**
+- [x] **Step 3: Escrever a migration**
 
 Create `supabase/migrations/20260929000000_news.sql` (se a Task 1 mudou o catálogo, ajuste o `insert` final para ficar igual a `catalog.ts`):
 ```sql
@@ -612,12 +614,12 @@ insert into public.news_sources (user_id, name, section, feed_url) values
   (null, 'Agência Brasil', 'Últimas', 'https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml');
 ```
 
-- [ ] **Step 4: Aplicar e rodar os testes**
+- [x] **Step 4: Aplicar e rodar os testes**
 
 Run: `npx supabase db reset && npx supabase test db`
 Expected: PASS em `core_test.sql` (8) e `news_test.sql` (9).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add supabase/migrations/20260929000000_news.sql supabase/tests/database/news_test.sql
@@ -641,7 +643,7 @@ git commit -m "feat: schema de notícias com filtro por interesses e bloqueios"
   - `isAuthorized(req: Request, cronSecret: string | undefined, getUser: (jwt: string) => Promise<boolean>): Promise<boolean>`
   - HTTP `POST /functions/v1/news-fetch`, com corpo `{}` → `{ sources, items, failures }` e corpo `{ "validate": "<url>" }` → `{ ok: true, count, sample }` ou `{ ok: false, error }`. Responde `401` sem autorização.
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `supabase/functions/news-fetch/collect_test.ts`:
 ```ts
@@ -717,12 +719,12 @@ Deno.test("falha ao consultar o usuário conta como não autorizado", async () =
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `deno test supabase/functions/news-fetch/`
 Expected: FAIL (`collect.ts` e `auth.ts` não existem).
 
-- [ ] **Step 3: Implementar a coleta, a autorização e o handler**
+- [x] **Step 3: Implementar a coleta, a autorização e o handler**
 
 Create `supabase/functions/news-fetch/collect.ts`:
 ```ts
@@ -861,12 +863,12 @@ Deno.serve(async (req) => {
 });
 ```
 
-- [ ] **Step 4: Rodar os testes Deno**
+- [x] **Step 4: Rodar os testes Deno**
 
 Run: `deno test supabase/functions/news-fetch/`
 Expected: `ok | 15 passed | 0 failed` (8 do feed + 3 da coleta + 4 da autorização).
 
-- [ ] **Step 5: Configuração, segredo local e cron**
+- [x] **Step 5: Configuração, segredo local e cron**
 
 Append to `supabase/config.toml`:
 ```toml
@@ -908,7 +910,7 @@ select cron.schedule(
 );
 ```
 
-- [ ] **Step 6: Testar a função localmente de ponta a ponta**
+- [x] **Step 6: Testar a função localmente de ponta a ponta**
 
 Run (terminal 1): `npx supabase db reset && npx supabase functions serve news-fetch --env-file supabase/functions/.env`
 Run (terminal 2):
@@ -923,7 +925,7 @@ psql "$DB_URL" -c "select count(*) from news_items;"
 ```
 Expected: 1º curl `{"sources":1,"items":<n>,"failures":[]}` com n > 0; 2º `{"ok":false,"error":"não é um feed RSS/Atom"}` (ou `XML inválido`); 3º `401`; o `count` > 0. Se `psql` não estiver instalado: `sudo apt-get install -y postgresql-client`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add supabase/functions/news-fetch supabase/migrations/20260929000100_news_cron.sql supabase/config.toml .gitignore
@@ -949,7 +951,7 @@ git commit -m "feat: edge function news-fetch com coleta, validação de feed e 
   - `class MemoryNewsRepository({List<NewsSource> sources, List<NewsItem> items, Set<String> validFeeds})` com `bool failWrites`, `int refreshCount`
   - `class SupabaseNewsRepository(SupabaseClient db)`
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `app/test/domain/news_test.dart`:
 ```dart
@@ -1068,12 +1070,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/domain/news_test.dart test/data/memory_news_repository_test.dart`
 Expected: FAIL (arquivos não existem).
 
-- [ ] **Step 3: Implementar o domínio**
+- [x] **Step 3: Implementar o domínio**
 
 Create `app/lib/domain/news.dart`:
 ```dart
@@ -1211,7 +1213,7 @@ String? validateFeedUrl(String input) {
 }
 ```
 
-- [ ] **Step 4: Implementar os repositórios**
+- [x] **Step 4: Implementar os repositórios**
 
 Create `app/lib/data/news_repository.dart`:
 ```dart
@@ -1442,12 +1444,12 @@ class SupabaseNewsRepository implements NewsRepository {
 }
 ```
 
-- [ ] **Step 5: Rodar e ver passar**
+- [x] **Step 5: Rodar e ver passar**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; sem erros nem warnings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/lib/domain/news.dart app/lib/data/news_repository.dart app/lib/data/memory_news_repository.dart app/lib/data/supabase_news_repository.dart app/test/domain/news_test.dart app/test/data/memory_news_repository_test.dart
@@ -1472,7 +1474,7 @@ git commit -m "feat: domínio e repositórios de notícias"
   - Keys: `open-news` (ícone em Hoje), `refresh-news`, `news-settings`, `news-keywords`, `news-blocked`, `save-news-prefs`, `add-feed`, `feed-name`, `feed-url`, `source-<id>`
   - `pumpApp(tester, repo, {location, now, size, NewsRepository? news, Future<void> Function(Uri)? openLink})`
 
-- [ ] **Step 1: Atualizar o helper de testes e escrever os testes**
+- [x] **Step 1: Atualizar o helper de testes e escrever os testes**
 
 Replace all of `app/test/helpers.dart`:
 ```dart
@@ -1638,12 +1640,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && flutter pub add url_launcher && TZ=America/Sao_Paulo flutter test test/features/news_screens_test.dart`
 Expected: FAIL (`newsRepositoryProvider` não definido).
 
-- [ ] **Step 3: Providers e rotas**
+- [x] **Step 3: Providers e rotas**
 
 Modify `app/lib/app/providers.dart`, adding these imports at the top:
 ```dart
@@ -1688,7 +1690,7 @@ and, inside the `ShellRoute` `routes: [...]`, after the `/nota/:id` route:
             ),
 ```
 
-- [ ] **Step 4: Tile e tela de notícias**
+- [x] **Step 4: Tile e tela de notícias**
 
 Create `app/lib/ui/news_tile.dart`:
 ```dart
@@ -1802,7 +1804,7 @@ class NewsScreen extends ConsumerWidget {
 }
 ```
 
-- [ ] **Step 5: Tela de ajustes**
+- [x] **Step 5: Tela de ajustes**
 
 Create `app/lib/features/news/news_settings_screen.dart`:
 ```dart
@@ -2054,7 +2056,7 @@ class _AddFeedDialogState extends State<AddFeedDialog> {
 }
 ```
 
-- [ ] **Step 6: Manchetes em Hoje e override no main**
+- [x] **Step 6: Manchetes em Hoje e override no main**
 
 Replace all of `app/lib/features/today/today_screen.dart`:
 ```dart
@@ -2168,7 +2170,7 @@ Future<void> main() async {
 }
 ```
 
-- [ ] **Step 7: Rodar e ver passar (inclui os testes da Fase 1)**
+- [x] **Step 7: Rodar e ver passar (inclui os testes da Fase 1)**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; sem erros nem warnings. Se `separatorBuilder: (_, _)` der erro de parâmetro duplicado (Dart < 3.7), troque por `(context, index)`.
@@ -2178,7 +2180,7 @@ Expected: `All tests passed!`; sem erros nem warnings. Se `separatorBuilder: (_,
 Run: `npx supabase functions serve news-fetch --env-file supabase/functions/.env` (terminal separado) e `cd app && flutter run -d linux --dart-define-from-file=env.json`
 Expected: em Notícias → ⚙, ligue "G1 / Principais", volte e toque em ↻: as manchetes aparecem. Coloque um interesse que esteja em alguma manchete e salve: ela sobe com ★. Adicionar `https://g1.globo.com` como feed mostra o erro.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -2197,7 +2199,7 @@ git commit -m "feat: aba Notícias, ajustes de fontes e interesses e manchetes e
 - Consumes: tudo acima.
 - Produces: função `news-fetch` publicada; job `news-fetch` do `pg_cron` rodando a cada 20 min.
 
-- [ ] **Step 1: Suítes verdes**
+- [x] **Step 1: Suítes verdes**
 
 Run:
 ```bash
@@ -2208,7 +2210,7 @@ cd app && TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutte
 ```
 Expected: tudo PASS.
 
-- [ ] **Step 2: Publicar migrations, função e segredos**
+- [x] **Step 2: Publicar migrations, função e segredos**
 
 Run:
 ```bash
@@ -2227,7 +2229,7 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/news-fetch', 
 select vault.create_secret('<segredo>', 'cron_secret');
 ```
 
-- [ ] **Step 3: Verificar a coleta agendada**
+- [x] **Step 3: Verificar a coleta agendada**
 
 Ligue algumas fontes no app (build de produção), espere até 20 minutos e rode no SQL Editor:
 ```sql
@@ -2237,7 +2239,7 @@ select status_code, content from net._http_response order by created desc limit 
 ```
 Expected: `succeeded`; `count` > 0; resposta HTTP 200 com `"failures":[]` (ou só as fontes que caíram naquele momento).
 
-- [ ] **Step 4: Documentar e commitar**
+- [x] **Step 4: Documentar e commitar**
 
 Append to `README.md`:
 ````markdown

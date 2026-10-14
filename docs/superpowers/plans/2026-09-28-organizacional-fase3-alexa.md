@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status (2026-10-14):** implementado e com a ponte no ar (Echos e dispositivos sincronizados). Abertos: Task 7 Step 5 (skill no console da Alexa) e Task 9 Step 8 (teste de ponta a ponta do despertar), que dependem do usuário.
+
 **Goal:** Pelo app, configurar despertares que tocam Spotify num Echo e falam o resumo do dia (aulas, tarefas, manchetes), executar rotinas da Alexa, controlar dispositivos inteligentes e falar texto no Echo; e ter a skill "Alexa, abre organizacional" para ouvir o resumo sob demanda.
 
 **Architecture:** Uma ponte Node/TypeScript roda numa VPS (Docker + Caddy com HTTPS) e tem duas partes. (1) A **skill oficial** (ask-sdk) responde em `https://<domínio>/alexa` com o resumo do dia lido do Supabase. (2) A parte **não oficial** (`alexa-remote2`, login por cookie) executa comandos que o app grava na tabela `alexa_commands` e roda um agendador que transforma `wake_plans` em despertares. Cada despertar tem um **alarme reserva nativo** criado com antecedência no Echo e apagado quando a sequência dá certo. A lógica (agendador, resumo, comandos, skill) fica em módulos puros testados com vitest, com um gateway falso no lugar da Alexa.
@@ -95,7 +97,7 @@ app/
   - `alexa_bridge_status(user_id pk, state ∈ ok|auth_required|error, message, last_seen)`
   - `claim_wake_run(p_user uuid, p_plan uuid, p_date date, p_planned timestamptz) → boolean`, `claim_command(p_id uuid) → boolean`
 
-- [ ] **Step 1: Escrever o teste pgTAP**
+- [x] **Step 1: Escrever o teste pgTAP**
 
 Create `supabase/tests/database/alexa_test.sql`:
 ```sql
@@ -145,12 +147,12 @@ select * from finish();
 rollback;
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd /home/only/organizacional && npx supabase test db`
 Expected: FAIL em `alexa_test.sql` (`relation "wake_plans" does not exist`).
 
-- [ ] **Step 3: Escrever a migration**
+- [x] **Step 3: Escrever a migration**
 
 Create `supabase/migrations/20260930000000_alexa.sql`:
 ```sql
@@ -291,12 +293,12 @@ alter publication supabase_realtime add table
   public.alexa_routines, public.alexa_bridge_status;
 ```
 
-- [ ] **Step 4: Aplicar e rodar os testes**
+- [x] **Step 4: Aplicar e rodar os testes**
 
 Run: `npx supabase db reset && npx supabase test db`
 Expected: PASS em `core_test.sql`, `news_test.sql` e `alexa_test.sql` (10).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add supabase/migrations/20260930000000_alexa.sql supabase/tests/database/alexa_test.sql
@@ -324,7 +326,7 @@ git commit -m "feat: schema da Alexa com despertares idempotentes e fila de coma
   - `interface BriefingEvent { title: string; startsAt: Date; endsAt: Date; allDay: boolean; location: string | null }`, `interface BriefingTask { title: string }`, `interface BriefingNews { title: string; source: string }`, `interface BriefingInput { now: Date; timeZone: string; events: BriefingEvent[]; overdue: BriefingTask[]; dueToday: BriefingTask[]; news: BriefingNews[] }`
   - `buildBriefing(input: BriefingInput): string`, `headlinesText(news: BriefingNews[]): string`, `splitTasks(tasks: { title: string; dueAt: Date }[], dayStart: Date): { overdue: BriefingTask[]; dueToday: BriefingTask[] }`, `chunkSpeech(text: string, max?: number): string[]`, `escapeSsml(text: string): string`
 
-- [ ] **Step 1: Criar o projeto**
+- [x] **Step 1: Criar o projeto**
 
 Run:
 ```bash
@@ -394,7 +396,7 @@ Create `bridge/src/types/alexa-remote2.d.ts`:
 declare module 'alexa-remote2';
 ```
 
-- [ ] **Step 2: Escrever os testes**
+- [x] **Step 2: Escrever os testes**
 
 Create `bridge/test/time.test.ts`:
 ```ts
@@ -559,12 +561,12 @@ describe('auxiliares', () => {
 });
 ```
 
-- [ ] **Step 3: Rodar e ver falhar**
+- [x] **Step 3: Rodar e ver falhar**
 
 Run: `npx vitest run`
 Expected: FAIL (módulos `src/*.ts` não existem).
 
-- [ ] **Step 4: Implementar**
+- [x] **Step 4: Implementar**
 
 Create `bridge/src/time.ts`:
 ```ts
@@ -775,12 +777,12 @@ export function escapeSsml(text: string): string {
 }
 ```
 
-- [ ] **Step 5: Rodar e ver passar**
+- [x] **Step 5: Rodar e ver passar**
 
 Run: `npx vitest run && npx tsc -p tsconfig.json --noEmit`
 Expected: todos os testes passam; `tsc` sem erros.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -806,7 +808,7 @@ git commit -m "feat(ponte): projeto, fuso horário, config e texto do resumo do 
   - `occurrence(plan: WakePlan, runDate: string, timeZone: string): Date | null`
   - `planWakeActions(plans: WakePlan[], runs: WakeRun[], now: Date, timeZone: string, opts?: SchedulerOptions): WakeAction[]`, `DEFAULT_OPTIONS = { graceMin: 15, fallbackDelayMin: 10, armAheadHours: 24 }`
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `bridge/test/scheduler.test.ts`:
 ```ts
@@ -902,12 +904,12 @@ describe('planWakeActions', () => {
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd bridge && npx vitest run test/scheduler.test.ts`
 Expected: FAIL (`scheduler.ts` não existe).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Create `bridge/src/scheduler.ts`:
 ```ts
@@ -1013,12 +1015,12 @@ export function planWakeActions(
 }
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+- [x] **Step 4: Rodar e ver passar**
 
 Run: `npx vitest run && npx tsc -p tsconfig.json --noEmit`
 Expected: todos passam; `tsc` sem erros.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -1044,7 +1046,7 @@ git commit -m "feat(ponte): agendador de despertares com alarme reserva"
   - `interface WakeStore { armRun(planId, runDate, plannedFor: Date, fallbackHandle: string); setRunStatus(runId, status: RunStatus, note?: string | null); claimRun(planId, runDate, plannedFor: Date): Promise<boolean>; finishRun(planId, runDate, status: 'done' | 'failed', note: string) }`
   - `interface WakeDeps { gateway; store: WakeStore; briefing(): Promise<string>; sleep(ms): Promise<void>; log(msg: string): void }`; `applyWakeActions(actions, deps, inFlight: Set<string>): Promise<Promise<void>[]>` (devolve os disparos em andamento)
 
-- [ ] **Step 1: Gateway falso e testes**
+- [x] **Step 1: Gateway falso e testes**
 
 Create `bridge/test/fake-gateway.ts`:
 ```ts
@@ -1259,12 +1261,12 @@ describe('applyWakeActions', () => {
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd bridge && npx vitest run test/commands.test.ts test/wake.test.ts`
 Expected: FAIL (módulos não existem).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Create `bridge/src/gateway.ts`:
 ```ts
@@ -1495,12 +1497,12 @@ export async function applyWakeActions(
 }
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+- [x] **Step 4: Rodar e ver passar**
 
 Run: `npx vitest run && npx tsc -p tsconfig.json --noEmit`
 Expected: todos passam; `tsc` sem erros.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -1520,7 +1522,7 @@ git commit -m "feat(ponte): comandos e execução do despertar com alarme reserv
 - Consumes: `buildBriefing`, `headlinesText`, `escapeSsml`, `BriefingInput` (Task 2).
 - Produces: `interface SkillDeps { allowedUserId: string | null; briefingInput: () => Promise<BriefingInput>; log: (m: string) => void }`; `buildSkill(deps): Skill` (ask-sdk-core). Intents: `ResumoDoDiaIntent`, `NoticiasIntent`, mais `LaunchRequest` e os intents `AMAZON.*`.
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `bridge/test/skill.test.ts`:
 ```ts
@@ -1594,12 +1596,12 @@ describe('skill', () => {
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd bridge && npx vitest run test/skill.test.ts`
 Expected: FAIL (`skill.ts` não existe).
 
-- [ ] **Step 3: Implementar a skill e o modelo de interação**
+- [x] **Step 3: Implementar a skill e o modelo de interação**
 
 Create `bridge/src/skill.ts`:
 ```ts
@@ -1699,12 +1701,12 @@ Create `bridge/skill/interaction-model.pt-BR.json`:
 }
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+- [x] **Step 4: Rodar e ver passar**
 
 Run: `npx vitest run && npx tsc -p tsconfig.json --noEmit`
 Expected: todos passam; `tsc` sem erros. Se o `tsc` reclamar do default import de `ask-sdk-core`, troque por `import * as askCore from 'ask-sdk-core'` (e mantenha a desestruturação).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -1727,7 +1729,7 @@ git commit -m "feat(ponte): skill oficial com resumo do dia e notícias"
   - `class AlexaRemoteGateway implements AlexaGateway` com `static connect(opts: { cookieFile; amazonPage; alexaServiceHost; language })`; `mapSmartEntities(raw: unknown): SmartDevice[]`; `mapRoutines(raw: unknown): Routine[]`
   - Processo `node dist/main.js`: HTTP `POST /alexa`, `GET /health`; loops de heartbeat (60 s), comandos (realtime + varredura a cada 15 s), sincronização (10 min) e despertador (30 s)
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `bridge/test/mappers.test.ts`:
 ```ts
@@ -1855,12 +1857,12 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd bridge && npx vitest run test/mappers.test.ts`
 Expected: FAIL (`alexa-remote-gateway.ts` não existe).
 
-- [ ] **Step 3: Implementar o store**
+- [x] **Step 3: Implementar o store**
 
 Create `bridge/src/supabase-store.ts`:
 ```ts
@@ -2051,7 +2053,7 @@ export class SupabaseStore implements WakeStore {
 }
 ```
 
-- [ ] **Step 4: Implementar o gateway real (alexa-remote2)**
+- [x] **Step 4: Implementar o gateway real (alexa-remote2)**
 
 Create `bridge/src/alexa-remote-gateway.ts`:
 ```ts
@@ -2185,7 +2187,7 @@ export class AlexaRemoteGateway implements AlexaGateway {
 }
 ```
 
-- [ ] **Step 5: Confirmar os nomes dos métodos da versão instalada do alexa-remote2**
+- [x] **Step 5: Confirmar os nomes dos métodos da versão instalada do alexa-remote2**
 
 Run:
 ```bash
@@ -2193,7 +2195,7 @@ node -e "const A=require('alexa-remote2');const n=['getDevices','getSmarthomeEnt
 ```
 Expected: todos `function`. Se algum estiver `undefined`, abra `node_modules/alexa-remote2/README.md`, ache o método equivalente e ajuste **só** `alexa-remote-gateway.ts`. Os testes não dependem dele.
 
-- [ ] **Step 6: Processo principal e scripts**
+- [x] **Step 6: Processo principal e scripts**
 
 Create `bridge/src/main.ts`:
 ```ts
@@ -2394,12 +2396,12 @@ await writeFile('/data/smoke-ok.txt', new Date().toISOString());
 process.exit(0);
 ```
 
-- [ ] **Step 7: Rodar os testes unitários e o build**
+- [x] **Step 7: Rodar os testes unitários e o build**
 
 Run: `npx vitest run && npm run build`
 Expected: todos passam (os de integração aparecem como skipped); `dist/main.js` gerado.
 
-- [ ] **Step 8: Rodar a integração contra o Supabase local**
+- [x] **Step 8: Rodar a integração contra o Supabase local**
 
 Run:
 ```bash
@@ -2408,7 +2410,7 @@ cd bridge && SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KE
 ```
 Expected: 5 testes passam, nenhum skipped. Se o CLI não exportar `SERVICE_ROLE_KEY`, copie a service role key de `npx supabase status`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -2428,7 +2430,7 @@ git commit -m "feat(ponte): store Supabase, gateway alexa-remote2 e processo pri
 - Consumes: Tasks 1–6.
 - Produces: ponte rodando em `https://<DOMAIN>` com `/health` e `/alexa`; status `ok` em `alexa_bridge_status`; skill em modo Development na sua conta.
 
-- [ ] **Step 1: Arquivos de deploy**
+- [x] **Step 1: Arquivos de deploy**
 
 Create `bridge/Dockerfile`:
 ```dockerfile
@@ -2499,7 +2501,7 @@ PORT=8080
 LOGIN_PROXY_PORT=3001
 ```
 
-- [ ] **Step 2: Preparar a VPS**
+- [x] **Step 2: Preparar a VPS**
 
 Na VPS (Ubuntu), como usuário com sudo:
 ```bash
@@ -2516,7 +2518,7 @@ Preencha o `.env`:
 
 Rode `npx supabase db push` na sua máquina para aplicar a migration da Task 1 na nuvem.
 
-- [ ] **Step 3: Subir e fazer o login da Alexa**
+- [x] **Step 3: Subir e fazer o login da Alexa**
 
 Run na VPS:
 ```bash
@@ -2529,7 +2531,7 @@ Expected: o comando na VPS imprime `Login salvo em /data/alexa-cookie.json` e te
 Run: `docker compose run --rm bridge node dist/scripts/smoke.js --speak <SERIAL_DO_ECHO> Teste da ponte`
 Expected: lista Echos (com `id` = serial), dispositivos e rotinas; o Echo fala "Teste da ponte". Se `Dispositivos` vier vazio mas você tiver lâmpadas na Alexa, salve a resposta crua de `getSmarthomeEntities` como `bridge/test/fixtures/entities.json`, adicione um caso em `mappers.test.ts` com ela e ajuste `mapSmartEntities` até passar.
 
-- [ ] **Step 4: Subir o serviço**
+- [x] **Step 4: Subir o serviço**
 
 Run: `docker compose up -d && sleep 20 && curl -s https://$DOMAIN/health && docker compose logs --tail=20 bridge`
 Expected: `{"ok":true}`; logs com `ouvindo na porta 8080` e `sincronizado: N Echos, ...`. No SQL Editor do Supabase, `select state, last_seen from alexa_bridge_status;` mostra `ok` com horário recente.
@@ -2543,7 +2545,7 @@ Em https://developer.amazon.com/alexa/console/ask:
 4. **Test**: ative **Development**. Digite "abrir organizacional".
 Expected: a skill responde "Skill ainda não configurada..." e o log (`docker compose logs bridge | grep "skill chamada"`) mostra `amzn1.ask.account...`. Copie esse valor para `ALEXA_ALLOWED_USER_ID` no `.env`, rode `docker compose up -d` e teste de novo: o resumo do dia é falado. No Echo: "Alexa, abre organizacional".
 
-- [ ] **Step 6: Documentar e commitar**
+- [x] **Step 6: Documentar e commitar**
 
 Append to `README.md`:
 ````markdown
@@ -2589,7 +2591,7 @@ git commit -m "feat(ponte): deploy com Docker e Caddy e guia de login da Alexa"
   - `class MemoryAlexaRepository({BridgeStatus? status, List<AlexaDevice> devices, List<AlexaRoutine> routines, List<WakePlan> plans, CommandStatus? respondWith = CommandStatus.done, String? respondResult = 'ok'})` com `sent` (`List<({String kind, Map<String, Object?> payload})>`), `failWrites` e o setter `status`
   - `class SupabaseAlexaRepository(SupabaseClient db)`
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `app/test/domain/alexa_test.dart`:
 ```dart
@@ -2701,12 +2703,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/domain/alexa_test.dart test/data/memory_alexa_repository_test.dart`
 Expected: FAIL (arquivos não existem).
 
-- [ ] **Step 3: Implementar o domínio**
+- [x] **Step 3: Implementar o domínio**
 
 Create `app/lib/domain/alexa.dart`:
 ```dart
@@ -2971,7 +2973,7 @@ String commandOutcome(AlexaCommand? c) => switch (c?.status) {
     };
 ```
 
-- [ ] **Step 4: Implementar os repositórios**
+- [x] **Step 4: Implementar os repositórios**
 
 Create `app/lib/data/alexa_repository.dart`:
 ```dart
@@ -3195,12 +3197,12 @@ class SupabaseAlexaRepository implements AlexaRepository {
 }
 ```
 
-- [ ] **Step 5: Rodar e ver passar**
+- [x] **Step 5: Rodar e ver passar**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; sem erros nem warnings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -3226,7 +3228,7 @@ git commit -m "feat: domínio e repositórios da Alexa no app"
   - Keys: `open-home`, `bridge-warning` (Hoje); `bridge-banner`, `sync-alexa`, `new-wake`, `wake-enabled-<id>`, `run-routine-<id>`, `on-<id>`, `off-<id>`, `brightness-<id>`, `speak-text`, `speak-send`, `echo-<id>` (Casa); `wake-label`, `wake-time`, `day-<1..7>`, `wake-spotify`, `wake-fallback`, `wake-error`, `wake-save`, `wake-test`, `wake-delete` (Despertar)
   - `pumpApp(..., AlexaRepository? alexa)`
 
-- [ ] **Step 1: Atualizar o helper e escrever os testes**
+- [x] **Step 1: Atualizar o helper e escrever os testes**
 
 Replace all of `app/test/helpers.dart`:
 ```dart
@@ -3403,12 +3405,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/features/home_test.dart`
 Expected: FAIL (`alexaRepositoryProvider` não definido).
 
-- [ ] **Step 3: Providers e rotas**
+- [x] **Step 3: Providers e rotas**
 
 Modify `app/lib/app/providers.dart`, adding the imports:
 ```dart
@@ -3451,7 +3453,7 @@ and, inside the `ShellRoute` `routes: [...]`, after `/noticias/ajustes`:
             ),
 ```
 
-- [ ] **Step 4: Tela Casa**
+- [x] **Step 4: Tela Casa**
 
 Create `app/lib/features/home/home_screen.dart`:
 ```dart
@@ -3681,7 +3683,7 @@ class _DeviceTileState extends State<_DeviceTile> {
 }
 ```
 
-- [ ] **Step 5: Tela do despertar**
+- [x] **Step 5: Tela do despertar**
 
 Create `app/lib/features/home/wake_plan_screen.dart`:
 ```dart
@@ -3935,7 +3937,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
 }
 ```
 
-- [ ] **Step 6: Hoje com atalho e aviso, e main**
+- [x] **Step 6: Hoje com atalho e aviso, e main**
 
 Replace all of `app/lib/features/today/today_screen.dart`:
 ```dart
@@ -4074,7 +4076,7 @@ Future<void> main() async {
 }
 ```
 
-- [ ] **Step 7: Rodar e ver passar (todas as fases)**
+- [x] **Step 7: Rodar e ver passar (todas as fases)**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; sem erros nem warnings.
@@ -4088,7 +4090,7 @@ Com a Task 7 concluída, rode o app (`flutter run -d linux --dart-define-from-fi
 4. Espere o horário: o despertar toca sozinho. No SQL Editor, `select status, note from wake_runs order by created_at desc limit 1;` mostra `done`, e o alarme "(reserva)" some do app Alexa.
 5. `docker compose stop bridge` na VPS; em até 3 minutos, Hoje mostra o aviso (se houver despertar ativo). Rode `docker compose start bridge`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /home/only/organizacional

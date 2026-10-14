@@ -105,7 +105,7 @@ organizacional/
 - Consumes: nada.
 - Produces: tabelas `public.spaces(id, user_id, name, kind, icon, color, position, created_at, updated_at)`, `public.notes(id, user_id, space_id, parent_id, title, body, created_at, updated_at)`, `public.tasks(id, user_id, space_id, note_id, title, description, status, due_at, completed_at, source, external_id, created_at, updated_at)`, `public.events(id, user_id, space_id, title, starts_at, ends_at, all_day, location, source, external_id, created_at, updated_at)`; enums `space_kind('materia','trabalho','hobby','geral')` e `task_status('todo','doing','done')`; todas na publicação `supabase_realtime`.
 
-- [ ] **Step 1: Conferir ferramentas e iniciar o repositório**
+- [x] **Step 1: Conferir ferramentas e iniciar o repositório**
 
 Run:
 ```bash
@@ -122,7 +122,7 @@ npx supabase@latest init
 ```
 Expected: versões do Node e do Docker impressas; `Finished supabase init.` Se o Docker não estiver rodando, instale/inicie antes (`sudo systemctl start docker`); o Supabase local depende dele.
 
-- [ ] **Step 2: Escrever o teste pgTAP (falha, porque as tabelas não existem)**
+- [x] **Step 2: Escrever o teste pgTAP (falha, porque as tabelas não existem)**
 
 Create `supabase/tests/database/core_test.sql`:
 ```sql
@@ -179,12 +179,12 @@ select * from finish();
 rollback;
 ```
 
-- [ ] **Step 3: Rodar e ver falhar**
+- [x] **Step 3: Rodar e ver falhar**
 
 Run: `npx supabase start && npx supabase test db`
 Expected: FAIL com `relation "spaces" does not exist`.
 
-- [ ] **Step 4: Escrever a migration**
+- [x] **Step 4: Escrever a migration**
 
 Create `supabase/migrations/20260928000000_core_schema.sql`:
 ```sql
@@ -281,12 +281,12 @@ end $$;
 alter publication supabase_realtime add table public.spaces, public.notes, public.tasks, public.events;
 ```
 
-- [ ] **Step 5: Aplicar e rodar os testes**
+- [x] **Step 5: Aplicar e rodar os testes**
 
 Run: `npx supabase db reset && npx supabase test db`
 Expected: PASS, `All tests successful. Files=1, Tests=8`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .gitignore supabase docs
@@ -315,7 +315,7 @@ git commit -m "feat: schema do núcleo (espaços, notas, tarefas, eventos) com R
   - `enum TaskStatus { todo, doing, done }`; `class TaskItem({required String id, required String title, String description = '', TaskStatus status = TaskStatus.todo, DateTime? dueAt, DateTime? completedAt, String? spaceId, String? noteId, String source = 'manual', String? externalId})` + `bool isDone`, `TaskItem toggled(DateTime now)`, `fromMap`, `toMap`, `==`
   - `class CalendarEvent({required String id, required String title, required DateTime startsAt, required DateTime endsAt, bool allDay = false, String? location, String? spaceId, String source = 'manual', String? externalId})` + `CalendarEvent withoutSpace()`, `fromMap`, `toMap`, `==`
 
-- [ ] **Step 1: Instalar o Flutter (se `flutter --version` falhar)**
+- [x] **Step 1: Instalar o Flutter (se `flutter --version` falhar)**
 
 Run:
 ```bash
@@ -326,7 +326,7 @@ flutter doctor
 ```
 Expected: `flutter doctor` com ✓ em Flutter e Linux toolchain. Para Android, instale o Android Studio (SDK + cmdline-tools) e rode `flutter doctor --android-licenses`. O Android só é necessário na Task 9.
 
-- [ ] **Step 2: Criar o projeto e as dependências**
+- [x] **Step 2: Criar o projeto e as dependências**
 
 Run:
 ```bash
@@ -357,7 +357,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
 }
 ```
 
-- [ ] **Step 3: Escrever o teste dos modelos**
+- [x] **Step 3: Escrever o teste dos modelos**
 
 Create `app/test/domain/models_test.dart`:
 ```dart
@@ -446,12 +446,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 4: Rodar e ver falhar**
+- [x] **Step 4: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/domain/models_test.dart`
 Expected: FAIL com `Error: Couldn't resolve the package 'organizacional/domain/...'` / `Undefined name`.
 
-- [ ] **Step 5: Implementar os modelos**
+- [x] **Step 5: Implementar os modelos**
 
 Create `app/lib/domain/json.dart`:
 ```dart
@@ -765,12 +765,12 @@ class CalendarEvent {
 }
 ```
 
-- [ ] **Step 6: Rodar e ver passar**
+- [x] **Step 6: Rodar e ver passar**
 
 Run: `TZ=America/Sao_Paulo flutter test test/domain/models_test.dart && flutter analyze`
 Expected: `All tests passed!` e `No issues found!`. O `main.dart` gerado pelo template ainda compila; ele é substituído na Task 5.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -797,7 +797,7 @@ git commit -m "feat: projeto Flutter e modelos de domínio"
   - `class DayAgenda { List<CalendarEvent> events; List<TaskItem> overdue; List<TaskItem> dueToday; }`, `DayAgenda buildDayAgenda({required DateTime now, required Iterable<CalendarEvent> events, required Iterable<TaskItem> tasks})`
   - `String? validateEventTimes(DateTime start, DateTime end)`
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `app/test/domain/wikilinks_test.dart`:
 ```dart
@@ -961,12 +961,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/domain`
 Expected: FAIL (`wikilinks.dart` e `agenda.dart` não existem).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Create `app/lib/domain/wikilinks.dart`:
 ```dart
@@ -1112,12 +1112,12 @@ String? validateEventTimes(DateTime start, DateTime end) =>
     end.isAfter(start) ? null : 'O fim precisa ser depois do início.';
 ```
 
-- [ ] **Step 4: Rodar e ver passar (nenhum teste pode aparecer como skipped)**
+- [x] **Step 4: Rodar e ver passar (nenhum teste pode aparecer como skipped)**
 
 Run: `TZ=America/Sao_Paulo flutter test test/domain && flutter analyze`
 Expected: `All tests passed!` sem `skipped`; `No issues found!`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -1141,7 +1141,7 @@ git commit -m "feat: wikilinks, backlinks e regras de agenda"
   - `class MemoryRepository implements Repository` com `bool failWrites` (true → toda escrita lança `RepositoryException`)
   - `class SupabaseRepository implements Repository` com construtor `SupabaseRepository(SupabaseClient db)`
 
-- [ ] **Step 1: Escrever o teste do repositório em memória**
+- [x] **Step 1: Escrever o teste do repositório em memória**
 
 Create `app/test/data/memory_repository_test.dart`:
 ```dart
@@ -1227,12 +1227,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/data/memory_repository_test.dart`
 Expected: FAIL (`memory_repository.dart` não existe).
 
-- [ ] **Step 3: Implementar a interface e o repositório em memória**
+- [x] **Step 3: Implementar a interface e o repositório em memória**
 
 Create `app/lib/data/repository.dart`:
 ```dart
@@ -1369,12 +1369,12 @@ class MemoryRepository implements Repository {
 }
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+- [x] **Step 4: Rodar e ver passar**
 
 Run: `TZ=America/Sao_Paulo flutter test test/data/memory_repository_test.dart`
 Expected: `All tests passed!`
 
-- [ ] **Step 5: Escrever o teste de integração do Supabase**
+- [x] **Step 5: Escrever o teste de integração do Supabase**
 
 Create `app/test/data/supabase_repository_test.dart`:
 ```dart
@@ -1428,7 +1428,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 6: Implementar o repositório Supabase**
+- [x] **Step 6: Implementar o repositório Supabase**
 
 Create `app/lib/data/supabase_repository.dart`:
 ```dart
@@ -1517,7 +1517,7 @@ class SupabaseRepository implements Repository {
 }
 ```
 
-- [ ] **Step 7: Rodar a integração contra o Supabase local**
+- [x] **Step 7: Rodar a integração contra o Supabase local**
 
 Run:
 ```bash
@@ -1527,12 +1527,12 @@ cd app && SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" flutter test --t
 ```
 Expected: `All tests passed!` (2 testes, nenhum skipped). Se o `status -o env` da sua versão do CLI não exportar `ANON_KEY`, copie a chave anon/publishable de `npx supabase status`.
 
-- [ ] **Step 8: Rodar a suíte rápida e o analyzer**
+- [x] **Step 8: Rodar a suíte rápida e o analyzer**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; `No issues found!`
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -1565,7 +1565,7 @@ git commit -m "feat: repositórios em memória e Supabase"
   - Teste: `Future<void> pumpApp(WidgetTester, Repository, {String location = '/', DateTime? now, Size size = const Size(1000, 800)})`. Sem `now`, usa `DateTime(2026, 9, 28, 10)` (segunda-feira).
   - Títulos de AppBar fixos, dos quais os testes dependem: Tarefas → `'Tarefas'`, Espaços → `'Espaços'`.
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `app/test/helpers.dart`:
 ```dart
@@ -1677,12 +1677,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/app test/ui`
 Expected: FAIL (arquivos `app/*.dart` e `ui/*.dart` não existem).
 
-- [ ] **Step 3: Providers, tema, componentes compartilhados**
+- [x] **Step 3: Providers, tema, componentes compartilhados**
 
 Create `app/lib/app/providers.dart`:
 ```dart
@@ -1874,7 +1874,7 @@ class EventTile extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 4: Versões iniciais das telas (as Tasks 6–8 substituem cada arquivo por inteiro)**
+- [x] **Step 4: Versões iniciais das telas (as Tasks 6–8 substituem cada arquivo por inteiro)**
 
 Create `app/lib/features/today/today_screen.dart`:
 ```dart
@@ -1956,7 +1956,7 @@ class NoteScreen extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 5: Login, shell, rotas, app e main**
+- [x] **Step 5: Login, shell, rotas, app e main**
 
 Create `app/lib/features/auth/login_screen.dart`:
 ```dart
@@ -2262,12 +2262,12 @@ Modify `app/android/app/src/main/AndroidManifest.xml`: add the permission line r
     <uses-permission android:name="android.permission.INTERNET"/>
 ```
 
-- [ ] **Step 6: Rodar e ver passar**
+- [x] **Step 6: Rodar e ver passar**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; `No issues found!`
 
-- [ ] **Step 7: Testar à mão no Linux contra o Supabase local**
+- [x] **Step 7: Testar à mão no Linux contra o Supabase local**
 
 Run:
 ```bash
@@ -2278,7 +2278,7 @@ cd app && flutter run -d linux --dart-define-from-file=env.json
 ```
 Expected: a tela de login aparece; com e-mail/senha certos, o app abre em "Hoje" com o menu lateral; a janela estreita (< 720 px) mostra a barra inferior.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -2298,7 +2298,7 @@ git commit -m "feat: shell do app com login, rotas e navegação responsiva"
 - Consumes: `repositoryProvider`, `spacesProvider`, `notesProvider`, `tasksProvider`, `clockProvider`; `asyncView`, `SectionHeader`, `EmptyHint`, `plural`, `showError`, `TaskTile` (Task 5); `newId`, `Space`, `SpaceKind`, `Note`; `resolveWikiLink`, `backlinksFor`, `wikiLinksToMarkdown`, `uniqueTitle` (Task 3); `pumpApp` (test helper).
 - Produces: `SpacesScreen` (AppBar `'Espaços'`, FAB key `new-space`), `SpaceDialog` (campo key `space-name`, botão `Criar`), `SpaceScreen(spaceId)` (botões key `new-note` e `delete-space`), `NoteScreen(noteId)` (keys `note-title`, `note-body`, `toggle-preview`, `save-error`; autosave com debounce de 800 ms).
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `app/test/features/spaces_test.dart`:
 ```dart
@@ -2434,12 +2434,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/features/spaces_test.dart test/features/notes_test.dart`
 Expected: FAIL (as telas iniciais não têm `new-space`, `note-body` etc.).
 
-- [ ] **Step 3: Implementar a lista de espaços**
+- [x] **Step 3: Implementar a lista de espaços**
 
 Replace all of `app/lib/features/spaces/spaces_screen.dart`:
 ```dart
@@ -2576,7 +2576,7 @@ class _SpaceDialogState extends State<SpaceDialog> {
 }
 ```
 
-- [ ] **Step 4: Implementar a tela do espaço**
+- [x] **Step 4: Implementar a tela do espaço**
 
 Replace all of `app/lib/features/spaces/space_screen.dart`:
 ```dart
@@ -2709,7 +2709,7 @@ class SpaceScreen extends ConsumerWidget {
 }
 ```
 
-- [ ] **Step 5: Implementar o editor de notas**
+- [x] **Step 5: Implementar o editor de notas**
 
 Replace all of `app/lib/features/notes/note_screen.dart`:
 ```dart
@@ -2896,12 +2896,12 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 }
 ```
 
-- [ ] **Step 6: Rodar e ver passar**
+- [x] **Step 6: Rodar e ver passar**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; `No issues found!`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -2921,7 +2921,7 @@ git commit -m "feat: espaços e notas Markdown com wikilinks e backlinks"
 - Consumes: `repositoryProvider`, `spacesProvider`, `tasksProvider`, `clockProvider`, `asyncView`, `SectionHeader`, `EmptyHint`, `showError`, `TaskTile` (Task 5); `groupTasks`, `TaskGroup` (Task 3); `TaskItem`, `newId` (Task 2).
 - Produces: `TasksScreen` (AppBar `'Tarefas'`; campo key `quick-add`; botão key `show-done`; chips de filtro por espaço).
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `app/test/features/tasks_test.dart`:
 ```dart
@@ -3003,12 +3003,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/features/tasks_test.dart`
 Expected: FAIL (`quick-add` não encontrado).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Replace all of `app/lib/features/tasks/tasks_screen.dart`:
 ```dart
@@ -3158,12 +3158,12 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
 }
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+- [x] **Step 4: Rodar e ver passar**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; `No issues found!`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -3184,7 +3184,7 @@ git commit -m "feat: tela de tarefas com adição rápida, grupos e filtro por e
 - Consumes: `repositoryProvider`, `spacesProvider`, `tasksProvider`, `eventsFromProvider`, `clockProvider`, `asyncView`, `SectionHeader`, `EmptyHint`, `showError`, `TaskTile`, `EventTile` (Task 5); `buildDayAgenda`, `eventsOnDay`, `startOfDay`, `startOfWeek`, `validateEventTimes` (Task 3); `CalendarEvent`, `Space`, `newId` (Task 2).
 - Produces: `TodayScreen` (título no formato `"EEEE, d 'de' MMMM"` pt_BR); `AgendaScreen` (keys `prev-week`, `next-week`, `new-event`; cabeçalho do dia no formato `"EEEE, dd/MM"`); `EventDialog({required DateTime initialDay, required List<Space> spaces})`, que devolve um `CalendarEvent` via `Navigator.pop` (campo key `event-title`, botão `Salvar`).
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `app/test/features/today_test.dart`:
 ```dart
@@ -3287,12 +3287,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd app && TZ=America/Sao_Paulo flutter test test/features/today_test.dart test/features/agenda_test.dart`
 Expected: FAIL (as telas iniciais só têm o AppBar).
 
-- [ ] **Step 3: Implementar a tela Hoje**
+- [x] **Step 3: Implementar a tela Hoje**
 
 Replace all of `app/lib/features/today/today_screen.dart`:
 ```dart
@@ -3343,7 +3343,7 @@ class TodayScreen extends ConsumerWidget {
 }
 ```
 
-- [ ] **Step 4: Implementar o diálogo de evento**
+- [x] **Step 4: Implementar o diálogo de evento**
 
 Create `app/lib/features/agenda/event_dialog.dart`:
 ```dart
@@ -3489,7 +3489,7 @@ class _EventDialogState extends State<EventDialog> {
 }
 ```
 
-- [ ] **Step 5: Implementar a Agenda semanal**
+- [x] **Step 5: Implementar a Agenda semanal**
 
 Replace all of `app/lib/features/agenda/agenda_screen.dart`:
 ```dart
@@ -3591,12 +3591,12 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 }
 ```
 
-- [ ] **Step 6: Rodar e ver passar**
+- [x] **Step 6: Rodar e ver passar**
 
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; `No issues found!`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /home/only/organizacional
@@ -3615,7 +3615,7 @@ git commit -m "feat: telas Hoje e Agenda semanal com criação de eventos"
 - Consumes: tudo que as tasks anteriores produziram.
 - Produces: `app/build/linux/x64/release/bundle/organizacional`, `app/build/app/outputs/flutter-apk/app-release.apk`, projeto Supabase na nuvem com a migration aplicada.
 
-- [ ] **Step 1: Suíte completa verde antes de empacotar**
+- [x] **Step 1: Suíte completa verde antes de empacotar**
 
 Run:
 ```bash
@@ -3624,7 +3624,7 @@ cd app && TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutte
 ```
 Expected: pgTAP `Tests=8` PASS; `All tests passed!`; `No issues found!`
 
-- [ ] **Step 2: Subir o banco na nuvem**
+- [x] **Step 2: Subir o banco na nuvem**
 
 Run (depois de criar um projeto grátis em https://supabase.com/dashboard):
 ```bash
@@ -3635,17 +3635,17 @@ npx supabase db push
 ```
 Expected: `Finished supabase db push.` No painel: **Authentication → Users → Add user** (seu e-mail/senha) e **Authentication → Sign In / Providers → desligar "Allow new users to sign up"**. Copie a URL e a chave anon/publishable de **Project Settings → API** para `app/env.json`.
 
-- [ ] **Step 3: Build Linux**
+- [x] **Step 3: Build Linux**
 
 Run: `cd app && flutter build linux --release --dart-define-from-file=env.json && ./build/linux/x64/release/bundle/organizacional`
 Expected: o app abre, você faz login e vê "Hoje".
 
-- [ ] **Step 4: Build Android**
+- [x] **Step 4: Build Android**
 
 Run: `flutter build apk --release --dart-define-from-file=env.json`
 Expected: `✓ Built build/app/outputs/flutter-apk/app-release.apk`. Instale no celular (`adb install build/app/outputs/flutter-apk/app-release.apk` ou copie o arquivo). O template do Flutter assina o release com a chave de debug, o que basta para instalar fora da loja. Crie uma nota no PC e confira que ela aparece no celular em poucos segundos (realtime).
 
-- [ ] **Step 5: Escrever o README**
+- [x] **Step 5: Escrever o README**
 
 Create `README.md`:
 ````markdown
@@ -3686,7 +3686,7 @@ flutter build apk --release --dart-define-from-file=env.json
 Veja `docs/superpowers/specs/2026-09-28-organizacional-design.md`: Claude via MCP, Google Agenda, GitHub, anexos (YouTube/PDF/docx).
 ````
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/only/organizacional

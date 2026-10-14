@@ -82,7 +82,7 @@ Contra o Supabase local: `npx supabase functions serve news-fetch --env-file sup
 
 Código em `bridge/`. Testes: `cd bridge && npx vitest run` (integração com `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` do Supabase local).
 
-> **Status: pendente para você.** Os arquivos de deploy (`bridge/Dockerfile`, `docker-compose.yml`, `Caddyfile`, `.env.example`) estão prontos e a imagem foi validada localmente, mas os passos abaixo exigem a sua VPS, DuckDNS, conta Amazon e o console de desenvolvedor da Alexa. Nada disso foi executado.
+> **Status:** a ponte está no ar na VPS (Echos, rotinas e dispositivos sincronizados) e o MCP também. Os passos abaixo ficam como guia de reinstalação. Ainda falta conferir o passo 5 (skill no console da Alexa) e o teste manual da Fase 3 (despertar tocando sozinho no horário).
 
 ### 1. Publicar a migration na nuvem (na sua máquina)
 ```bash
