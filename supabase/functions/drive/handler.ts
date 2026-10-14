@@ -22,6 +22,7 @@ import {
   contentDisposition,
   findBySha256,
   getDownloadMeta,
+  getFileMeta,
   getFolder,
   listChildren,
   listPaged,
@@ -355,6 +356,12 @@ export async function handle(req: Request, deps: DriveDeps): Promise<Response> {
         const sha = body.sha256;
         if (!validSha256(sha)) throw new BadRequest("Hash do arquivo inválido.");
         const file = await withToken((t) => findBySha256(t, sha, fetchFn));
+        return json({ file });
+      }
+
+      case "meta": {
+        const fid = id(body.id, "arquivo");
+        const file = await withToken((t) => getFileMeta(t, fid, fetchFn));
         return json({ file });
       }
 

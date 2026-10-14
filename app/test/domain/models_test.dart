@@ -17,6 +17,24 @@ void main() {
     expect(s.toMap()['kind'], 'materia');
   });
 
+  test('Space guarda a cor (hex) e copyWith troca cor e tipo', () {
+    const s = Space(id: 's1', name: 'Pasta', color: '#E5484D');
+    expect(Space.fromMap(s.toMap()), s);
+    expect(s.toMap()['color'], '#E5484D');
+    expect(Space.fromMap({'id': 's2', 'name': 'x', 'kind': 'geral'}).color, isNull);
+    final c = s.copyWith(color: '#3E63DD', kind: SpaceKind.materia);
+    expect(c.color, '#3E63DD');
+    expect(c.kind, SpaceKind.materia);
+    expect(s.copyWith(name: 'Outra').color, '#E5484D');
+  });
+
+  test('Note.withSpace troca ou zera o espaço', () {
+    const n = Note(id: 'n1', title: 'Caderno', spaceId: 's1', kind: NoteKind.notebook);
+    expect(n.withSpace(null).spaceId, isNull);
+    expect(n.withSpace(null).kind, NoteKind.notebook);
+    expect(n.withSpace('s2').spaceId, 's2');
+  });
+
   test('Note ida e volta pelo mapa', () {
     const n = Note(id: 'n1', title: 'Limites', body: '# Limites', spaceId: 's1');
     expect(Note.fromMap(n.toMap()), n);

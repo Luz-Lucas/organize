@@ -9,6 +9,8 @@ import '../../data/drive_repository.dart';
 import '../../data/file_picker_service.dart';
 import '../../data/repository.dart';
 import '../../domain/drive.dart';
+import '../../files/drive_file_opener.dart';
+import '../../files/files_platform.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
@@ -54,6 +56,12 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
 
   String? _uploadName;
   double? _uploadFraction;
+
+  // Abrir um arquivo pelo aparelho (confere o Drive, baixa se preciso): o nome e, ao baixar, o tamanho.
+  OpenCancel? _openCancel;
+  String? _openingName;
+  int? _downloadSize;
+  bool _downloading = false;
 
   DriveRepository get _repo => ref.read(driveRepositoryProvider);
   bool get _searching => _results != null;
@@ -166,16 +174,69 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     showError(context, e is RepositoryException ? e.message : fallback);
   }
 
+  /// Arquivos nativos do Google (Docs, Planilhas...) não têm o que baixar: só abrem no navegador.
+  bool _opensLocally(DriveItem item) =>
+      !item.isFolder && !item.mimeType.toLowerCase().startsWith('application/vnd.google-apps.') && ref.read(filesPlatformProvider).supported;
+
   Future<void> _open(DriveItem item) async {
     if (item.isFolder) {
       if (_searching) _clearSearch();
       return _enter(item);
     }
+    return _opensLocally(item) ? _openLocal(item) : _openInDrive(item);
+  }
+
+  Future<void> _openInDrive(DriveItem item) async {
     final link = item.webViewLink;
     final uri = link == null ? null : Uri.tryParse(link);
     if (uri == null) return showError(context, 'Este arquivo não tem link para abrir.');
     final opened = await ref.read(linkOpenerProvider)(uri);
     if (!opened && mounted) showError(context, 'Não consegui abrir o arquivo.');
+  }
+
+  Future<void> _openLocal(DriveItem item) async {
+    if (_openCancel != null) return;
+    final cancel = OpenCancel();
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    setState(() {
+      _openCancel = cancel;
+      _openingName = item.name;
+      _downloading = false;
+      _downloadSize = null;
+    });
+    final result = await ref.read(driveFileOpenerProvider).open(
+      item.id,
+      cancel: cancel,
+      onDownloading: (meta) {
+        if (!mounted || cancel.isCancelled) return;
+        setState(() {
+          _downloading = true;
+          _downloadSize = meta.size;
+        });
+      },
+    );
+    if (!mounted) return;
+    if (identical(_openCancel, cancel)) setState(() => _openCancel = null);
+    switch (result.outcome) {
+      case OpenOutcome.opened || OpenOutcome.cancelled:
+        break;
+      case OpenOutcome.openedStale || OpenOutcome.failed:
+        final text = result.message;
+        if (text != null) {
+          messenger
+            ?..clearSnackBars()
+            ..showSnackBar(SnackBar(content: Text(text)));
+        }
+      case OpenOutcome.needsBrowser:
+        await _openInDrive(item);
+      case OpenOutcome.notOpened:
+        messenger
+          ?..clearSnackBars()
+          ..showSnackBar(SnackBar(
+            content: const Text('Não encontrei um app para abrir este arquivo.'),
+            action: SnackBarAction(key: const Key('docs-open-in-drive'), label: 'Abrir no Drive', onPressed: () => _openInDrive(item)),
+          ));
+    }
   }
 
   Future<void> _newFolder() async {
@@ -256,13 +317,22 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   Future<void> _showActions(DriveItem item) async {
     final action = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (ctx) => SafeArea(
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           key: const Key('doc-actions'),
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis), dense: true),
+            if (_opensLocally(item))
+              ListTile(
+                key: const Key('doc-act-open-local'),
+                leading: const Icon(Icons.file_open_outlined),
+                title: const Text('Abrir'),
+                onTap: () => Navigator.pop(ctx, 'open-local'),
+              ),
             ListTile(
               key: const Key('doc-act-open'),
               leading: const Icon(Icons.open_in_new),
@@ -295,12 +365,15 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             ),
           ],
         ),
+        ),
       ),
     );
     if (!mounted || action == null) return;
     switch (action) {
       case 'open':
-        return _open(item);
+        return item.isFolder ? _open(item) : _openInDrive(item);
+      case 'open-local':
+        return _openLocal(item);
       case 'rename':
         return _rename(item);
       case 'move':
@@ -513,6 +586,40 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                 Text('Enviando $_uploadName…', style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
                 LinearProgressIndicator(key: const Key('docs-progress'), value: _uploadFraction),
+              ],
+            ),
+          ),
+        if (_openCancel != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _downloading
+                            ? 'Baixando $_openingName${_downloadSize == null ? '' : ' (${formatBytes(_downloadSize!)})'}…'
+                            : 'Abrindo $_openingName…',
+                        key: const Key('docs-download-text'),
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      const LinearProgressIndicator(key: Key('docs-download-progress')),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  key: const Key('docs-download-cancel'),
+                  onPressed: () => setState(() {
+                    _openCancel?.cancel();
+                    _openCancel = null;
+                  }),
+                  child: const Text('Cancelar'),
+                ),
               ],
             ),
           ),

@@ -182,6 +182,13 @@ class SupabaseDriveRepository implements DriveRepository {
   }
 
   @override
+  Future<DriveFileMeta> meta(String id) async {
+    final file = (await _call('meta', {'id': id}))['file'];
+    if (file is! Map || file['id'] is! String) throw const RepositoryException('Resposta inesperada do servidor.');
+    return DriveFileMeta.fromMap(Map<String, dynamic>.from(file));
+  }
+
+  @override
   Future<Uint8List> download(String id) => _guard(() => _download(id));
 
   @override

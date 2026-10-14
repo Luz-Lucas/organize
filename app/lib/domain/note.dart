@@ -58,6 +58,17 @@ class Note {
         kind: kind,
       );
 
+  /// Mesma nota em outro espaço (ou sem espaço, com `null`).
+  Note withSpace(String? spaceId) => Note(
+        id: id,
+        title: title,
+        body: body,
+        spaceId: spaceId,
+        parentId: parentId,
+        updatedAt: updatedAt,
+        kind: kind,
+      );
+
   @override
   bool operator ==(Object other) =>
       other is Note &&

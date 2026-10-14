@@ -198,14 +198,16 @@ Gmail:
 | App mostra "Reconecte o Gmail" | Token revogado, `GMAIL_TOKEN_KEY` trocada ou senha da conta alterada: conecte de novo. |
 | App mostra "Não foi possível atualizar o Gmail agora" | Erro temporário do Google (limite de taxa ou indisponibilidade); tenta de novo sozinho em 10 minutos. |
 
-## 8. Compartilhar do celular para o Organizacional (Samsung Notes e qualquer app)
+## 8. Compartilhar do celular para o Organizacional (qualquer app) e abrir arquivos do Drive
 
-Nada a configurar no Google. No Samsung Notes: abra a nota → **Compartilhar → Organizacional** (texto vira
-uma nota) ou **Salvar como PDF** e compartilhe o PDF (vai ao Drive em `Organizacional/Importados`, com uma
-nota contendo o link). Para enviar arquivos é preciso ter o Drive conectado. Não existe API do Samsung
-Notes: o app não interpreta o conteúdo dos arquivos `.sdocx`. Eles sobem ao Drive como binário opaco
-(`application/octet-stream`) pela sincronização da pasta do Samsung Notes (Ajustes → Samsung Notes) e, na
-nota-link, o botão **Editar no Samsung Notes** (só no Android, com o app instalado) baixa o arquivo pela ação
-`download` da função `drive` e o abre no Samsung Notes, que o importa como nota editável. A ação `download`
-recusa arquivos nativos do Google e maiores que 50 MB. Depois de mudar `drive`/`_shared/drive.ts`, publique a
-função de novo (`supabase functions deploy drive`).
+Nada a configurar no Google. Em qualquer app: **Compartilhar → Organizacional** (texto vira uma nota; PDF, imagens e
+documentos vão ao Drive em `Organizacional/Importados`, com uma nota contendo o link). Para enviar arquivos é
+preciso ter o Drive conectado.
+
+Em Documentos (e no botão **Abrir** das notas-link) os arquivos do Drive abrem pelo aparelho: o app confere os
+metadados atuais pela ação `meta` da função `drive` (data, tamanho e md5), guarda a cópia em uma pasta persistente
+do app (`files/drive_cache/` no Android) e a abre no app padrão do sistema para o tipo do arquivo. Se o arquivo não
+mudou, abre direto do aparelho (e sem internet abre a cópia guardada, avisando que pode estar desatualizada). O
+download usa a ação `download`, que recusa arquivos nativos do Google (esses abrem no navegador) e maiores que
+50 MB. Em Ajustes → Arquivos baixados dá para ver o espaço usado e limpar; acima de 1 GB os menos usados saem
+sozinhos. Depois de mudar `drive`/`_shared/drive.ts`, publique a função de novo (`supabase functions deploy drive`).

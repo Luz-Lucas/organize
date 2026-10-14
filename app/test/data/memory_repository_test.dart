@@ -21,6 +21,16 @@ void main() {
     await sub.cancel();
   });
 
+  test('excluir espaço nunca apaga cadernos: ficam sem espaço (como o gatilho do banco)', () async {
+    await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I'));
+    await repo.upsertNote(const Note(id: 'c1', title: 'Caderno', spaceId: 's1', kind: NoteKind.notebook));
+    await repo.upsertNote(const Note(id: 'n1', title: 'Limites', spaceId: 's1'));
+    await repo.deleteSpace('s1');
+    final notes = await repo.watchNotes().first;
+    expect(notes.map((n) => n.id), ['c1']);
+    expect(notes.single.spaceId, isNull);
+  });
+
   test('excluir espaço apaga notas e tarefas e mantém eventos sem espaço', () async {
     await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I'));
     await repo.upsertNote(const Note(id: 'n1', title: 'Limites', spaceId: 's1'));

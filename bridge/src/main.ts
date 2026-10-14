@@ -78,7 +78,7 @@ async function ensureGateway(): Promise<AlexaGateway | null> {
   try {
     gateway = await AlexaRemoteGateway.connect({
       cookieFile: cfg.cookieFile, amazonPage: cfg.amazonPage,
-      alexaServiceHost: cfg.alexaServiceHost, language: 'pt-BR',
+      alexaServiceHost: cfg.alexaServiceHost, language: 'pt-BR', log,
     });
     await store.setStatus('ok', null);
     await sync();

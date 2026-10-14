@@ -96,8 +96,8 @@ void main() {
     final share = _FakeShare(const SharedContent(text: 'Resumo da aula\nTópico 1\nTópico 2'));
     await _pump(tester, repo: repo, drive: MemoryDriveRepository(), share: share);
     expect(find.byKey(const Key('share-sheet')), findsOneWidget);
-    expect(find.byKey(const Key('share-help')), findsOneWidget);
-    expect(find.textContaining('Samsung Notes'), findsOneWidget);
+    expect(find.byKey(const Key('share-help')), findsNothing);
+    expect(find.textContaining('Samsung'), findsNothing);
     expect(find.textContaining('Resumo da aula'), findsWidgets);
     await _tap(tester, 'share-save');
     expect(find.byKey(const Key('share-sheet')), findsNothing);

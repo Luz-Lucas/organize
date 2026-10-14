@@ -7,7 +7,7 @@ const _mimeByExt = {
   'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'txt': 'text/plain',
   'md': 'text/markdown',
-  // Nota editável do Samsung Notes: binário opaco (o servidor recusa curingas e tipos nativos do Google).
+  // Binário opaco (o servidor recusa curingas e tipos nativos do Google).
   'sdocx': 'application/octet-stream',
   'png': 'image/png',
   'jpg': 'image/jpeg',

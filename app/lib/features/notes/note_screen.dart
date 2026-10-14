@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,14 +9,12 @@ import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/ids.dart';
 import '../../domain/note.dart';
-import '../../domain/space.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
+import '../../files/drive_file_opener.dart';
+import '../../files/files_platform.dart';
 import '../import/importer.dart' show driveFileIdFromLink, driveLinkFileName, driveLinkInBody;
-import '../samsung_notes/edit_in_samsung_notes.dart';
-import '../samsung_notes/folder_sync.dart' show samsungSpaceName;
-import '../samsung_notes/samsung_platform.dart';
 import 'markdown_bridge.dart';
 import 'rich_note_editor.dart';
 import '../../app/back_navigation.dart';
@@ -59,9 +56,11 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   // Nota recém-criada ("Sem título…" e vazia): foca o título com tudo selecionado.
   bool _focusTitle = false;
   // "Editar no Samsung Notes": baixando; erro do download; ou o aviso de que nenhum app abriu o arquivo.
-  bool _editing = false;
-  String? _editError;
-  bool _editNotOpened = false;
+  bool _opening = false;
+  String? _openError;
+  bool _openNotOpened = false;
+  String? _openStale;
+  OpenCancel? _openCancel;
 
   @override
   void initState() {
@@ -206,39 +205,40 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
-  /// Link do Drive quando a nota é uma nota-link criada pela sincronização do Samsung Notes.
-  String? _samsungDriveLink(Note note) {
-    final spaces = ref.watch(spacesProvider).value ?? const <Space>[];
-    final space = spaces.where((s) => s.id == note.spaceId).firstOrNull;
-    if (space == null || normalizeTitle(space.name) != normalizeTitle(samsungSpaceName)) return null;
-    return driveLinkInBody(note.body);
+  /// Abre o arquivo do link pelo aparelho (cache do Drive): o app padrão do sistema para o tipo do arquivo.
+  Future<void> _openDriveFile(String fileId, String link) async {
+    if (_opening) return;
+    final cancel = OpenCancel();
+    setState(() {
+      _opening = true;
+      _openCancel = cancel;
+      _openError = null;
+      _openNotOpened = false;
+      _openStale = null;
+    });
+    final result = await ref.read(driveFileOpenerProvider).open(fileId, cancel: cancel);
+    if (!mounted || !identical(_openCancel, cancel)) return; // cancelado: a tela já voltou ao normal
+    setState(() {
+      _opening = false;
+      _openCancel = null;
+      _openError = result.outcome == OpenOutcome.failed ? result.message : null;
+      _openNotOpened = result.outcome == OpenOutcome.notOpened;
+      _openStale = result.outcome == OpenOutcome.openedStale ? result.message : null;
+    });
+    if (result.outcome == OpenOutcome.needsBrowser) await ref.read(linkOpenerProvider)(Uri.parse(link));
   }
 
-  bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  void _cancelOpen() => setState(() {
+        _openCancel?.cancel();
+        _openCancel = null;
+        _opening = false;
+      });
 
-  /// Baixa o `.sdocx` do Drive e o entrega ao Samsung Notes (que o importa como nota editável).
-  Future<void> _editInSamsungNotes(String fileId, String fileName) async {
-    if (_editing) return;
-    setState(() {
-      _editing = true;
-      _editError = null;
-      _editNotOpened = false;
-    });
-    final result = await ref.read(samsungEditorProvider).edit(fileId: fileId, fileName: fileName);
-    if (!mounted) return;
-    setState(() {
-      _editing = false;
-      _editError = result.outcome == EditOutcome.failed ? result.message : null;
-      _editNotOpened = result.outcome == EditOutcome.notOpened;
-    });
-  }
-
-  Widget _samsungActions(String link, String body) {
-    final installed = ref.watch(samsungNotesInstalledProvider).value ?? false;
+  /// Botões das notas-link (nota com a linha "Arquivo no Google Drive: [nome](link)").
+  Widget _driveLinkActions(String link, String body) {
     final fileName = driveLinkFileName(body);
     final fileId = driveFileIdFromLink(link);
-    final canEdit =
-        installed && _isAndroid && fileId != null && fileName != null && fileName.toLowerCase().endsWith('.sdocx');
+    final canOpenFile = ref.watch(filesPlatformProvider).supported && fileId != null && fileName != null;
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -250,40 +250,40 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             runSpacing: 8,
             children: [
               OutlinedButton.icon(
-                key: const Key('samsung-open-drive'),
+                key: const Key('open-drive-link'),
                 icon: const Icon(Icons.open_in_new, size: 18),
                 label: const Text('Abrir no Drive'),
                 onPressed: () => ref.read(linkOpenerProvider)(Uri.parse(link)),
               ),
-              if (installed)
+              if (canOpenFile)
                 OutlinedButton.icon(
-                  key: const Key('samsung-open-app'),
-                  icon: const Icon(Icons.edit_note, size: 18),
-                  label: const Text('Abrir Samsung Notes'),
-                  onPressed: () => ref.read(samsungNotesPlatformProvider).open(),
-                ),
-              if (canEdit)
-                OutlinedButton.icon(
-                  key: const Key('edit-in-samsung-notes'),
-                  icon: _editing
+                  key: const Key('open-drive-file'),
+                  icon: _opening
                       ? const SizedBox(
-                          key: Key('edit-in-samsung-progress'),
+                          key: Key('open-drive-progress'),
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.edit, size: 18),
-                  label: Text(_editing ? 'Baixando…' : 'Editar no Samsung Notes'),
-                  onPressed: _editing ? null : () => _editInSamsungNotes(fileId, fileName),
+                      : const Icon(Icons.file_open_outlined, size: 18),
+                  label: Text(_opening ? 'Baixando…' : 'Abrir'),
+                  onPressed: _opening ? null : () => _openDriveFile(fileId, link),
                 ),
+              if (_opening)
+                TextButton(key: const Key('drive-open-cancel'), onPressed: _cancelOpen, child: const Text('Cancelar')),
             ],
           ),
-          if (_editError != null)
+          if (_openError != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(_editError!, key: const Key('edit-in-samsung-error'), style: TextStyle(color: theme.colorScheme.error)),
+              child: Text(_openError!, key: const Key('open-drive-error'), style: TextStyle(color: theme.colorScheme.error)),
             ),
-          if (_editNotOpened)
+          if (_openStale != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_openStale!, key: const Key('open-drive-stale'), style: theme.textTheme.bodySmall),
+            ),
+          if (_openNotOpened)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Wrap(
@@ -292,11 +292,11 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
                 children: [
                   Text(
                     'Não encontrei um app para abrir este arquivo.',
-                    key: const Key('edit-in-samsung-notice'),
+                    key: const Key('open-drive-notice'),
                     style: theme.textTheme.bodySmall,
                   ),
                   TextButton(
-                    key: const Key('edit-in-samsung-open-drive'),
+                    key: const Key('open-drive-notice-link'),
                     onPressed: () => ref.read(linkOpenerProvider)(Uri.parse(link)),
                     child: const Text('Abrir no Drive'),
                   ),
@@ -310,7 +310,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   Widget _buildBody(
       BuildContext context, ThemeData theme, List<Note> all, List<Note> backlinks) {
-    final samsungLink = _note == null ? null : _samsungDriveLink(_note!);
+    final driveLink = _note == null ? null : driveLinkInBody(_note!.body);
     final header = <Widget>[
       TextField(
         key: const Key('note-title'),
@@ -321,7 +321,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         style: theme.textTheme.headlineMedium,
         decoration: const InputDecoration.collapsed(hintText: 'Título'),
       ),
-      if (samsungLink != null) _samsungActions(samsungLink, _note!.body),
+      if (driveLink != null) _driveLinkActions(driveLink, _note!.body),
       if (_saveError != null)
         Padding(
           padding: const EdgeInsets.only(top: 8),

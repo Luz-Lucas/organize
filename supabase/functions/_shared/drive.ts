@@ -332,6 +332,41 @@ export async function getDownloadMeta(accessToken: string, id: string, fetchFn: 
   return { name: item.name, mimeType: item.mimeType, size: item.size };
 }
 
+export interface FileMeta {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number | null;
+  modifiedTime: string | null;
+  /** Só arquivos binários têm md5 (Docs/Sheets nativos não). */
+  md5Checksum: string | null;
+  webViewLink: string | null;
+}
+
+/**
+ * Metadados que o app compara com o cache local para decidir se baixa de novo.
+ * Arquivo na lixeira conta como inexistente (404), igual ao Drive para quem não o vê mais.
+ */
+export async function getFileMeta(accessToken: string, id: string, fetchFn: FetchFn): Promise<FileMeta> {
+  const j = await driveRequest(
+    fetchFn,
+    `${DRIVE_API}/files/${encodeURIComponent(id)}?fields=id,name,mimeType,size,modifiedTime,md5Checksum,webViewLink,trashed`,
+    { headers: authz(accessToken) },
+  );
+  if (!j || typeof j.id !== "string") throw new GoogleError("other");
+  if (j.trashed === true) throw new GoogleError("other", 404);
+  const item = toItem(j);
+  return {
+    id: item.id,
+    name: item.name,
+    mimeType: item.mimeType,
+    size: item.size,
+    modifiedTime: item.modifiedTime,
+    md5Checksum: typeof j.md5Checksum === "string" && /^[0-9a-f]{32}$/i.test(j.md5Checksum) ? j.md5Checksum.toLowerCase() : null,
+    webViewLink: item.webViewLink,
+  };
+}
+
 /**
  * Abre `files/{id}?alt=media` e devolve a resposta (corpo ainda não lido) para repassar em streaming.
  * O prazo de [HTTP_TIMEOUT_MS] vale só até os cabeçalhos chegarem; depois o corpo flui sem corte.

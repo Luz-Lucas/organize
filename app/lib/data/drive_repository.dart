@@ -44,6 +44,9 @@ abstract interface class DriveRepository {
   Future<List<DrivePermission>> permissions(String id);
   Future<void> unshare(String id, String permissionId);
 
+  /// Metadados atuais de um arquivo (data, tamanho e md5), para saber se a cópia do aparelho ainda vale.
+  Future<DriveFileMeta> meta(String id);
+
   /// Baixa o conteúdo de um arquivo (até 50 MB; arquivos nativos do Google, como Docs, não). Lança
   /// [DriveException] com a mensagem do servidor quando o Drive recusa.
   Future<Uint8List> download(String id);

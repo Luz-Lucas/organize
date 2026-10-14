@@ -9,7 +9,7 @@ import '../domain/wikilinks.dart';
 import 'repository.dart';
 
 /// Implementação em memória usada nos testes. Reproduz as regras do banco
-/// (título único, cascade ao excluir espaço).
+/// (título único, cascade ao excluir espaço — menos nos cadernos).
 class MemoryRepository implements Repository {
   final _spaces = <String, Space>{};
   final _notes = <String, Note>{};
@@ -53,6 +53,10 @@ class MemoryRepository implements Repository {
   @override
   Future<void> deleteSpace(String id) => _write(() {
         _spaces.remove(id);
+        // Cadernos sobrevivem (gatilho `spaces_keep_notebooks` do banco): ficam sem espaço.
+        for (final n in _notes.values.where((n) => n.spaceId == id && n.isNotebook).toList()) {
+          _notes[n.id] = n.withSpace(null);
+        }
         _notes.removeWhere((_, n) => n.spaceId == id);
         _tasks.removeWhere((_, t) => t.spaceId == id);
         for (final e in _events.values.where((e) => e.spaceId == id).toList()) {

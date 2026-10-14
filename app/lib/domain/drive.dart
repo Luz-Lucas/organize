@@ -96,6 +96,52 @@ class DriveItem {
       );
 }
 
+/// Metadados atuais de um arquivo: o que o app compara com a cópia guardada no aparelho.
+class DriveFileMeta {
+  const DriveFileMeta({
+    required this.id,
+    required this.name,
+    this.mimeType = '',
+    this.size,
+    this.modifiedTime,
+    this.md5,
+    this.webViewLink,
+  });
+
+  final String id;
+  final String name;
+  final String mimeType;
+  final int? size;
+  final DateTime? modifiedTime;
+
+  /// Só arquivos binários têm; Docs/Sheets nativos do Google não.
+  final String? md5;
+  final String? webViewLink;
+
+  /// Docs, Planilhas, Apresentações...: não há arquivo para baixar, só abrir no navegador.
+  bool get isGoogleNative => mimeType.toLowerCase().startsWith('application/vnd.google-apps.');
+
+  factory DriveFileMeta.fromMap(Map<String, dynamic> m) => DriveFileMeta(
+        id: m['id'] as String,
+        name: (m['name'] as String?) ?? '',
+        mimeType: (m['mimeType'] as String?) ?? '',
+        size: (m['size'] as num?)?.toInt(),
+        modifiedTime: parseDate(m['modifiedTime']),
+        md5: (m['md5Checksum'] as String?)?.toLowerCase(),
+        webViewLink: m['webViewLink'] as String?,
+      );
+
+  /// O conteúdo é o mesmo? Com md5 dos dois lados, ele decide; sem md5 (um lado só), vale data + tamanho
+  /// iguais. Sem informação suficiente, não dá para afirmar: false (baixa de novo).
+  bool sameContentAs(DriveFileMeta other) {
+    if (md5 != null && other.md5 != null) return md5 == other.md5;
+    final a = modifiedTime;
+    final b = other.modifiedTime;
+    if (a == null || b == null || size == null || other.size == null) return false;
+    return a.isAtSameMomentAs(b) && size == other.size;
+  }
+}
+
 class DriveFolder {
   const DriveFolder({required this.id, required this.name, this.parents = const []});
 

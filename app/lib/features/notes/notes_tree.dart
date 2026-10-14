@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,28 +10,13 @@ import '../../domain/space.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
 import '../../notebook/create_notebook.dart';
-import '../../notebook/data/notebook_image_purger.dart';
 import '../../notebook/notebook_thumbnail.dart';
 import '../../notebook/state/notebook_providers.dart';
 import '../../ui/org_theme.dart';
 import '../import/import_flow.dart';
-import '../samsung_notes/samsung_platform.dart';
 import '../spaces/spaces_screen.dart' show iconForKind;
-
-const _accents = {
-  'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a',
-  'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
-  'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
-  'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
-  'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
-  'ç': 'c', 'ñ': 'n',
-};
-
-/// Minúsculas, sem acento, espaços normalizados (para a busca da árvore).
-String _fold(String s) => normalizeTitle(s).replaceAllMapped(
-      RegExp('[${_accents.keys.join()}]'),
-      (m) => _accents[m.group(0)]!,
-    );
+import 'notebooks/notebook_actions.dart';
+import 'search_fold.dart';
 
 /// Árvore de notas: campo de busca, espaços expansíveis com suas notas,
 /// grupo "Sem espaço" e botão de nova nota.
@@ -97,91 +80,20 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
     }
   }
 
-  Future<void> _notebookMenu(Note note) async {
-    final action = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(note.title, overflow: TextOverflow.ellipsis),
-        children: [
-          SimpleDialogOption(
-            key: const Key('notebook-menu-rename'),
-            onPressed: () => Navigator.of(ctx).pop('rename'),
-            child: const Text('Renomear'),
-          ),
-          SimpleDialogOption(
-            key: const Key('notebook-menu-delete'),
-            onPressed: () => Navigator.of(ctx).pop('delete'),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    if (action == 'rename') await _renameNotebook(note);
-    if (action == 'delete') await _deleteNotebook(note);
-  }
-
-  Future<void> _renameNotebook(Note note) async {
-    final title = await showDialog<String>(
-      context: context,
-      builder: (_) => _RenameNotebookDialog(initial: note.title),
-    );
-    if (title == null || title.isEmpty || title == note.title || !mounted) return;
-    try {
-      await ref.read(repositoryProvider).upsertNote(note.copyWith(title: title));
-    } on RepositoryException catch (e) {
-      if (mounted) {
-        showError(context, e.duplicate ? 'Já existe uma nota com esse título.' : 'Não foi possível renomear o caderno.');
-      }
-    }
-  }
-
-  Future<void> _deleteNotebook(Note note) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Excluir “${note.title}”?'),
-        content: const Text('As páginas e imagens do caderno serão apagadas. Essa ação não pode ser desfeita.'),
-        actions: [
-          TextButton(
-            key: const Key('notebook-delete-cancel'),
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            key: const Key('notebook-delete-confirm'),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final images = ref.read(notebookImageStoreFactoryProvider)(note.id);
-    try {
-      await ref.read(repositoryProvider).deleteNote(note.id);
-    } on RepositoryException {
-      if (mounted) showError(context, 'Não foi possível excluir o caderno.');
-      return;
-    }
-    // O banco apagou as páginas em cascata; as imagens só saem pela API do Storage.
-    if (images is NotebookImagePurger) {
-      unawaited((images as NotebookImagePurger).purgeAll().catchError((Object _) {}));
-    }
-  }
+  Future<void> _notebookMenu(Note note) => showNotebookMenu(context, ref, note);
 
   @override
   Widget build(BuildContext context) {
     final spaces = ref.watch(spacesProvider).value ?? const <Space>[];
     final notes = ref.watch(notesProvider).value ?? const <Note>[];
-    final q = _fold(_query);
+    final q = foldSearch(_query);
     final searching = q.isNotEmpty;
     // Busca no título e no corpo; quem casa pelo título vem primeiro.
-    bool titleHit(Note n) => _fold(n.title).contains(q);
+    bool titleHit(Note n) => foldSearch(n.title).contains(q);
     // Cadernos: também o texto reconhecido da escrita (só buscado quando há busca).
     final recognized = searching ? (ref.watch(notebookRecognizedTextProvider).value ?? const <String, String>{}) : const <String, String>{};
     bool bodyHit(Note n) =>
-        _fold(n.body).contains(q) || (n.isNotebook && _fold(recognized[n.id] ?? '').contains(q));
+        foldSearch(n.body).contains(q) || (n.isNotebook && foldSearch(recognized[n.id] ?? '').contains(q));
     final visible = [
       for (final n in notes)
         if (!searching || titleHit(n) || bodyHit(n)) n,
@@ -190,10 +102,9 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
           final byHit = (titleHit(a) ? 0 : 1).compareTo(titleHit(b) ? 0 : 1);
           if (byHit != 0) return byHit;
         }
-        return _fold(a.title).compareTo(_fold(b.title));
+        return foldSearch(a.title).compareTo(foldSearch(b.title));
       });
     final mobile = MediaQuery.sizeOf(context).width < 720;
-    final samsungInstalled = ref.watch(samsungNotesInstalledProvider).value ?? false;
 
     final spaceIds = {for (final s in spaces) s.id};
     List<Note> inSpace(String id) => [for (final n in visible) if (n.spaceId == id) n];
@@ -248,12 +159,9 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                 padding: EdgeInsets.zero,
                 onSelected: (v) {
                   if (v == 'import') runBatchImport(context, ref);
-                  if (v == 'samsung') ref.read(samsungNotesPlatformProvider).open();
                 },
                 itemBuilder: (_) => [
                   const PopupMenuItem(key: Key('notes-import'), value: 'import', child: Text('Importar arquivos')),
-                  if (samsungInstalled)
-                    const PopupMenuItem(key: Key('open-samsung-notes'), value: 'samsung', child: Text('Abrir Samsung Notes')),
                 ],
               ),
             ],
@@ -297,39 +205,6 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
       ],
     );
   }
-}
-
-class _RenameNotebookDialog extends StatefulWidget {
-  const _RenameNotebookDialog({required this.initial});
-
-  final String initial;
-
-  @override
-  State<_RenameNotebookDialog> createState() => _RenameNotebookDialogState();
-}
-
-class _RenameNotebookDialogState extends State<_RenameNotebookDialog> {
-  late final _controller = TextEditingController(text: widget.initial);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Renomear caderno'),
-        content: TextField(key: const Key('notebook-rename-field'), controller: _controller, autofocus: true),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-          FilledButton(
-            key: const Key('notebook-rename-ok'),
-            onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
-            child: const Text('Salvar'),
-          ),
-        ],
-      );
 }
 
 class _SpaceTile extends StatelessWidget {

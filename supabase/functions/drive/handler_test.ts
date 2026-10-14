@@ -731,6 +731,60 @@ Deno.test("upload_session aceita application/octet-stream (usado pelo .sdocx do 
   assertEquals(JSON.parse(api(s.f.calls, UPLOAD)[0].body).mimeType, "application/octet-stream");
 });
 
+// ---------------------------------------------------------------- meta
+
+Deno.test("meta devolve modifiedTime, size e md5 do arquivo (e pede só esses campos ao Drive)", async () => {
+  const s = await setup([[`${DRIVE}/files/f1?`, () =>
+    jsonRes({
+      id: "f1", name: "Edital.pdf", mimeType: "application/pdf", size: "2048",
+      modifiedTime: "2026-10-12T09:00:00.000Z", md5Checksum: "d41d8cd98f00b204e9800998ecf8427e",
+      webViewLink: "https://drive.google.com/file/d/f1/view", trashed: false,
+    })]]);
+  const r = await s.run("meta", { id: "f1" });
+  assertEquals(r.status, 200);
+  assertEquals((await r.json()).file, {
+    id: "f1", name: "Edital.pdf", mimeType: "application/pdf", size: 2048,
+    modifiedTime: "2026-10-12T09:00:00.000Z", md5Checksum: "d41d8cd98f00b204e9800998ecf8427e",
+    webViewLink: "https://drive.google.com/file/d/f1/view",
+  });
+  const fields = new URL(api(s.f.calls, `${DRIVE}/files/f1?`)[0].url).searchParams.get("fields")!;
+  assertStringIncludes(fields, "md5Checksum");
+  assertStringIncludes(fields, "modifiedTime");
+  assertEquals(api(s.f.calls, `${DRIVE}/files/f1?`)[0].headers.get("authorization"), "Bearer ACC1-R-u1");
+});
+
+Deno.test("meta de arquivo nativo do Google (sem md5 nem size) devolve null nesses campos", async () => {
+  const s = await setup([[`${DRIVE}/files/f1?`, () => jsonRes({ id: "f1", name: "Doc", mimeType: "application/vnd.google-apps.document", modifiedTime: "2026-10-12T09:00:00Z" })]]);
+  const r = await s.run("meta", { id: "f1" });
+  assertEquals(r.status, 200);
+  const f = (await r.json()).file;
+  assertEquals(f.md5Checksum, null);
+  assertEquals(f.size, null);
+  assertEquals(f.webViewLink, null);
+});
+
+Deno.test("meta recusa id inválido sem chamar o Drive e mapeia 404 para not_found", async () => {
+  const s = await setup([]);
+  for (const bad of ["a/b", "x' or '1'='1", "", 5, undefined, "../x"]) {
+    const r = await s.run("meta", { id: bad });
+    assertEquals(r.status, 400, String(bad));
+    await r.body?.cancel();
+  }
+  assertEquals(s.f.calls.length, 0);
+
+  const nf = await setup([[`${DRIVE}/files/f1?`, () => jsonRes({ error: { message: "SEGREDO" } }, 404)]]);
+  const r = await nf.run("meta", { id: "f1" });
+  assertEquals(r.status, 404);
+  assertEquals((await r.json()).code, "not_found");
+});
+
+Deno.test("meta de arquivo na lixeira => not_found", async () => {
+  const s = await setup([[`${DRIVE}/files/f1?`, () => jsonRes({ id: "f1", name: "x.pdf", mimeType: "application/pdf", size: "1", trashed: true })]]);
+  const r = await s.run("meta", { id: "f1" });
+  assertEquals(r.status, 404);
+  assertEquals((await r.json()).code, "not_found");
+});
+
 // ---------------------------------------------------------------- download
 
 const META = (over: Record<string, unknown> = {}) => ({ id: "f1", name: "Aula.sdocx", mimeType: "application/octet-stream", size: "5", ...over });

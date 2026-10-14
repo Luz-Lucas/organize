@@ -3,17 +3,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
-    <!-- Samsung Notes: achar e ler a pasta onde ele salva os arquivos (app pessoal, fora da Play Store).
-         Android 11+ usa "Acesso a todos os arquivos"; até o 12L basta a leitura comum. -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <application
-        android:label="organizacional"
+        android:label="Organize"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
-            android:label="Organizacional"
+            android:label="Organize"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
@@ -29,7 +25,7 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-            <!-- Compartilhar com o Organizacional (Samsung Notes e qualquer app): texto vira nota,
+            <!-- Compartilhar com o Organizacional (qualquer app): texto vira nota,
                  arquivos vão para o Drive. Tratado por ShareChannel.kt. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
@@ -172,11 +168,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <!-- "Editar no Samsung Notes": entrega o .sdocx baixado (só cache/samsung_open/) ao outro app por URI com
+        <!-- Abrir arquivo do Drive: entrega o arquivo baixado (só files/drive_cache/) ao app que o abre, por URI com
              permissão temporária. Não exportado; o ShareGuard recusa essa autoridade vinda de fora. -->
         <provider
-            android:name=".SamsungFileProvider"
-            android:authorities="${applicationId}.samsung_files"
+            android:name=".DriveFileProvider"
+            android:authorities="${applicationId}.drive_files"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
@@ -239,8 +235,6 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
-        <!-- Android 11+: sem isso o app do Samsung Notes fica invisível (isInstalled/abrir). -->
-        <package android:name="com.samsung.android.app.notes"/>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

@@ -34,6 +34,6 @@ void main() {
   });
 
   test('a MainActivity tem o rótulo que aparece na folha de compartilhar', () {
-    expect(mainActivity, contains('android:label="Organizacional"'));
+    expect(mainActivity, contains('android:label="Organize"'));
   });
 }

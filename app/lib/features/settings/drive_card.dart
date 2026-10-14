@@ -8,11 +8,6 @@ import '../../domain/drive.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 
-/// Texto de ajuda para quem usa o Samsung Notes (não há API; o caminho é compartilhar).
-const samsungNotesHelp =
-    'No Samsung Notes: abra a nota → Compartilhar → Organizacional (texto) ou salve como Arquivo do Samsung Notes (.sdocx) '
-    'para editar em outro aparelho (PDF, para só visualizar) e compartilhe.';
-
 /// Ajustes > "Google Drive": conectar e desconectar (Documentos e arquivos importados).
 class DriveCard extends ConsumerStatefulWidget {
   const DriveCard({super.key});
@@ -96,8 +91,6 @@ class _DriveCardState extends ConsumerState<DriveCard> {
             '(em "Organizacional/Importados"). O app pode ver e organizar o seu Drive inteiro; o acesso fica só no servidor.',
             style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
           ),
-          const SizedBox(height: 8),
-          Text(samsungNotesHelp, key: const Key('drive-samsung-help'), style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted)),
           const SizedBox(height: 12),
           Text(summary, key: const Key('drive-status'), style: theme.textTheme.bodyMedium),
           if (state?.accountEmail != null) Text(state!.accountEmail!, style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted)),

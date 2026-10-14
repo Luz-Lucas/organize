@@ -85,4 +85,45 @@ void main() {
     expect((await f.openRead().toList()).expand((e) => e).toList(), [104, 105]);
     expect(f.mimeType, 'text/plain');
   });
+
+  group('DriveFileMeta', () {
+    test('fromMap lê data, tamanho e md5', () {
+      final m = DriveFileMeta.fromMap({
+        'id': 'f1',
+        'name': 'Edital.pdf',
+        'mimeType': 'application/pdf',
+        'size': 2048,
+        'modifiedTime': '2026-10-12T09:00:00.000Z',
+        'md5Checksum': 'D41D8CD98F00B204E9800998ECF8427E',
+        'webViewLink': 'https://drive.google.com/file/d/f1/view',
+      });
+      expect(m.id, 'f1');
+      expect(m.size, 2048);
+      expect(m.md5, 'd41d8cd98f00b204e9800998ecf8427e');
+      expect(m.modifiedTime!.toUtc(), DateTime.utc(2026, 10, 12, 9));
+      expect(m.isGoogleNative, isFalse);
+    });
+
+    test('arquivo nativo do Google não tem md5 nem tamanho e não baixa', () {
+      final m = DriveFileMeta.fromMap({'id': 'd', 'name': 'Doc', 'mimeType': 'application/vnd.google-apps.document'});
+      expect(m.md5, isNull);
+      expect(m.size, isNull);
+      expect(m.isGoogleNative, isTrue);
+    });
+
+    test('sameContentAs: md5 vale quando os dois têm; senão data e tamanho', () {
+      DriveFileMeta m({String? md5, int? size = 10, DateTime? at}) =>
+          DriveFileMeta(id: 'f', name: 'a', mimeType: 'x/y', size: size, modifiedTime: at, md5: md5);
+      final t = DateTime.utc(2026, 10, 12);
+      expect(m(md5: 'aa').sameContentAs(m(md5: 'aa', at: DateTime.utc(2030))), isTrue);
+      expect(m(md5: 'aa').sameContentAs(m(md5: 'bb')), isFalse);
+      expect(m(at: t).sameContentAs(m(at: t)), isTrue);
+      expect(m(at: t).sameContentAs(m(at: t.add(const Duration(seconds: 1)))), isFalse);
+      expect(m(at: t, size: 10).sameContentAs(m(at: t, size: 11)), isFalse);
+      // md5 de um lado só: cai para data + tamanho
+      expect(m(md5: 'aa', at: t).sameContentAs(m(at: t)), isTrue);
+      // sem nenhuma informação não dá para afirmar que é igual
+      expect(m(size: null).sameContentAs(m(size: null)), isFalse);
+    });
+  });
 }

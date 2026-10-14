@@ -305,4 +305,29 @@ void main() {
       expect(() => driveBytesFrom(bad), throwsA(isA<RepositoryException>()), reason: '$bad');
     }
   });
+
+  test('meta manda {action:meta,id} e converte o resultado', () async {
+    final calls = <_Call>[];
+    final repo = _repo(calls, (_) => {
+          'file': {
+            'id': 'f1',
+            'name': 'Edital.pdf',
+            'mimeType': 'application/pdf',
+            'size': 2048,
+            'modifiedTime': '2026-10-12T09:00:00.000Z',
+            'md5Checksum': 'd41d8cd98f00b204e9800998ecf8427e',
+            'webViewLink': 'https://drive.google.com/file/d/f1/view',
+          },
+        });
+    final m = await repo.meta('f1');
+    expect(calls.single.function, 'drive');
+    expect(calls.single.body, {'action': 'meta', 'id': 'f1'});
+    expect(m.md5, 'd41d8cd98f00b204e9800998ecf8427e');
+    expect(m.size, 2048);
+  });
+
+  test('meta com resposta sem arquivo é erro claro', () async {
+    final repo = _repo(<_Call>[], (_) => <String, dynamic>{});
+    await expectLater(repo.meta('f1'), throwsA(isA<RepositoryException>()));
+  });
 }

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../app_icon/app_icon.dart';
-import '../features/samsung_notes/samsung_sync_controller.dart';
 import '../location/location_report_sync.dart';
 import '../notebook/state/notebook_providers.dart';
 import '../ui/org_theme.dart';
@@ -23,7 +22,6 @@ class OrganizacionalApp extends ConsumerWidget {
     ref.watch(widgetSyncProvider);
     ref.watch(appIconSyncProvider);
     ref.watch(locationReportSyncProvider);
-    ref.watch(samsungForegroundSyncProvider);
     ref.watch(notebookStartupSyncProvider);
     final id = ref.watch(settingsProvider).value?.theme ?? 'violeta';
     final theme = buildOrgTheme(
@@ -31,7 +29,7 @@ class OrganizacionalApp extends ConsumerWidget {
       googleFonts: ref.watch(googleFontsEnabledProvider),
     );
     return MaterialApp.router(
-      title: 'Organizacional',
+      title: 'Organize',
       debugShowCheckedModeBanner: false,
       theme: theme,
       darkTheme: theme,

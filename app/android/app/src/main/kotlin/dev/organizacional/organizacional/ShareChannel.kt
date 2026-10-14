@@ -15,7 +15,7 @@ import java.io.File
 import java.util.UUID
 
 /**
- * Canal `dev.organizacional/share`: recebe ACTION_SEND / ACTION_SEND_MULTIPLE (Samsung Notes e qualquer app).
+ * Canal `dev.organizacional/share`: recebe ACTION_SEND / ACTION_SEND_MULTIPLE (qualquer app).
  *
  * Os arquivos chegam como `content://` temporários; aqui são copiados para `cacheDir/shared/<id>/<nome>`
  * (fora da thread principal) e o Dart recebe só caminhos locais. Depois do envio ao Drive o Dart não precisa

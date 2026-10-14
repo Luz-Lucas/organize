@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
+
 import '../domain/drive.dart';
 import '../domain/ids.dart';
 import 'drive_repository.dart';
@@ -20,6 +22,7 @@ class _Node {
   _Node(this.item, this.parentId);
 
   DriveItem item;
+  DateTime modified = DateTime.utc(2026, 10, 1);
   String? parentId;
   bool trashed = false;
   Map<String, String>? appProperties;
@@ -49,6 +52,9 @@ class MemoryDriveRepository implements DriveRepository {
   String? lastConnectEmail;
   Uri connectUri = Uri.parse('https://accounts.google.com/o/oauth2/v2/auth?drive=1');
   final uploads = <UploadCall>[];
+
+  /// Ids pedidos a `meta`, na ordem.
+  final metaCalls = <String>[];
 
   /// Ids pedidos a `download`, na ordem.
   final downloads = <String>[];
@@ -80,6 +86,22 @@ class MemoryDriveRepository implements DriveRepository {
     _nodes[item.id] = _Node(item, parentId);
     if (bytes != null) _nodes[item.id]!.bytes = Uint8List.fromList(bytes);
     return item;
+  }
+
+  /// Troca o conteúdo de um arquivo, como se ele tivesse sido editado no Drive (muda tamanho, data e md5).
+  void setContent(String id, List<int> bytes) {
+    final n = _node(id);
+    n.bytes = Uint8List.fromList(bytes);
+    n.modified = n.modified.add(const Duration(minutes: 5));
+    n.item = DriveItem(
+      id: n.item.id,
+      name: n.item.name,
+      mimeType: n.item.mimeType,
+      size: bytes.length,
+      modifiedTime: n.modified,
+      webViewLink: n.item.webViewLink,
+      shared: n.item.shared,
+    );
   }
 
   @override
@@ -191,6 +213,24 @@ class MemoryDriveRepository implements DriveRepository {
       if (!n.trashed && n.appProperties?['sha256'] == sha256) return n.item;
     }
     return null;
+  }
+
+  @override
+  Future<DriveFileMeta> meta(String id) async {
+    _check();
+    final n = _node(id);
+    if (n.trashed) throw const DriveException('Item não encontrado no Google Drive.', code: 'not_found');
+    metaCalls.add(id);
+    final native = n.item.mimeType.startsWith('application/vnd.google-apps.');
+    return DriveFileMeta(
+      id: n.item.id,
+      name: n.item.name,
+      mimeType: n.item.mimeType,
+      size: native ? null : n.bytes.length,
+      modifiedTime: n.modified,
+      md5: native || n.bytes.isEmpty ? null : crypto.md5.convert(n.bytes).toString(),
+      webViewLink: n.item.webViewLink,
+    );
   }
 
   @override

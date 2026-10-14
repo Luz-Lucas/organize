@@ -169,6 +169,11 @@ export async function weatherSpeech(
   }
 }
 
+/** Apaga o alarme reserva (o gateway confere que ele saiu); falha só é registrada, nunca interrompe o fluxo. */
+async function dropAlarm(deps: Pick<WakeDeps, 'gateway' | 'log'>, handle: string): Promise<void> {
+  await deps.gateway.deleteAlarm(handle).catch((e: Error) => deps.log(`não apagou o alarme reserva: ${e.message}`));
+}
+
 type FireAction = Extract<WakeAction, { type: 'fire' }>;
 
 async function fireWake(a: FireAction, deps: WakeDeps): Promise<void> {
@@ -187,7 +192,7 @@ async function fireWake(a: FireAction, deps: WakeDeps): Promise<void> {
     if (source) {
       const presence = evaluatePresence({ ...source, now: (deps.now ?? (() => new Date()))() });
       if (presence.state === 'away') {
-        if (handle) await deps.gateway.deleteAlarm(handle).catch((e: Error) => deps.log(`não apagou o alarme reserva: ${e.message}`));
+        if (handle) await dropAlarm(deps, handle);
         await deps.store.finishRun(a.plan.id, a.runDate, 'skipped', `fora de casa (a ${Math.round(presence.distanceM ?? 0)} m)`);
         return;
       }
@@ -195,7 +200,7 @@ async function fireWake(a: FireAction, deps: WakeDeps): Promise<void> {
     const weather = await weatherSpeech(a.plan, source, deps);
     // O alarme reserva sai assim que o áudio é confirmado, sem esperar as ações de dispositivos atrasadas.
     const dropFallback = handle
-      ? () => deps.gateway.deleteAlarm(handle).catch((e: Error) => deps.log(`não apagou o alarme reserva: ${e.message}`))
+      ? () => dropAlarm(deps, handle)
       : undefined;
     const result = await runWake(a.plan, await deps.briefing(weather), deps.gateway, deps.sleep, dropFallback);
     authAfterAudio = result.authError;
@@ -224,15 +229,13 @@ export async function applyWakeActions(
           break;
         }
         case 'rearm': {
-          if (a.run.fallbackHandle) await deps.gateway.deleteAlarm(a.run.fallbackHandle).catch(() => {});
+          if (a.run.fallbackHandle) await dropAlarm(deps, a.run.fallbackHandle);
           const handle = await deps.gateway.createAlarm(a.plan.echoDeviceId, a.fallbackAt, `${a.plan.label} (reserva)`);
           await deps.store.armRun(a.plan.id, a.run.runDate, a.plannedFor, handle);
           break;
         }
         case 'cancel':
-          if (a.run.fallbackHandle) {
-            await deps.gateway.deleteAlarm(a.run.fallbackHandle).catch((e: Error) => deps.log(`não apagou alarme: ${e.message}`));
-          }
+          if (a.run.fallbackHandle) await dropAlarm(deps, a.run.fallbackHandle);
           await deps.store.setRunStatus(a.run.id, 'cancelled');
           break;
         case 'miss':

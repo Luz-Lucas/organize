@@ -39,7 +39,9 @@ class SpaceScreen extends ConsumerWidget {
     List<Note> notes,
     List<TaskItem> tasks,
   ) async {
-    final nNotes = notes.where((n) => n.spaceId == space.id).length;
+    final nNotes = notes.where((n) => n.spaceId == space.id && !n.isNotebook).length;
+    // Cadernos nunca são apagados com o espaço: ficam sem pasta (gatilho `spaces_keep_notebooks`).
+    final nNotebooks = notes.where((n) => n.spaceId == space.id && n.isNotebook).length;
     final nTasks = tasks.where((t) => t.spaceId == space.id).length;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -47,6 +49,7 @@ class SpaceScreen extends ConsumerWidget {
         title: Text('Excluir “${space.name}”?'),
         content: Text(
           'Isso apaga ${plural(nNotes, 'nota', 'notas')} e ${plural(nTasks, 'tarefa', 'tarefas')}. '
+          '${nNotebooks == 0 ? '' : '${plural(nNotebooks, 'caderno não é apagado: vai', 'cadernos não são apagados: vão')} para “Sem pasta”. '}'
           'Os eventos da agenda são mantidos.',
         ),
         actions: [

@@ -184,4 +184,28 @@ void main() {
     repo.failActions = true;
     await expectLater(repo.download(manual.id), throwsA(isA<RepositoryException>()));
   });
+
+  test('meta devolve md5, tamanho e data; setContent muda tudo isso (arquivo editado no Drive)', () async {
+    final repo = MemoryDriveRepository();
+    final f = repo.addFile('a.pdf', repo.rootFolderId, bytes: [1, 2, 3]);
+    final m1 = await repo.meta(f.id);
+    expect(m1.size, 3);
+    expect(m1.md5, '5289df737df57326fcdd22597afb1fac');
+    expect(repo.metaCalls, [f.id]);
+    repo.setContent(f.id, [1, 2, 3, 4]);
+    final m2 = await repo.meta(f.id);
+    expect(m2.size, 4);
+    expect(m2.md5, isNot(m1.md5));
+    expect(m2.sameContentAs(m1), isFalse);
+  });
+
+  test('meta: lixeira e id desconhecido são not_found; sem rede falha como o resto', () async {
+    final repo = MemoryDriveRepository();
+    final f = repo.addFile('a.pdf', repo.rootFolderId, bytes: [1]);
+    await repo.trash(f.id);
+    await expectLater(repo.meta(f.id), throwsA(isA<DriveException>().having((e) => e.code, 'code', 'not_found')));
+    await expectLater(repo.meta('nada'), throwsA(isA<DriveException>()));
+    repo.failActions = true;
+    await expectLater(repo.meta(f.id), throwsA(isA<RepositoryException>()));
+  });
 }

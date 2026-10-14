@@ -16,6 +16,7 @@ class Space {
     required this.name,
     this.kind = SpaceKind.geral,
     this.position = 0,
+    this.color,
   });
 
   final String id;
@@ -23,11 +24,15 @@ class Space {
   final SpaceKind kind;
   final int position;
 
+  /// Cor da pasta em hex `#RRGGBB` (coluna `spaces.color`); `null` usa a cor do tema.
+  final String? color;
+
   factory Space.fromMap(Map<String, dynamic> m) => Space(
         id: m['id'] as String,
         name: m['name'] as String,
         kind: SpaceKind.values.byName(m['kind'] as String),
         position: (m['position'] as num?)?.toInt() ?? 0,
+        color: m['color'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -35,13 +40,15 @@ class Space {
         'name': name,
         'kind': kind.name,
         'position': position,
+        'color': color,
       };
 
-  Space copyWith({String? name, SpaceKind? kind, int? position}) => Space(
+  Space copyWith({String? name, SpaceKind? kind, int? position, String? color}) => Space(
         id: id,
         name: name ?? this.name,
         kind: kind ?? this.kind,
         position: position ?? this.position,
+        color: color ?? this.color,
       );
 
   @override
@@ -50,8 +57,9 @@ class Space {
       other.id == id &&
       other.name == name &&
       other.kind == kind &&
-      other.position == position;
+      other.position == position &&
+      other.color == color;
 
   @override
-  int get hashCode => Object.hash(id, name, kind, position);
+  int get hashCode => Object.hash(id, name, kind, position, color);
 }

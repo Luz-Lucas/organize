@@ -9,7 +9,6 @@ import '../../domain/drive.dart';
 import '../../domain/space.dart';
 import '../../app/providers.dart';
 import '../../ui/org_theme.dart';
-import '../settings/drive_card.dart' show samsungNotesHelp;
 import 'importer.dart';
 
 /// Abre a folha "Salvar no Organizacional" para o [content] recebido.
@@ -114,7 +113,7 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Salvar no Organizacional', style: theme.textTheme.titleMedium),
+            Text('Salvar no Organize', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
             if (_c.hasText)
               Container(
@@ -143,7 +142,7 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
             if (!widget.signedIn)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('Entre na sua conta do Organizacional para salvar.', key: const Key('share-signin-required'), style: TextStyle(color: theme.colorScheme.error)),
+                child: Text('Entre na sua conta do Organize para salvar.', key: const Key('share-signin-required'), style: TextStyle(color: theme.colorScheme.error)),
               )
             else ...[
               if (driveMissing)
@@ -200,8 +199,6 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(_error!, key: const Key('share-error'), style: TextStyle(color: theme.colorScheme.error)),
               ),
-            const SizedBox(height: 12),
-            Text(samsungNotesHelp, key: const Key('share-help'), style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted)),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
