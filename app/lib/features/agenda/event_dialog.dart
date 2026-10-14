@@ -23,7 +23,9 @@ import 'series_scope_dialog.dart';
 /// [onDeleteScoped], editar/excluir um evento que tem `seriesId` pergunta antes
 /// a quais ocorrências a ação vale. A etiqueta escolhida segue esse mesmo escopo.
 ///
-/// Com [tags] não vazio, aparece o campo "Etiqueta" (chips coloridos mais "Sem etiqueta").
+/// O campo "Etiqueta" (chips coloridos mais "Sem etiqueta") aparece com [tags] não vazio ou com
+/// [onCreateTag]; esse callback abre o editor de etiqueta e devolve a criada (ou `null` se cancelou), que
+/// entra na lista e já fica selecionada no evento (chip "+ Nova").
 class EventDialog extends StatefulWidget {
   const EventDialog({
     super.key,
@@ -31,6 +33,7 @@ class EventDialog extends StatefulWidget {
     required this.initialEnd,
     required this.spaces,
     this.tags = const [],
+    this.onCreateTag,
     this.existing,
     this.onSave,
     this.onDelete,
@@ -43,6 +46,7 @@ class EventDialog extends StatefulWidget {
   final DateTime initialEnd;
   final List<Space> spaces;
   final List<EventTag> tags;
+  final Future<EventTag?> Function()? onCreateTag;
   final CalendarEvent? existing;
   final Future<String?> Function(CalendarEvent event)? onSave;
   final Future<String?> Function()? onDelete;
@@ -76,8 +80,11 @@ class _EventDialogState extends State<EventDialog> {
   late TimeOfDay _end = TimeOfDay.fromDateTime(widget.initialEnd);
   late String? _spaceId = widget.existing?.spaceId;
 
+  /// Etiquetas do seletor: as recebidas mais as criadas com "+ Nova" enquanto o editor está aberto.
+  late List<EventTag> _tags = widget.tags;
+
   /// Etiqueta escolhida; uma que não existe mais (apagada em outro aparelho) conta como nenhuma.
-  late String? _tagId = widget.tags.any((t) => t.id == widget.existing?.tagId) ? widget.existing?.tagId : null;
+  late String? _tagId = _tags.any((t) => t.id == widget.existing?.tagId) ? widget.existing?.tagId : null;
   bool _busy = false;
   String? _error;
 
@@ -302,6 +309,7 @@ class _EventDialogState extends State<EventDialog> {
     return [
       DropdownButtonFormField<RepeatFreq>(
         key: const Key('event-repeat'),
+        isExpanded: true, // textos longos ("Quinzenal…") cortam com reticências em vez de estourar a 360 dp
         initialValue: _freq,
         decoration: const InputDecoration(labelText: 'Repetir'),
         items: [
@@ -388,6 +396,15 @@ class _EventDialogState extends State<EventDialog> {
     ];
   }
 
+  Future<void> _createTag() async {
+    final created = await widget.onCreateTag!();
+    if (created == null || !mounted) return;
+    setState(() {
+      if (!_tags.any((t) => t.id == created.id)) _tags = [..._tags, created];
+      _tagId = created.id;
+    });
+  }
+
   List<Widget> _tagSection(BuildContext context) {
     final theme = Theme.of(context);
     final org = context.org;
@@ -405,13 +422,19 @@ class _EventDialogState extends State<EventDialog> {
             selected: _tagId == null,
             onSelected: _busy ? null : (_) => setState(() => _tagId = null),
           ),
-          for (final t in widget.tags)
+          for (final t in _tags)
             ChoiceChip(
               key: Key('event-tag-${t.id}'),
               avatar: CircleAvatar(radius: 6, backgroundColor: parseFolderColor(t.color) ?? org.accentDeep),
               label: Text(t.name),
               selected: _tagId == t.id,
               onSelected: _busy ? null : (_) => setState(() => _tagId = t.id),
+            ),
+          if (widget.onCreateTag != null)
+            ActionChip(
+              key: const Key('event-tag-new'),
+              label: const Text('+ Nova'),
+              onPressed: _busy ? null : _createTag,
             ),
         ],
       ),
@@ -485,7 +508,7 @@ class _EventDialogState extends State<EventDialog> {
                 controller: _location,
                 decoration: const InputDecoration(labelText: 'Local (opcional)'),
               ),
-              if (widget.tags.isNotEmpty) ..._tagSection(context),
+              if (_tags.isNotEmpty || widget.onCreateTag != null) ..._tagSection(context),
               if (widget.spaces.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Wrap(

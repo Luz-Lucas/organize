@@ -21,6 +21,7 @@ import 'calendar_layout.dart';
 import 'event_dialog.dart';
 import 'mobile_calendar.dart';
 import 'month_view.dart';
+import 'tag_editor.dart';
 import 'tag_filter_bar.dart';
 import 'tag_style.dart';
 import 'tags_manager.dart';
@@ -87,6 +88,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         initialEnd: e,
         spaces: spaces,
         tags: ref.read(eventTagsProvider).value ?? const <EventTag>[],
+        onCreateTag: () => showTagEditor(context, ref),
         existing: existing,
         onSave: (event) async {
           try {
@@ -257,6 +259,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 tags: tagList,
                 hidden: hidden,
                 onToggle: ref.read(agendaHiddenTagsProvider.notifier).toggle,
+                onNew: () => showTagEditor(context, ref),
+                onEdit: (t) => showTagEditor(context, ref, existing: t),
+                onDelete: (t) => deleteTagWithConfirm(context, ref, t),
               ),
             Expanded(
               child: asyncView(events, (allEvents) {

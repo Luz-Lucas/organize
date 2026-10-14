@@ -268,6 +268,10 @@ void main() {
       expect(find.byKey(const Key('tags-manager')), findsOneWidget);
     }
 
+    // A fileira de filtros também tem um 'tag-new' ("+ Nova etiqueta"): aqui vale o do gerenciador.
+    final newInManager =
+        find.descendant(of: find.byKey(const Key('tags-manager')), matching: find.byKey(const Key('tag-new')));
+
     testWidgets('lista as etiquetas na ordem, com o papel de cada uma', (tester) async {
       final repo = await _withTags(MemoryRepository());
       await pumpApp(tester, repo, location: '/agenda');
@@ -287,7 +291,7 @@ void main() {
       await pumpApp(tester, repo, location: '/agenda');
       await tester.pumpAndSettle();
       await openManager(tester);
-      await tester.tap(find.byKey(const Key('tag-new')));
+      await tester.tap(newInManager);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('tag-save')));
@@ -313,7 +317,7 @@ void main() {
       await pumpApp(tester, repo, location: '/agenda');
       await tester.pumpAndSettle();
       await openManager(tester);
-      await tester.tap(find.byKey(const Key('tag-new')));
+      await tester.tap(newInManager);
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('tag-name')), 'aula');
       await tester.tap(find.byKey(const Key('tag-save')));
@@ -391,7 +395,7 @@ void main() {
       await pumpApp(tester, repo, location: '/agenda');
       await tester.pumpAndSettle();
       await openManager(tester);
-      await tester.tap(find.byKey(const Key('tag-new')));
+      await tester.tap(newInManager);
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('tag-name')), 'Estágio');
       repo.failWrites = true;
@@ -426,12 +430,13 @@ void main() {
       expect((await _events(repo)).single.tagId, 't-acad');
     });
 
-    testWidgets('sem etiquetas cadastradas o campo não aparece', (tester) async {
+    testWidgets('sem etiquetas cadastradas o campo aparece, com "Sem etiqueta" e "+ Nova"', (tester) async {
       await pumpApp(tester, _NoSeed(), location: '/agenda');
       await tester.pumpAndSettle();
       await openNew(tester);
-      expect(find.text('Etiqueta'), findsNothing);
-      expect(find.byKey(const Key('event-tag-none')), findsNothing);
+      expect(find.text('Etiqueta'), findsOneWidget);
+      expect(tester.widget<ChoiceChip>(find.byKey(const Key('event-tag-none'))).selected, isTrue);
+      expect(find.byKey(const Key('event-tag-new')), findsOneWidget);
     });
 
     testWidgets('editar: vem marcada a etiqueta atual e "Sem etiqueta" a remove', (tester) async {
