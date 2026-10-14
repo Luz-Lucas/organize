@@ -120,6 +120,26 @@ void main() {
   });
 
   group('formato JSON v1 -> gzip -> base64', () {
+    test('fonte manuscrita: grava "font" só quando existe e volta igual', () {
+      const t = TextBox(id: 't9', x: 1, y: 2, w: 80, text: 'gato', size: 30, argb: 0xFF000000, font: kHandwritingFont);
+      final doc = PageDoc.empty.withText(t);
+      final j = unpack(encodePage(doc));
+      expect(((j['texts'] as List).single as Map)['font'], 'caveat');
+      expect(decodePage(encodePage(doc)), doc);
+      expect(decodePage(encodePage(doc)).texts.single.font, kHandwritingFont);
+      // Página antiga (sem a chave) continua lendo, com a fonte padrão.
+      final old = pack({
+        'v': 1,
+        'strokes': [],
+        'texts': [
+          {'id': 't1', 'x': 0, 'y': 0, 'w': 10, 'text': 'a', 'size': 12, 'color': '#000000FF'},
+        ],
+        'images': [],
+        'deleted': [],
+      });
+      expect(decodePage(old).texts.single.font, isNull);
+    });
+
     test('estrutura v1 (traços em deltas inteiros)', () {
       final j = unpack(encodePage(sample()));
       expect(j['v'], 1);

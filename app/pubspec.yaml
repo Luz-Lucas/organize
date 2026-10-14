@@ -87,6 +87,12 @@ flutter:
   assets:
     - assets/google_fonts/
 
+  # Fonte manuscrita das palavras trocadas pelo corretor do Caderno (OFL: assets/fonts/Caveat-OFL.txt).
+  fonts:
+    - family: Caveat
+      fonts:
+        - asset: assets/fonts/Caveat-Variable.ttf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

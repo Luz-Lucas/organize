@@ -7,7 +7,6 @@ import 'dart:ui' hide TextBox;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/notebook/core/notebook_core.dart';
 import 'package:organizacional/notebook/intelligence/gestures.dart';
-import 'package:organizacional/notebook/intelligence/ink_types.dart';
 import 'package:organizacional/notebook/intelligence/segmentation.dart';
 import 'package:organizacional/notebook/intelligence/straighten.dart';
 

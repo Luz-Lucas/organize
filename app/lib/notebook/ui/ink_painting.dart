@@ -406,11 +406,14 @@ void paintDoc(
   }
 }
 
+/// Família da fonte de [t] no Flutter (`null` = a padrão do tema).
+String? textFontFamily(TextBox t) => t.font == kHandwritingFont ? 'Caveat' : null;
+
 void paintText(Canvas canvas, TextBox t) {
   final tp = TextPainter(
     text: TextSpan(
       text: t.text,
-      style: TextStyle(fontSize: t.size, color: Color(t.argb), height: 1.25),
+      style: TextStyle(fontSize: t.size, color: Color(t.argb), height: 1.25, fontFamily: textFontFamily(t)),
     ),
     textDirection: TextDirection.ltr,
   )..layout(maxWidth: t.w <= 0 ? 1 : t.w);
@@ -421,7 +424,7 @@ void paintText(Canvas canvas, TextBox t) {
 /// Altura real do texto (para o retângulo de seleção/toque).
 double measureTextHeight(TextBox t) {
   final tp = TextPainter(
-    text: TextSpan(text: t.text, style: TextStyle(fontSize: t.size, height: 1.25)),
+    text: TextSpan(text: t.text, style: TextStyle(fontSize: t.size, height: 1.25, fontFamily: textFontFamily(t))),
     textDirection: TextDirection.ltr,
   )..layout(maxWidth: t.w <= 0 ? 1 : t.w);
   final h = tp.height;

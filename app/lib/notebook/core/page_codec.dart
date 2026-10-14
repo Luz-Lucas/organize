@@ -219,6 +219,7 @@ Map<String, Object?> _textToJson(TextBox t) => {
   'text': t.text,
   'size': _size(t.size),
   'color': _colorToJson(t.argb),
+  if (t.font != null) 'font': t.font,
 };
 
 Map<String, Object?> _imageToJson(ImageBox i) => {
@@ -353,6 +354,7 @@ TextBox _textFromJson(Map<String, dynamic> m) {
     text: _str(m, 'text', what),
     size: quantizeSize(_dbl(m, 'size', what)),
     argb: _colorFromJson(m, what),
+    font: m['font'] is String ? m['font'] as String : null,
   );
 }
 

@@ -142,6 +142,9 @@ class Stroke {
   String toString() => 'Stroke($id, ${tool.name}, ${points.length} pts)';
 }
 
+/// Valor de [TextBox.font] para a fonte manuscrita (Caveat, embutida no app).
+const String kHandwritingFont = 'caveat';
+
 /// Caixa de texto (nome igual ao do plano; colide com `TextBox` do dart:ui —
 /// use `hide TextBox` ao importar `flutter/material.dart`, ou o alias
 /// [InkText]).
@@ -155,6 +158,7 @@ class TextBox {
     required this.text,
     required this.size,
     required this.argb,
+    this.font,
   });
 
   final String id;
@@ -164,6 +168,11 @@ class TextBox {
   final String text;
   final double size;
   final int argb;
+
+  /// Fonte do texto: `null` = a padrão; [kHandwritingFont] = manuscrita (Caveat),
+  /// usada quando o corretor troca uma palavra escrita à mão. Versões antigas do
+  /// app ignoram o campo e mostram na fonte padrão.
+  final String? font;
 
   /// Retângulo estimado (a altura é uma estimativa por contagem de linhas;
   /// a UI pode medir com `TextPainter` se precisar de exatidão).
@@ -186,6 +195,7 @@ class TextBox {
     String? text,
     double? size,
     int? argb,
+    String? font,
   }) => TextBox(
     id: id ?? this.id,
     x: x ?? this.x,
@@ -194,6 +204,7 @@ class TextBox {
     text: text ?? this.text,
     size: size ?? this.size,
     argb: argb ?? this.argb,
+    font: font ?? this.font,
   );
 
   TextBox quantized() => copyWith(
@@ -212,10 +223,11 @@ class TextBox {
       other.w == w &&
       other.text == text &&
       other.size == size &&
-      other.argb == argb;
+      other.argb == argb &&
+      other.font == font;
 
   @override
-  int get hashCode => Object.hash(id, x, y, w, text, size, argb);
+  int get hashCode => Object.hash(id, x, y, w, text, size, argb, font);
 
   @override
   String toString() => 'TextBox($id, "$text")';
