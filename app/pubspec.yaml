@@ -56,8 +56,11 @@ dependencies:
   http: ^1.6.0
   file_picker: ^10.3.10
   crypto: ^3.0.7
+  package_info_plus: ^9.0.1
+  archive: ^4.0.0
   shared_preferences: ^2.5.5
   perfect_freehand: ^2.5.2+1
+  google_mlkit_digital_ink_recognition: ^0.16.1
 
 dev_dependencies:
   flutter_test:

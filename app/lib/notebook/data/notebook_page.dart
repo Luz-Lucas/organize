@@ -14,6 +14,7 @@ class NotebookPage {
     this.background = PageBackground.lined,
     this.data = '',
     this.recognizedText = '',
+    this.withRecognizedText = false,
     this.version = 0,
     this.updatedAt,
   });
@@ -24,6 +25,11 @@ class NotebookPage {
   final PageBackground background;
   final String data;
   final String recognizedText;
+
+  /// Só vale num `savePage`: grava [recognizedText] junto com os dados. Sem isso o
+  /// `recognized_text` do servidor fica como está (um aparelho que não reconhece
+  /// escrita, como o Linux, não pode apagar o texto que o celular gravou).
+  final bool withRecognizedText;
   final int version;
   final DateTime? updatedAt;
 
@@ -54,6 +60,7 @@ class NotebookPage {
     PageBackground? background,
     String? data,
     String? recognizedText,
+    bool? withRecognizedText,
     int? version,
     DateTime? updatedAt,
     String? id,
@@ -65,6 +72,7 @@ class NotebookPage {
         background: background ?? this.background,
         data: data ?? this.data,
         recognizedText: recognizedText ?? this.recognizedText,
+        withRecognizedText: withRecognizedText ?? this.withRecognizedText,
         version: version ?? this.version,
         updatedAt: updatedAt ?? this.updatedAt,
       );

@@ -34,6 +34,35 @@ void main() {
     expect(end.idx, 3);
   });
 
+  test('savePage com withRecognizedText grava o texto reconhecido; sem isso não mexe nele', () async {
+    final p = await repo.addPage('n1');
+    final a = await repo.savePage(p.copyWith(data: enc(['a']), recognizedText: 'olá mundo', withRecognizedText: true));
+    expect(a.recognizedText, 'olá mundo');
+    expect((await repo.recognizedTextByNote())['n1'], 'olá mundo');
+    // Um save só de tinta (outro aparelho sem reconhecimento) não apaga o texto do servidor.
+    final b = await repo.savePage(a.copyWith(data: enc(['a', 'b']), recognizedText: ''));
+    expect(b.recognizedText, 'olá mundo');
+    // Texto vazio explícito (página esvaziada) limpa.
+    final c = await repo.savePage(b.copyWith(recognizedText: '', withRecognizedText: true));
+    expect(c.recognizedText, '');
+  });
+
+  test('em conflito o texto do aparelho não é gravado (vale o do documento mesclado, re-transcrito depois)', () async {
+    final base = await repo.addPage('n1');
+    await repo.savePage(base.copyWith(data: enc(['a1']), recognizedText: 'do outro aparelho', withRecognizedText: true));
+    final merged = await repo.savePage(base.copyWith(data: enc(['b1']), recognizedText: 'meu', withRecognizedText: true));
+    expect(idsOf(merged.data), {'a1', 'b1'});
+    expect(merged.recognizedText, 'do outro aparelho');
+  });
+
+  test('conflito que não acrescenta nada à tinta deste aparelho: o texto é gravado', () async {
+    final base = await repo.addPage('n1');
+    await repo.savePage(base.copyWith(data: enc(['a1']))); // outro aparelho: só a1
+    final merged = await repo.savePage(base.copyWith(data: enc(['a1', 'b1']), recognizedText: 'a1 b1', withRecognizedText: true));
+    expect(idsOf(merged.data), {'a1', 'b1'});
+    expect(merged.recognizedText, 'a1 b1');
+  });
+
   test('savePage grava, sobe a versão e toca a nota', () async {
     final p = await repo.addPage('n1');
     final saved = await repo.savePage(p.copyWith(data: enc(['a'])));

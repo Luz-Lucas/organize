@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Só a pasta dos arquivos baixados do Drive (filesDir/drive_cache/). Nada mais do app é exposto. -->
+<!-- Só duas pastas são expostas: os arquivos baixados do Drive (filesDir/drive_cache/) e o APK de atualização
+     (cacheDir/updates/). Nada mais do app é exposto. -->
 <paths>
     <files-path name="drive_cache" path="drive_cache/"/>
+    <cache-path name="updates" path="updates/"/>
 </paths>

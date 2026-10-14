@@ -80,11 +80,15 @@ class ControlledRepo implements NotebookRepository {
   /// Segura os `savePage` até o completer terminar (gravação em voo).
   Completer<void>? saveGate;
 
+  /// Roda antes de cada `savePage` (por exemplo, para simular outro aparelho gravando no meio).
+  Future<void> Function(NotebookPage page)? beforeSave;
+
   final savedVersions = <int>[];
   final savedPageIds = <String>[];
 
   @override
   Future<NotebookPage> savePage(NotebookPage page) async {
+    await beforeSave?.call(page);
     savedVersions.add(page.version);
     savedPageIds.add(page.id);
     final gate = saveGate;

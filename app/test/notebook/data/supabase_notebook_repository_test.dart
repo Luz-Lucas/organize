@@ -59,6 +59,42 @@ void main() {
     expect((touch.body as Map).containsKey('updated_at'), isTrue);
   });
 
+  test('savePage só envia recognized_text quando withRecognizedText (senão não apaga o do servidor)', () async {
+    final p = await repo.addPage('n1', id: 'p-a');
+    final a = await repo.savePage(p.copyWith(data: enc(['a']), recognizedText: 'olá', withRecognizedText: true));
+    expect(a.recognizedText, 'olá');
+    var patch = writes().where((s) => s.method == 'PATCH' && s.path.endsWith('/note_pages')).last;
+    expect((patch.body as Map)['recognized_text'], 'olá');
+    final b = await repo.savePage(a.copyWith(data: enc(['a', 'b']), recognizedText: ''));
+    patch = writes().where((s) => s.method == 'PATCH' && s.path.endsWith('/note_pages')).last;
+    expect((patch.body as Map).containsKey('recognized_text'), isFalse);
+    expect(b.recognizedText, 'olá');
+    expect(server.pages['p-a']!['recognized_text'], 'olá');
+  });
+
+  test('em conflito o texto reconhecido do aparelho não vai junto com a tinta mesclada', () async {
+    final base = await repo.addPage('n1', id: 'p-a');
+    await SupabaseNotebookRepository(server.client())
+        .savePage(base.copyWith(data: enc(['a1']), recognizedText: 'outro', withRecognizedText: true));
+    final merged = await repo.savePage(base.copyWith(data: enc(['b1']), recognizedText: 'meu', withRecognizedText: true));
+    expect(idsOf(merged.data), {'a1', 'b1'});
+    expect(merged.recognizedText, 'outro');
+    final patches = writes().where((s) => s.method == 'PATCH' && s.path.endsWith('/note_pages')).toList();
+    expect((patches.first.body as Map)['recognized_text'], 'outro');
+    expect(patches[1].query['version'], 'eq.0'); // a tentativa que perdeu a corrida ...
+    expect((patches.last.body as Map).containsKey('recognized_text'), isFalse); // ... e a regravação mesclada
+  });
+
+  test('conflito que não acrescenta nada à tinta deste aparelho: o texto reconhecido vai junto', () async {
+    final base = await repo.addPage('n1', id: 'p-a');
+    await SupabaseNotebookRepository(server.client()).savePage(base.copyWith(data: enc(['a1'])));
+    final merged = await repo.savePage(
+        base.copyWith(data: enc(['a1', 'b1']), recognizedText: 'a1 b1', withRecognizedText: true));
+    expect(merged.recognizedText, 'a1 b1');
+    final patches = writes().where((s) => s.method == 'PATCH' && s.path.endsWith('/note_pages')).toList();
+    expect((patches.last.body as Map)['recognized_text'], 'a1 b1');
+  });
+
   test('conflito: 0 linhas afetadas -> relê, mescla e grava de novo sem perder traços', () async {
     final base = await repo.addPage('n1', id: 'p-a');
     // O outro aparelho grava a1/a2 (v0 -> v1) antes do nosso save.

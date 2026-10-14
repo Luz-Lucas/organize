@@ -126,9 +126,13 @@ class MemoryNotebookRepository implements NotebookRepository {
       } on PageDecodeException catch (e) {
         throw NotebookRepositoryException(e.message, kind: NotebookErrorKind.newerFormat);
       }
-      // O fundo não entra aqui: quem troca o fundo é o setBackground.
+      // O fundo não entra aqui: quem troca o fundo é o setBackground. O texto reconhecido
+      // só entra se pedido e se vale para o documento gravado: em conflito que acrescentou
+      // tinta de outro aparelho vale o do documento mesclado (o aparelho transcreve de novo).
+      final textValid = page.withRecognizedText && (current.version == page.version || data == page.data);
       result = current.copyWith(
         data: data,
+        recognizedText: textValid ? page.recognizedText : current.recognizedText,
         version: current.version + 1,
         updatedAt: DateTime.now(),
       );

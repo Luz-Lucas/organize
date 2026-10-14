@@ -145,6 +145,7 @@ class SupabaseNotebookRepository implements NotebookRepository {
               // O fundo não entra aqui: quem troca o fundo é o setBackground.
               .update({
                 'data': local.data,
+                if (local.withRecognizedText) 'recognized_text': local.recognizedText,
                 'version': local.version + 1,
               })
               .eq('id', local.id)
@@ -161,7 +162,15 @@ class SupabaseNotebookRepository implements NotebookRepository {
             await _touchNote(local.noteId);
             return created;
           }
-          local = local.copyWith(version: remote.version, data: mergePageData(remote.data, local.data));
+          // Em conflito que acrescentou tinta de outro aparelho, o texto reconhecido deste
+          // aparelho não vale para o documento mesclado: não é gravado (o aparelho transcreve
+          // de novo e envia no save seguinte). Se nada foi acrescentado, ele continua valendo.
+          final merged = mergePageData(remote.data, local.data);
+          local = local.copyWith(
+            version: remote.version,
+            data: merged,
+            withRecognizedText: local.withRecognizedText && merged == local.data,
+          );
         }
         throw const RepositoryException('Muitos conflitos ao salvar a página; tente de novo.');
       });

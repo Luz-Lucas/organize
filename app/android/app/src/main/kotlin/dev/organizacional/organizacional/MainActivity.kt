@@ -14,6 +14,7 @@ class MainActivity : FlutterActivity() {
         AppIconChannel.register(flutterEngine.dartExecutor.binaryMessenger, applicationContext)
         share = ShareChannel(this).also { it.attach(flutterEngine.dartExecutor.binaryMessenger) }
         FilesChannel(this).attach(flutterEngine.dartExecutor.binaryMessenger)
+        UpdateChannel(this).attach(flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

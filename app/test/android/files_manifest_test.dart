@@ -42,15 +42,36 @@ void main() {
       expect(app, contains('android:name=".DriveFileProvider"'));
     });
 
-    test('file_paths.xml expõe só files/drive_cache/', () {
+    test('file_paths.xml expõe só files/drive_cache/ e cache/updates/ (o APK de atualização)', () {
       final xml = File('android/app/src/main/res/xml/file_paths.xml').readAsStringSync();
       final paths = RegExp(r'<(files-path|cache-path|external-path|external-files-path|external-cache-path|external-media-path|root-path)\b[^>]*/>')
           .allMatches(xml)
           .map((m) => m.group(0)!)
           .toList();
-      expect(paths, hasLength(1));
-      expect(paths.single, contains('<files-path'));
-      expect(paths.single, contains('path="drive_cache/"'));
+      expect(paths, hasLength(2));
+      expect(paths.where((p) => p.contains('<files-path') && p.contains('path="drive_cache/"')), hasLength(1));
+      expect(paths.where((p) => p.contains('<cache-path') && p.contains('path="updates/"')), hasLength(1));
+    });
+  });
+
+  group('atualização por dentro do app', () {
+    test('pede REQUEST_INSTALL_PACKAGES (e só essa permissão nova)', () {
+      expect(manifest, contains('android.permission.REQUEST_INSTALL_PACKAGES'));
+    });
+
+    test('o canal de atualização é separado do FilesChannel, que segue restrito ao drive_cache', () {
+      const dir = 'android/app/src/main/kotlin/dev/organizacional/organizacional';
+      final files = File('$dir/FilesChannel.kt').readAsStringSync();
+      final update = File('$dir/UpdateChannel.kt').readAsStringSync();
+      final main = File('$dir/MainActivity.kt').readAsStringSync();
+      expect(files, isNot(contains('UpdateGuard')));
+      expect(files, isNot(contains('REQUEST_INSTALL')));
+      expect(update, contains('UpdateGuard.isInstallable'));
+      expect(update, contains('canRequestPackageInstalls'));
+      expect(update, contains('ACTION_MANAGE_UNKNOWN_APP_SOURCES'));
+      expect(update, contains('FLAG_GRANT_READ_URI_PERMISSION'));
+      expect(update, contains('UpdateGuard.APK_MIME'));
+      expect(main, contains('UpdateChannel(this)'));
     });
   });
 

@@ -14,10 +14,11 @@ void main() {
         location: '/ajustes', size: const Size(400, 900), overrides: [widgetSinkProvider.overrideWithValue(sink)]);
 
     expect(find.byType(SettingsScreen), findsOneWidget);
+    // A lista é preguiçosa: primeiro o título da seção, depois as opções de transparência.
+    await tester.scrollUntilVisible(find.text('Widgets'), 300, scrollable: find.byType(Scrollable).first);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('widget-bg-90')), 300,
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
-    expect(find.text('Widgets'), findsOneWidget);
     expect(find.text('Transparência do fundo'), findsOneWidget);
     for (final pct in [0, 25, 50, 75, 90]) {
       expect(find.byKey(ValueKey('widget-bg-$pct')), findsOneWidget, reason: '$pct%');

@@ -7,9 +7,11 @@ import '../../data/repository.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
+import 'about_card.dart';
 import 'downloaded_files_card.dart';
 import 'drive_card.dart';
 import 'gmail_card.dart';
+import 'handwriting_card.dart';
 import 'home_location_card.dart';
 import 'widgets_card.dart';
 
@@ -93,6 +95,16 @@ class SettingsScreen extends ConsumerWidget {
                 child: WidgetsCard(),
               ),
             ],
+            const SectionHeader('Escrita à mão'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: HandwritingCard(),
+            ),
+            const SectionHeader('Sobre'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: AboutCard(),
+            ),
             const SectionHeader('Conta'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),

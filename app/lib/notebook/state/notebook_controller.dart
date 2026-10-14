@@ -7,6 +7,8 @@ import '../../domain/ids.dart';
 import '../core/notebook_core.dart';
 import '../data/notebook_page.dart';
 import '../data/notebook_repository.dart';
+import '../intelligence/recognizer.dart';
+import '../intelligence/transcript.dart';
 import '../ui/notebook_session.dart';
 import 'notebook_pending_store.dart';
 
@@ -14,7 +16,8 @@ import 'notebook_pending_store.dart';
 /// em que isso se baseia e se há alterações ainda não confirmadas ([dirty]).
 class _Local {
   _Local(this.id, this.background, this.doc, this.version, {this.dirty = false, this.locked = false})
-      : seenVersion = version;
+      : seenVersion = version,
+        recognizedDoc = doc;
 
   final String id;
   PageBackground background;
@@ -65,8 +68,33 @@ class _Local {
   /// antes de o `savePage` responder).
   String? inflightData;
 
+  // ---- texto reconhecido (fase 2) ------------------------------------------
+
+  /// O texto reconhecido desta página: o que veio do servidor ou a última
+  /// transcrição deste aparelho. Só é enviado quando [textDirty].
+  String text = '';
+
+  /// O documento a que [text] corresponde (por identidade). Se [doc] é outro objeto,
+  /// a escrita mudou depois da transcrição e a página precisa ser reconhecida de novo.
+  PageDoc? recognizedDoc;
+
+  /// [text] mudou e ainda não está no servidor.
+  bool textDirty = false;
+
+  /// Muda a cada texto novo (permite saber se o texto mudou durante um envio).
+  int textRev = 0;
+
+  PageTranscript? transcript;
+
+  /// A escrita mudou desde a última transcrição.
+  bool get needsRecognition => !locked && !identical(doc, recognizedDoc);
+
+  /// Há texto novo, **do documento atual**, por enviar. Texto de tinta que já mudou
+  /// espera a próxima transcrição em vez de ir para o servidor.
+  bool get textPending => textDirty && !locked && !blocked && identical(doc, recognizedDoc);
+
   /// Há algo a enviar ao servidor.
-  bool get needsSend => dirty && !locked && !blocked;
+  bool get needsSend => (dirty || textPending) && !locked && !blocked;
 
   /// Tem tinta que só existe no aparelho (vai para a fila local).
   bool get holdsInk => dirty && !locked;
@@ -167,6 +195,10 @@ class NotebookController implements NotebookSession {
     this.pageMaxLength = 4000000,
     this.cacheMinInterval = const Duration(seconds: 5),
     this.encoder = encodePageAsync,
+    this.recognizer,
+    this.recognizeEnabled,
+    this.recognizeDelay = const Duration(seconds: 3),
+    this.transcriber = transcribe,
   });
 
   final String noteId;
@@ -205,6 +237,19 @@ class NotebookController implements NotebookSession {
   /// no servidor. O provider usa para manter o controller vivo até terminar de salvar.
   final void Function(bool pending)? onPendingChanged;
 
+  /// Reconhece a escrita para a busca (`recognized_text`). `null` (Linux, Windows):
+  /// nada é reconhecido e o texto que o servidor já tem fica como está.
+  final InkRecognizer? recognizer;
+
+  /// A chave "Reconhecer escrita (busca)" deste aparelho; sem ela, sempre ligado.
+  final bool Function()? recognizeEnabled;
+
+  /// Espera sem traços antes de transcrever uma página.
+  final Duration recognizeDelay;
+
+  /// Transcreve uma página (os testes trocam por uma versão sem segmentação).
+  final Future<PageTranscript> Function(PageDoc doc, InkRecognizer r, {bool Function()? isCancelled}) transcriber;
+
   var _pages = <_Local>[];
   final _ops = <_Op>[];
   List<NotebookPage> _lastRemote = const [];
@@ -225,6 +270,9 @@ class NotebookController implements NotebookSession {
   Timer? _persistTimer;
   Timer? _retryTimer;
   Timer? _streamTimer;
+  Timer? _recognizeTimer;
+  bool _recognizing = false;
+  bool _recognizeAgain = false;
   late Duration _retryDelay = retryBase;
   late Duration _streamDelay = retryBase;
   Future<void>? _inFlight;
@@ -250,6 +298,7 @@ class NotebookController implements NotebookSession {
 
   final _pagesCtl = StreamController<List<NotebookPageState>>.broadcast();
   final _statusCtl = StreamController<SaveStatus>.broadcast();
+  final _transcriptCtl = StreamController<({String pageId, PageTranscript transcript})>.broadcast();
 
   // ---- NotebookSession ------------------------------------------------------
 
@@ -265,6 +314,13 @@ class NotebookController implements NotebookSession {
 
   @override
   NotebookImageStore get images => _images;
+
+  /// Cada vez que uma página é transcrita (para a camada de ortografia da tela).
+  /// **Não** passa por [pages]: o texto reconhecido não reemite as páginas.
+  Stream<({String pageId, PageTranscript transcript})> get transcripts => _transcriptCtl.stream;
+
+  /// A última transcrição feita neste aparelho para a página (`null` se ainda não houve).
+  PageTranscript? transcriptOf(String pageId) => _byId(pageId)?.transcript;
 
   /// Páginas como a tela as vê agora.
   List<NotebookPageState> get currentPages => [
@@ -301,6 +357,7 @@ class NotebookController implements NotebookSession {
       _maxWaitTimer = null;
       unawaited(flush());
     });
+    _scheduleRecognition();
   }
 
   @override
@@ -329,9 +386,16 @@ class NotebookController implements NotebookSession {
     final src = _pages[idx];
     final newPageId = newId();
     final copy = _Local(newPageId, src.background, src.doc, 0, dirty: !src.doc.isEmpty && !src.locked)..gen = 1;
+    // A cópia leva o texto reconhecido da original (mesma tinta, mesma transcrição).
+    copy
+      ..text = src.text
+      ..recognizedDoc = src.recognizedDoc
+      ..textDirty = src.text.isNotEmpty && !src.locked
+      ..transcript = src.transcript;
     _pages.insert(idx + 1, copy);
     _ops.add(_AddOp(newPageId, src.background));
     _afterStructureChange();
+    _scheduleRecognition();
   }
 
   @override
@@ -444,6 +508,7 @@ class NotebookController implements NotebookSession {
     _persistTimer?.cancel();
     _retryTimer?.cancel();
     _streamTimer?.cancel();
+    _recognizeTimer?.cancel();
     _sub?.cancel();
     if (holds && !_noteGone) unawaited(_persist());
     if (_cacheDirty && !_noteGone) unawaited(_writeCacheNow());
@@ -455,6 +520,7 @@ class NotebookController implements NotebookSession {
     _settledWaiters.clear();
     _pagesCtl.close();
     _statusCtl.close();
+    _transcriptCtl.close();
   }
 
   // ---- recebimento do repositório -------------------------------------------
@@ -543,6 +609,7 @@ class NotebookController implements NotebookSession {
     final l = _decodeLocal(r.id, r.background, r.data, r.version);
     l.nearLimit = r.data.length > pageWarnLength;
     l.remoteData = r.data;
+    l.text = r.recognizedText; // já transcrita (aqui ou em outro aparelho): não reconhecer de novo ao abrir
     return l;
   }
 
@@ -592,6 +659,7 @@ class NotebookController implements NotebookSession {
       l.nearLimit = r.data.length > pageWarnLength;
       if (merged != l.doc) {
         l.doc = merged;
+        _scheduleRecognition(); // a escrita mudou: o texto desta página está velho
         return true;
       }
     } on PageDecodeException catch (e) {
@@ -691,7 +759,8 @@ class NotebookController implements NotebookSession {
     // Tudo o que dava para enviar foi confirmado: a fila local fica só com o que o
     // servidor recusou de forma permanente (ou não entendemos), se houver.
     await _persist();
-    _notifyPending(false);
+    // O texto reconhecido ainda por vir mantém o controller vivo (não é "pendente" para a tela).
+    if (!_hasTextWork) _notifyPending(false);
     _setStatus(_idleStatus());
   }
 
@@ -745,6 +814,8 @@ class NotebookController implements NotebookSession {
         }
         final NotebookPage saved;
         l.inflightData = sent;
+        final sendText = l.textPending;
+        final textRev = l.textRev;
         try {
           saved = await _repo.savePage(NotebookPage(
             id: l.id,
@@ -752,6 +823,8 @@ class NotebookController implements NotebookSession {
             idx: _pages.indexOf(l),
             background: l.background,
             data: sent,
+            recognizedText: sendText ? l.text : '',
+            withRecognizedText: sendText,
             version: l.version,
           ));
         } on NotebookRepositoryException catch (e) {
@@ -787,6 +860,7 @@ class NotebookController implements NotebookSession {
             if (merged != l.doc) {
               l.doc = merged;
               changed = true;
+              _scheduleRecognition(); // o documento mesclado tem escrita nova: transcrever de novo
             }
           } on PageDecodeException {
             _lock(l);
@@ -794,6 +868,8 @@ class NotebookController implements NotebookSession {
             continue;
           }
         }
+        // O texto só conta como gravado sem conflito (em conflito o repositório não o grava).
+        if (sendText && l.textRev == textRev && saved.data == sent) l.textDirty = false;
         l.seenVersion = math.max(l.seenVersion, saved.version);
         l.tooLarge = false;
         l.nearLimit = math.max(sent.length, saved.data.length) > pageWarnLength;
@@ -828,6 +904,8 @@ class NotebookController implements NotebookSession {
     _maxWaitTimer = null;
     _persistTimer?.cancel();
     _persistTimer = null;
+    _recognizeTimer?.cancel();
+    _recognizeTimer = null;
     _cacheDirty = false;
     unawaited(_store(() async {
       try {
@@ -873,6 +951,98 @@ class NotebookController implements NotebookSession {
     if (_disposed || _status == s) return;
     _status = s;
     _statusCtl.add(s);
+  }
+
+  // ---- reconhecimento da escrita (texto para a busca) ------------------------
+
+  bool get _recognitionOn => recognizer != null && (recognizeEnabled?.call() ?? true);
+
+  /// Há texto reconhecido a caminho: transcrição agendada/em andamento ou texto por enviar.
+  bool get _hasTextWork => _recognizeTimer != null || _recognizing || _pages.any((l) => l.textPending);
+
+  /// Agenda a transcrição das páginas cuja escrita mudou, [recognizeDelay] depois da
+  /// última mudança. Mantém o controller vivo (via `onPendingChanged`) até o texto chegar
+  /// ao servidor, mesmo que a tela já tenha fechado.
+  void _scheduleRecognition() {
+    if (_disposed || _noteGone || !_recognitionOn || !_pages.any((l) => l.needsRecognition)) return;
+    _recognizeTimer?.cancel();
+    _recognizeTimer = Timer(recognizeDelay, () {
+      _recognizeTimer = null;
+      unawaited(_recognizeStale());
+    });
+    _notifyPending(true);
+  }
+
+  /// Transcreve agora o que ainda não foi (usado ao sair do caderno ou ao pausar o app),
+  /// sem esperar o tempo sem traços. Completa depois de gravar o texto.
+  Future<void> recognizeNow() async {
+    if (_disposed) return;
+    _recognizeTimer?.cancel();
+    _recognizeTimer = null;
+    await _recognizeStale();
+  }
+
+  Future<void> _recognizeStale() async {
+    final rec = recognizer;
+    if (_disposed || _noteGone || rec == null || !_recognitionOn) {
+      _endTextWork();
+      return;
+    }
+    if (_recognizing) {
+      _recognizeAgain = true;
+      return;
+    }
+    _recognizing = true;
+    var textChanged = false;
+    try {
+      do {
+        _recognizeAgain = false;
+        var ready = false;
+        try {
+          ready = await rec.isModelReady();
+        } catch (_) {}
+        if (!ready) break; // sem modelo: a escrita segue normal, sem texto
+        for (final l in List.of(_pages)) {
+          if (_disposed || _noteGone) return;
+          if (!l.needsRecognition || !_pages.contains(l)) continue;
+          final doc = l.doc;
+          final PageTranscript t;
+          try {
+            t = await transcriber(doc, rec, isCancelled: () => _disposed || !identical(l.doc, doc));
+          } catch (e) {
+            debugPrint('Caderno: não foi possível reconhecer a página ${l.id}: $e');
+            if (identical(l.doc, doc)) l.recognizedDoc = doc; // não insistir até a escrita mudar
+            continue;
+          }
+          if (_disposed || _noteGone) return;
+          if (!identical(l.doc, doc)) continue; // escreveu de novo: a mudança já reagendou
+          l.recognizedDoc = doc;
+          l.transcript = t;
+          _transcriptCtl.add((pageId: l.id, transcript: t));
+          // Escrita que não foi lida (erro do reconhecedor) não apaga o texto que já existia.
+          if (t.text.isEmpty && t.lineCount > 0) continue;
+          if (t.text != l.text) {
+            l.text = t.text;
+            l.textRev++;
+            l.textDirty = true;
+          }
+          if (l.textDirty) textChanged = true;
+        }
+      } while (_recognizeAgain && !_disposed);
+    } finally {
+      _recognizing = false;
+    }
+    if (_disposed || _noteGone) return;
+    if (textChanged) {
+      await flush();
+    }
+    _endTextWork();
+  }
+
+  /// Sem nada mais a transcrever nem a enviar: o controller pode ser descartado.
+  void _endTextWork() {
+    if (_disposed || _hasTextWork || _needsSendAny || _inFlight != null) return;
+    _notifyPending(false);
   }
 
   // ---- fila local (shared_preferences) ---------------------------------------
@@ -1008,9 +1178,13 @@ class NotebookController implements NotebookSession {
         local.doc = local.doc.merge(doc);
         local.dirty = true;
         local.gen++;
+        _scheduleRecognition();
       } else {
         // Página que o servidor não tem mais: recria no fim com a tinta guardada.
-        _pages.add(_Local(e.key, parsePageBackground(m['bg']), doc, (m['version'] as num?)?.toInt() ?? 0, dirty: true)..gen = 1);
+        _pages.add(_Local(e.key, parsePageBackground(m['bg']), doc, (m['version'] as num?)?.toInt() ?? 0, dirty: true)
+          ..gen = 1
+          ..recognizedDoc = null);
+        _scheduleRecognition();
       }
     }
   }

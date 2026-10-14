@@ -43,7 +43,7 @@ packages:
     source: git
     version: "6.1.0"
   archive:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: archive
       sha256: "58c8d17d8d589c4259f773522815115de873c397b977a29993588487d3f9acb4"
@@ -406,6 +406,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "8.2.1"
+  google_mlkit_commons:
+    dependency: transitive
+    description:
+      name: google_mlkit_commons
+      sha256: "621e94de22fd0f1e902e593b892746d80ab7542b39c2552aa091d904eb82fc6f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.13.0"
+  google_mlkit_digital_ink_recognition:
+    dependency: "direct main"
+    description:
+      name: google_mlkit_digital_ink_recognition
+      sha256: c0483cefaf5671e9b056413a2c8ec67b6f74ee4ac2f31079f5af0808ad339395
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.16.1"
   gotrue:
     dependency: transitive
     description:
@@ -663,7 +679,7 @@ packages:
     source: hosted
     version: "3.0.0"
   package_info_plus:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: package_info_plus
       sha256: "468c26b4254ab01979fa5e4a98cb343ea3631b9acee6f21028997419a80e1a20"

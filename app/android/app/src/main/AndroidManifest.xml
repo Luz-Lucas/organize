@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <!-- Atualização por dentro do app: abrir o instalador do sistema com o APK baixado (UpdateChannel.kt). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="Organize"
         android:name="${applicationName}"
@@ -168,8 +170,8 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <!-- Abrir arquivo do Drive: entrega o arquivo baixado (só files/drive_cache/) ao app que o abre, por URI com
-             permissão temporária. Não exportado; o ShareGuard recusa essa autoridade vinda de fora. -->
+        <!-- Abrir arquivo do Drive (files/drive_cache/) e instalar atualização (cache/updates/): entrega o arquivo ao app
+             que o abre, por URI com permissão temporária. Não exportado; o ShareGuard recusa essa autoridade vinda de fora. -->
         <provider
             android:name=".DriveFileProvider"
             android:authorities="${applicationId}.drive_files"

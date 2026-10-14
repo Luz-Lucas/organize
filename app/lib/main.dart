@@ -1,6 +1,6 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, exit;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
@@ -32,9 +32,21 @@ import 'location/geolocator_location_service.dart';
 import 'location/location_report_sync.dart';
 import 'notebook/data/supabase_notebook_image_store.dart';
 import 'notebook/data/supabase_notebook_repository.dart';
+import 'notebook/intelligence/mlkit_recognizer.dart';
+import 'notebook/intelligence/model_manager.dart';
+import 'notebook/intelligence/recognizer.dart';
+import 'notebook/intelligence/spell_checker.dart';
+import 'notebook/state/handwriting_providers.dart';
 import 'notebook/state/notebook_pending_store.dart';
 import 'notebook/state/notebook_providers.dart';
 import 'location/location_service.dart';
+import 'update/android_update_installer.dart';
+import 'update/linux_update_installer.dart';
+import 'update/release_repository.dart';
+import 'update/update_installer.dart';
+import 'update/update_prefs.dart';
+import 'update/update_providers.dart';
+import 'update/windows_update_installer.dart';
 import 'widgets/widget_background.dart';
 import 'widgets/widget_links.dart';
 import 'widgets/widget_sink.dart';
@@ -74,6 +86,9 @@ Future<void> main() async {
     registerWidgetBackgroundRefresh().catchError((_) {});
     registerLocationBackgroundReport().catchError((_) {});
   }
+  // Reconhecimento de escrita e corretor: só no Android (ML Kit / corretor do sistema);
+  // no Linux e no Windows ficam os Noop e nada muda.
+  final inkPolicy = InkDownloadPolicy();
   runApp(ProviderScope(
     overrides: [
       repositoryProvider.overrideWithValue(SupabaseRepository(client)),
@@ -87,6 +102,10 @@ Future<void> main() async {
       githubRepositoryProvider.overrideWithValue(SupabaseGithubRepository(client)),
       notebookRepositoryProvider.overrideWithValue(SupabaseNotebookRepository(client)),
       notebookPendingStoreProvider.overrideWithValue(const SharedPreferencesNotebookPendingStore()),
+      handwritingPrefsStoreProvider.overrideWithValue(const SharedPreferencesHandwritingPrefsStore()),
+      inkDownloadPolicyProvider.overrideWithValue(inkPolicy),
+      if (isAndroid) inkRecognizerProvider.overrideWithValue(MlKitInkRecognizer(policy: inkPolicy)),
+      if (isAndroid) spellCheckerProvider.overrideWithValue(PlatformSpellChecker()),
       notesTabPrefsProvider.overrideWithValue(const SharedPreferencesNotesTabPrefs()),
       agendaFilterPrefsProvider.overrideWithValue(const SharedPreferencesAgendaFilterPrefs()),
       notebookImageStoreFactoryProvider
@@ -103,6 +122,20 @@ Future<void> main() async {
       locationSignedInProvider.overrideWithValue(() => client.auth.currentSession != null),
       if (isAndroid) appIconServiceProvider.overrideWithValue(const MethodChannelAppIconService()),
       currentEmailProvider.overrideWithValue(client.auth.currentUser?.email),
+      // Atualização por dentro do app (Android, Linux e Windows). No desktop só em build de release:
+      // em `flutter run` a pasta do executável é a de desenvolvimento e não deve ser trocada.
+      releaseRepositoryProvider.overrideWithValue(SupabaseReleaseRepository(client)),
+      updatePrefsProvider.overrideWithValue(const SharedPreferencesUpdatePrefs()),
+      installedVersionLoaderProvider.overrideWithValue(loadInstalledVersionFromPlatform),
+      updateInstallerProvider.overrideWithValue(
+          isAndroid
+              ? AndroidUpdateInstaller()
+              : (kIsWeb || !kReleaseMode
+                  ? const NoopUpdateInstaller()
+                  : (Platform.isLinux
+                      ? LinuxUpdateInstaller()
+                      : (Platform.isWindows ? WindowsUpdateInstaller() : const NoopUpdateInstaller())))),
+      updateExitProvider.overrideWithValue(() => exit(0)),
     ],
     child: ShareIntentListener(
       router: router,

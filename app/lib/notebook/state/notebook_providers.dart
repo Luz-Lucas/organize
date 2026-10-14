@@ -1,13 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart' show AppLifecycleListener;
+import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../core/notebook_core.dart';
 import '../data/notebook_page.dart';
 import '../data/notebook_repository.dart';
+import '../intelligence/model_manager.dart';
 import '../ui/notebook_session.dart';
+import 'handwriting_providers.dart';
 import 'notebook_controller.dart';
 import 'notebook_pending_store.dart';
 
@@ -33,12 +35,17 @@ final notebookImageStoreFactoryProvider = Provider<NotebookImageStore Function(S
 /// salvar (mesmo depois de a tela fechar) e some quando tudo foi confirmado.
 final notebookControllerProvider = Provider.autoDispose.family<NotebookController, String>((ref, noteId) {
   KeepAliveLink? link;
+  // A chave é lida por um espelho: `ref.read` não pode ser chamado de dentro de `onCancel`.
+  var recognizeOn = true;
+  ref.listen(recognizeWritingEnabledProvider, (_, on) => recognizeOn = on, fireImmediately: true);
   final controller = NotebookController(
     noteId: noteId,
     repo: ref.read(notebookRepositoryProvider),
     images: ref.read(notebookImageStoreFactoryProvider)(noteId),
     pending: ref.read(notebookPendingStoreProvider),
     encoder: ref.read(notebookPageEncoderProvider),
+    recognizer: ref.read(inkRecognizerProvider),
+    recognizeEnabled: () => recognizeOn,
     onPendingChanged: (pending) {
       if (pending) {
         link ??= ref.keepAlive();
@@ -48,8 +55,18 @@ final notebookControllerProvider = Provider.autoDispose.family<NotebookControlle
       }
     },
   );
-  // Ao pausar/esconder o app grava na hora; ao voltar, tenta enviar o que ficou offline.
-  final lifecycle = AppLifecycleListener(onStateChange: (_) => unawaited(controller.flush()));
+  // Ao pausar/esconder o app grava na hora (e transcreve a escrita, sem esperar os 3 s);
+  // ao voltar, tenta enviar o que ficou offline.
+  final lifecycle = AppLifecycleListener(onStateChange: (state) {
+    unawaited(controller.flush());
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(controller.recognizeNow());
+    }
+  });
+  // A tela saiu do caderno: transcreve já o que faltar (o controller fica vivo até gravar).
+  ref.onCancel(() => unawaited(controller.recognizeNow()));
   ref.onDispose(() {
     lifecycle.dispose();
     controller.dispose();
