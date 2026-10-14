@@ -1,4 +1,5 @@
 import '../domain/calendar_event.dart';
+import '../domain/event_tag.dart';
 import '../domain/note.dart';
 import '../domain/notice.dart';
 import '../domain/space.dart';
@@ -42,6 +43,20 @@ abstract interface class Repository {
 
   /// Todas as ocorrências da série (inclusive as já passadas), por início.
   Future<List<CalendarEvent>> listSeries(String seriesId);
+
+  /// Etiquetas coloridas dos eventos, por posição.
+  Stream<List<EventTag>> watchTags();
+  Future<void> upsertTag(EventTag tag);
+
+  /// Os eventos com a etiqueta ficam sem etiqueta (o banco faz `on delete set null`).
+  Future<void> deleteTag(String id);
+
+  /// Regrava as posições das etiquetas como 0..n-1, na ordem recebida.
+  Future<void> reorderTags(List<EventTag> ordered);
+
+  /// Cria as etiquetas iniciais (Aula, Academia, Sazonal, Reunião) que faltam e classifica os eventos
+  /// ainda sem etiqueta. Devolve quantas etiquetas criou; chamar de novo não cria nada.
+  Future<int> seedEventTags();
 
   Stream<List<Notice>> watchNotices();
   Future<void> upsertNotice(Notice notice);

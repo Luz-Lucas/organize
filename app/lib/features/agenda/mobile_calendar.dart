@@ -3,10 +3,12 @@ import 'package:intl/intl.dart';
 
 import '../../domain/agenda.dart';
 import '../../domain/calendar_event.dart';
+import '../../domain/event_tag.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 import 'calendar_common.dart';
 import 'calendar_layout.dart';
+import 'tag_style.dart';
 
 const _initials = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
@@ -20,6 +22,7 @@ class MobileCalendar extends StatelessWidget {
     required this.spaceNames,
     required this.onSelect,
     required this.onOpen,
+    this.tags = const {},
   });
 
   final DateTime selected;
@@ -28,6 +31,18 @@ class MobileCalendar extends StatelessWidget {
   final Map<String, String> spaceNames;
   final ValueChanged<DateTime> onSelect;
   final ValueChanged<CalendarEvent> onOpen;
+
+  /// Etiquetas por id; sem elas os eventos têm o visual por espaço.
+  final Map<String, EventTag> tags;
+
+  /// Ponto do dia no mês: a cor da etiqueta do primeiro evento etiquetado; senão o destaque do tema.
+  Color _dotColor(OrgThemeSpec org, List<CalendarEvent> dayEvents) {
+    for (final e in dayEvents) {
+      final look = eventLook(org, e, tags);
+      if (look.tagged) return look.accent;
+    }
+    return org.accentText;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +77,7 @@ class MobileCalendar extends StatelessWidget {
                     isToday: grid[r * 7 + c] == today,
                     isSelected: grid[r * 7 + c] == sel,
                     hasEvents: eventsOnDay(events, grid[r * 7 + c]).isNotEmpty,
+                    dotColor: _dotColor(org, eventsOnDay(events, grid[r * 7 + c])),
                     onTap: () => onSelect(grid[r * 7 + c]),
                   ),
                 ),
@@ -72,57 +88,90 @@ class MobileCalendar extends StatelessWidget {
         for (final e in dayEvents)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: OrgCard(
-              key: ValueKey('agenda-event-${e.id}'),
-              onTap: () => onOpen(e),
-              child: Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: eventColor(org, e.spaceId),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                e.title,
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.titleSmall,
-                              ),
-                            ),
-                            if (e.seriesId != null) ...[
-                              const SizedBox(width: 6),
-                              Icon(Icons.repeat, size: 14, color: org.inkMuted),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          [
-                            eventTimeLabel(e, sel),
-                            if (spaceNames[e.spaceId] != null) spaceNames[e.spaceId]!,
-                            if ((e.location ?? '').isNotEmpty) e.location!,
-                          ].join(' · '),
-                          style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            child: _EventCard(
+              event: e,
+              day: sel,
+              look: eventLook(org, e, tags),
+              spaceName: spaceNames[e.spaceId],
+              onOpen: onOpen,
             ),
           ),
       ],
+    );
+  }
+}
+
+class _EventCard extends StatelessWidget {
+  const _EventCard({
+    required this.event,
+    required this.day,
+    required this.look,
+    required this.spaceName,
+    required this.onOpen,
+  });
+
+  final CalendarEvent event;
+  final DateTime day;
+  final EventLook look;
+  final String? spaceName;
+  final ValueChanged<CalendarEvent> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final org = context.org;
+    final theme = Theme.of(context);
+    final e = event;
+    return OrgCard(
+      key: ValueKey('agenda-event-${e.id}'),
+      onTap: () => onOpen(e),
+      color: look.tagged ? look.fill : null,
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 36,
+            decoration: BoxDecoration(
+              color: look.tagged ? null : eventColor(org, e.spaceId),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: look.tagged ? ColoredBox(key: ValueKey('tag-bar-${e.id}-list'), color: look.accent) : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        e.title,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: look.taggedWeight),
+                      ),
+                    ),
+                    if (e.seriesId != null) ...[
+                      const SizedBox(width: 6),
+                      Icon(Icons.repeat, size: 14, color: org.inkMuted),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    eventTimeLabel(e, day),
+                    ?spaceName,
+                    if ((e.location ?? '').isNotEmpty) e.location!,
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -134,6 +183,7 @@ class _MiniDay extends StatelessWidget {
     required this.isToday,
     required this.isSelected,
     required this.hasEvents,
+    required this.dotColor,
     required this.onTap,
   });
 
@@ -142,6 +192,7 @@ class _MiniDay extends StatelessWidget {
   final bool isToday;
   final bool isSelected;
   final bool hasEvents;
+  final Color dotColor;
   final VoidCallback onTap;
 
   @override
@@ -177,7 +228,7 @@ class _MiniDay extends StatelessWidget {
               height: 5,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: hasEvents ? org.accentText : Colors.transparent,
+                color: hasEvents ? dotColor : Colors.transparent,
               ),
             ),
           ],

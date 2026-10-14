@@ -89,7 +89,7 @@ class AgendaTarefasWidgetProvider : BaseOrgWidget() {
                 views.setViewVisibility(evRows[i], View.VISIBLE)
                 views.setTextViewText(evTimes[i], WidgetData.eventTimeCompact(e, nowMillis, zone))
                 views.setTextColor(evTimes[i], WidgetData.eventTimeColor(e, nowMillis, theme))
-                views.setTextViewText(evTitles[i], e.title)
+                views.setTextViewText(evTitles[i], taggedTitle(e))
                 views.setTextColor(evTitles[i], WidgetData.eventTitleColor(e, nowMillis, theme))
             }
             showMore(views, R.id.ev_more, theme, events.size - shown.size)

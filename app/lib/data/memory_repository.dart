@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import '../domain/calendar_event.dart';
+import '../domain/event_tag.dart';
+import '../domain/ids.dart';
 import '../domain/note.dart';
 import '../domain/notice.dart';
 import '../domain/space.dart';
@@ -15,6 +17,7 @@ class MemoryRepository implements Repository {
   final _notes = <String, Note>{};
   final _tasks = <String, TaskItem>{};
   final _events = <String, CalendarEvent>{};
+  final _tags = <String, EventTag>{};
   final _notices = <String, Notice>{};
   final _changes = StreamController<void>.broadcast(sync: true);
 
@@ -125,6 +128,67 @@ class MemoryRepository implements Repository {
   Future<List<CalendarEvent>> listSeries(String seriesId) async =>
       _events.values.where((e) => e.seriesId == seriesId).toList()
         ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+  @override
+  Stream<List<EventTag>> watchTags() => _watch(() => _sortedTags());
+
+  List<EventTag> _sortedTags() => _tags.values.toList()
+    ..sort((a, b) {
+      final byPosition = a.position.compareTo(b.position);
+      return byPosition != 0 ? byPosition : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
+  @override
+  Future<void> upsertTag(EventTag tag) async {
+    // Como o índice único (user_id, lower(name)) do banco.
+    final key = tag.name.trim().toLowerCase();
+    final clash = _tags.values.any((t) => t.id != tag.id && t.name.trim().toLowerCase() == key);
+    if (clash) {
+      throw RepositoryException('Já existe uma etiqueta "${tag.name}"', duplicate: true);
+    }
+    return _write(() => _tags[tag.id] = tag);
+  }
+
+  @override
+  Future<void> deleteTag(String id) => _write(() {
+        _tags.remove(id);
+        // `on delete set null` do banco: os eventos ficam, sem etiqueta.
+        for (final e in _events.values.where((e) => e.tagId == id).toList()) {
+          _events[e.id] = e.copyWith(clearTag: true);
+        }
+      });
+
+  @override
+  Future<void> reorderTags(List<EventTag> ordered) => _write(() {
+        for (var i = 0; i < ordered.length; i++) {
+          _tags[ordered[i].id] = ordered[i].copyWith(position: i);
+        }
+      });
+
+  /// Mesmas etiquetas iniciais da função `seed_event_tags` do banco (por papel). A classificação dos
+  /// eventos existentes é do banco e fica fora daqui.
+  @override
+  Future<int> seedEventTags() async {
+    const initial = [
+      EventTag(id: '', name: 'Aula', color: '#3E63DD', role: EventTagRole.main, position: 0),
+      EventTag(id: '', name: 'Academia', color: '#30A46C', role: EventTagRole.secondary, position: 1),
+      EventTag(id: '', name: 'Sazonal', color: '#FFB224', role: EventTagRole.seasonal, position: 2),
+      EventTag(id: '', name: 'Reunião', color: '#8E4EC6', role: EventTagRole.meeting, position: 3),
+    ];
+    final missing = [
+      for (final t in initial)
+        if (!_tags.values.any((x) => x.role == t.role) &&
+            !_tags.values.any((x) => x.name.toLowerCase() == t.name.toLowerCase()))
+          t.copyWith(id: newId()),
+    ];
+    if (missing.isEmpty) return 0;
+    await _write(() {
+      for (final t in missing) {
+        _tags[t.id] = t;
+      }
+    });
+    return missing.length;
+  }
 
   @override
   Stream<List<Notice>> watchNotices() => _watch(() {

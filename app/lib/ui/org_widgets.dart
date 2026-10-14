@@ -5,18 +5,21 @@ import 'org_theme.dart';
 /// Cartão padrão do app: fundo `surfaceRaised`, borda fina `line`, `radiusMd`.
 /// Com [onTap] vira clicável (com efeito de toque recortado no raio).
 class OrgCard extends StatelessWidget {
-  const OrgCard({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.onTap});
+  const OrgCard({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.onTap, this.color});
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
+
+  /// Fundo; o padrão é `surfaceRaised`.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final org = context.org;
     final radius = BorderRadius.circular(org.radiusMd);
     return Material(
-      color: org.surfaceRaised,
+      color: color ?? org.surfaceRaised,
       shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: org.line)),
       clipBehavior: Clip.antiAlias,
       child: onTap == null

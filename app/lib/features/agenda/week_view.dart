@@ -4,9 +4,11 @@ import 'package:intl/intl.dart';
 
 import '../../domain/agenda.dart';
 import '../../domain/calendar_event.dart';
+import '../../domain/event_tag.dart';
 import '../../ui/org_theme.dart';
 import 'calendar_common.dart';
 import 'calendar_layout.dart';
+import 'tag_style.dart';
 
 const double hourHeight = 48;
 const double _gutter = 52;
@@ -20,6 +22,7 @@ class WeekView extends StatefulWidget {
     required this.now,
     required this.onCreate,
     required this.onOpen,
+    this.tags = const {},
   });
 
   final DateTime weekStart;
@@ -27,6 +30,9 @@ class WeekView extends StatefulWidget {
   final DateTime now;
   final void Function(DateTime start, DateTime end) onCreate;
   final ValueChanged<CalendarEvent> onOpen;
+
+  /// Etiquetas por id; sem elas os eventos têm o visual por espaço.
+  final Map<String, EventTag> tags;
 
   @override
   State<WeekView> createState() => _WeekViewState();
@@ -82,19 +88,24 @@ class _WeekViewState extends State<WeekView> {
                             child: GestureDetector(
                               key: ValueKey('allday-${e.id}'),
                               onTap: () => widget.onOpen(e),
-                              child: Container(
+                              child: SizedBox(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: eventColor(org, e.spaceId),
-                                  borderRadius: BorderRadius.circular(org.radiusSm),
-                                ),
-                                child: Text(
-                                  e.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelSmall?.copyWith(color: org.onAccent),
-                                ),
+                                child: Builder(builder: (context) {
+                                  final look = eventLook(org, e, widget.tags);
+                                  return EventSurface(
+                                    look: look,
+                                    radius: org.radiusSm,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    barKey: ValueKey('tag-bar-${e.id}-allday'),
+                                    child: Text(
+                                      e.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(color: look.text, fontWeight: look.taggedWeight),
+                                    ),
+                                  );
+                                }),
                               ),
                             ),
                           ),
@@ -135,6 +146,7 @@ class _WeekViewState extends State<WeekView> {
                         isToday: d == today,
                         now: widget.now,
                         events: widget.events,
+                        tags: widget.tags,
                         onCreate: widget.onCreate,
                         onOpen: widget.onOpen,
                       ),
@@ -155,6 +167,7 @@ class _DayColumn extends StatefulWidget {
     required this.isToday,
     required this.now,
     required this.events,
+    required this.tags,
     required this.onCreate,
     required this.onOpen,
   });
@@ -163,6 +176,7 @@ class _DayColumn extends StatefulWidget {
   final bool isToday;
   final DateTime now;
   final List<CalendarEvent> events;
+  final Map<String, EventTag> tags;
   final void Function(DateTime start, DateTime end) onCreate;
   final ValueChanged<CalendarEvent> onOpen;
 
@@ -269,6 +283,7 @@ class _DayColumnState extends State<_DayColumn> {
                     key: ValueKey('event-block-${p.event.id}-${dayKey(widget.day)}'),
                     placed: p,
                     day: widget.day,
+                    tags: widget.tags,
                     onTap: () => widget.onOpen(p.event),
                   ),
                 ),
@@ -288,26 +303,26 @@ class _DayColumnState extends State<_DayColumn> {
 }
 
 class _EventBlock extends StatelessWidget {
-  const _EventBlock({super.key, required this.placed, required this.day, required this.onTap});
+  const _EventBlock({super.key, required this.placed, required this.day, required this.tags, required this.onTap});
 
   final PlacedEvent placed;
   final DateTime day;
+  final Map<String, EventTag> tags;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final org = context.org;
     final e = placed.event;
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(color: org.onAccent);
+    final look = eventLook(org, e, tags);
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(color: look.text);
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: EventSurface(
+        look: look,
+        radius: org.radiusSm,
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        clipBehavior: Clip.hardEdge,
-        decoration: BoxDecoration(
-          color: eventColor(org, e.spaceId),
-          borderRadius: BorderRadius.circular(org.radiusSm),
-        ),
+        barKey: ValueKey('tag-bar-${e.id}-${dayKey(day)}'),
         child: SingleChildScrollView(
           physics: const NeverScrollableScrollPhysics(),
           child: Column(
@@ -317,9 +332,9 @@ class _EventBlock extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: style?.copyWith(fontWeight: FontWeight.w600)),
+                        style: style?.copyWith(fontWeight: look.titleWeight)),
                   ),
-                  if (e.seriesId != null) Icon(Icons.repeat, size: 14, color: org.onAccent),
+                  if (e.seriesId != null) Icon(Icons.repeat, size: 14, color: look.text),
                 ],
               ),
               if (placed.height >= 40)

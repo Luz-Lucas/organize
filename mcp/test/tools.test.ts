@@ -69,11 +69,11 @@ describe.skipIf(!hasDb)('ferramentas MCP (Supabase local)', () => {
       'delete_task', 'search_notes', 'create_note', 'append_to_note', 'create_study_plan', 'list_notices',
       'create_notice', 'archive_notice', 'list_news', 'create_news_digest', 'list_alexa_devices',
       'list_alexa_routines', 'alexa_speak', 'alexa_run_routine', 'alexa_device', 'list_wake_plans', 'upsert_wake_plan',
-      'set_wake_override', 'clear_wake_override',
+      'set_wake_override', 'clear_wake_override', 'list_event_tags',
     ];
     for (const n of names) expect(by[n], n).toBeDefined();
     expect(tools.length).toBe(names.length);
-    for (const n of ['list_agenda', 'list_tasks', 'search_notes', 'list_notices', 'list_news', 'list_alexa_devices', 'list_alexa_routines', 'list_wake_plans']) {
+    for (const n of ['list_agenda', 'list_tasks', 'search_notes', 'list_notices', 'list_news', 'list_alexa_devices', 'list_alexa_routines', 'list_wake_plans', 'list_event_tags']) {
       expect(by[n].readOnlyHint, n).toBe(true);
     }
     for (const n of ['delete_event', 'delete_task', 'update_event', 'alexa_speak', 'alexa_run_routine', 'alexa_device', 'upsert_wake_plan', 'set_wake_override', 'clear_wake_override']) {

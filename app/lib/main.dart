@@ -12,6 +12,7 @@ import 'app/providers.dart';
 import 'app/router.dart';
 import 'app_icon/app_icon.dart';
 import 'data/github_repository.dart';
+import 'features/agenda/agenda_filter.dart';
 import 'features/notes/notebooks/notebooks_prefs.dart';
 import 'files/files_platform.dart';
 import 'data/supabase_alexa_repository.dart';
@@ -87,6 +88,7 @@ Future<void> main() async {
       notebookRepositoryProvider.overrideWithValue(SupabaseNotebookRepository(client)),
       notebookPendingStoreProvider.overrideWithValue(const SharedPreferencesNotebookPendingStore()),
       notesTabPrefsProvider.overrideWithValue(const SharedPreferencesNotesTabPrefs()),
+      agendaFilterPrefsProvider.overrideWithValue(const SharedPreferencesAgendaFilterPrefs()),
       notebookImageStoreFactoryProvider
           .overrideWithValue((noteId) => SupabaseNotebookImageStore(client, noteId: noteId)),
       filesPlatformProvider.overrideWithValue(

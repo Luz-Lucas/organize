@@ -33,6 +33,8 @@ data class WidgetEvent(
     val allDay: Boolean,
     val location: String?,
     val kind: String,
+    /** Cor da etiqueta do evento (ARGB), ou null se não tiver etiqueta. */
+    val tagColor: Int? = null,
 )
 
 data class WidgetTask(
@@ -85,6 +87,21 @@ object WidgetData {
         }
     }
 
+    /** '#RRGGBB' / '#AARRGGBB' válido -> cor; vazio, nulo ou inválido -> null (evento sem etiqueta). */
+    fun parseOptionalColor(value: String?): Int? {
+        if (value.isNullOrBlank()) return null
+        val s = value.trim().removePrefix("#")
+        if (s.length != 6 && s.length != 8) return null
+        if (!s.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) return null
+        return parseColor(value, 0)
+    }
+
+    /** Marca que antecede o título de um evento com etiqueta (o ponto é pintado com a cor dela). */
+    const val TAG_DOT = "●"
+
+    /** Título com o ponto da etiqueta na frente; sem etiqueta, o título como está. */
+    fun titleWithDot(e: WidgetEvent): String = if (e.tagColor == null) e.title else "$TAG_DOT ${e.title}"
+
     fun parseThemeJson(json: String?): WidgetTheme {
         val o = try {
             if (json.isNullOrBlank()) null else JSONObject(json)
@@ -133,6 +150,7 @@ object WidgetData {
                     location = if (o.isNull("location")) null
                     else o.optString("location", "").ifBlank { null },
                     kind = o.optString("kind", "outro"),
+                    tagColor = parseOptionalColor(o.optString("tagColor", "")),
                 ),
             )
         }

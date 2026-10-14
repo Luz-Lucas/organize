@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/calendar_event.dart';
+import '../domain/event_tag.dart';
 import '../domain/note.dart';
 import '../domain/notice.dart';
 import '../domain/space.dart';
@@ -106,6 +107,35 @@ class SupabaseRepository implements Repository {
     try {
       final rows = await _db.from('events').select().eq('series_id', seriesId).order('starts_at', ascending: true);
       return rows.map<CalendarEvent>(CalendarEvent.fromMap).toList();
+    } on PostgrestException catch (e) {
+      throw RepositoryException(e.message);
+    } catch (e) {
+      throw RepositoryException('Falha de conexão: $e');
+    }
+  }
+
+  @override
+  Stream<List<EventTag>> watchTags() => _watch('event_tags', EventTag.fromMap, 'position');
+
+  @override
+  Future<void> upsertTag(EventTag tag) => _upsert('event_tags', tag.toMap());
+
+  @override
+  Future<void> deleteTag(String id) => _delete('event_tags', id);
+
+  @override
+  Future<void> reorderTags(List<EventTag> ordered) {
+    if (ordered.isEmpty) return Future.value();
+    return _guard(() async => await _db
+        .from('event_tags')
+        .upsert([for (var i = 0; i < ordered.length; i++) ordered[i].copyWith(position: i).toMap()]));
+  }
+
+  @override
+  Future<int> seedEventTags() async {
+    try {
+      final n = await _db.rpc('seed_my_event_tags');
+      return n is num ? n.toInt() : 0;
     } on PostgrestException catch (e) {
       throw RepositoryException(e.message);
     } catch (e) {

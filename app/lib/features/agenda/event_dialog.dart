@@ -4,10 +4,12 @@ import 'package:intl/intl.dart';
 
 import '../../domain/agenda.dart';
 import '../../domain/calendar_event.dart';
+import '../../domain/event_tag.dart';
 import '../../domain/ids.dart';
 import '../../domain/recurrence.dart';
 import '../../domain/space.dart';
 import '../../ui/org_theme.dart';
+import '../notes/notebooks/notebooks_logic.dart' show parseFolderColor;
 import 'series_scope_dialog.dart';
 
 /// Diálogo de criar/editar evento. Fecha devolvendo o [CalendarEvent] salvo.
@@ -19,13 +21,16 @@ import 'series_scope_dialog.dart';
 /// Séries: com [onCreateSeries], evento novo ganha o seletor "Repetir" e, se
 /// houver repetição, salva por ele em vez de [onSave]. Com [onSaveScoped] /
 /// [onDeleteScoped], editar/excluir um evento que tem `seriesId` pergunta antes
-/// a quais ocorrências a ação vale.
+/// a quais ocorrências a ação vale. A etiqueta escolhida segue esse mesmo escopo.
+///
+/// Com [tags] não vazio, aparece o campo "Etiqueta" (chips coloridos mais "Sem etiqueta").
 class EventDialog extends StatefulWidget {
   const EventDialog({
     super.key,
     required this.initialStart,
     required this.initialEnd,
     required this.spaces,
+    this.tags = const [],
     this.existing,
     this.onSave,
     this.onDelete,
@@ -37,6 +42,7 @@ class EventDialog extends StatefulWidget {
   final DateTime initialStart;
   final DateTime initialEnd;
   final List<Space> spaces;
+  final List<EventTag> tags;
   final CalendarEvent? existing;
   final Future<String?> Function(CalendarEvent event)? onSave;
   final Future<String?> Function()? onDelete;
@@ -69,6 +75,9 @@ class _EventDialogState extends State<EventDialog> {
   late TimeOfDay _start = TimeOfDay.fromDateTime(widget.initialStart);
   late TimeOfDay _end = TimeOfDay.fromDateTime(widget.initialEnd);
   late String? _spaceId = widget.existing?.spaceId;
+
+  /// Etiqueta escolhida; uma que não existe mais (apagada em outro aparelho) conta como nenhuma.
+  late String? _tagId = widget.tags.any((t) => t.id == widget.existing?.tagId) ? widget.existing?.tagId : null;
   bool _busy = false;
   String? _error;
 
@@ -202,6 +211,7 @@ class _EventDialogState extends State<EventDialog> {
       externalId: old?.externalId,
       seriesId: old?.seriesId,
       recurrence: old?.recurrence,
+      tagId: _tagId,
     );
 
     Future<String?> Function()? save;
@@ -378,6 +388,36 @@ class _EventDialogState extends State<EventDialog> {
     ];
   }
 
+  List<Widget> _tagSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final org = context.org;
+    return [
+      const SizedBox(height: 12),
+      Text('Etiqueta', style: theme.textTheme.labelMedium?.copyWith(color: org.inkMuted)),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          ChoiceChip(
+            key: const Key('event-tag-none'),
+            label: const Text('Sem etiqueta'),
+            selected: _tagId == null,
+            onSelected: _busy ? null : (_) => setState(() => _tagId = null),
+          ),
+          for (final t in widget.tags)
+            ChoiceChip(
+              key: Key('event-tag-${t.id}'),
+              avatar: CircleAvatar(radius: 6, backgroundColor: parseFolderColor(t.color) ?? org.accentDeep),
+              label: Text(t.name),
+              selected: _tagId == t.id,
+              onSelected: _busy ? null : (_) => setState(() => _tagId = t.id),
+            ),
+        ],
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final hm = DateFormat.Hm('pt_BR');
@@ -445,6 +485,7 @@ class _EventDialogState extends State<EventDialog> {
                 controller: _location,
                 decoration: const InputDecoration(labelText: 'Local (opcional)'),
               ),
+              if (widget.tags.isNotEmpty) ..._tagSection(context),
               if (widget.spaces.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Wrap(

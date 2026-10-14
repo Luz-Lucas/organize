@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/providers.dart';
+import '../domain/event_tag.dart';
 import 'widget_appearance.dart';
 import 'widget_sink.dart';
 import 'widget_snapshot.dart';
@@ -86,6 +87,7 @@ final widgetSyncProvider = Provider<void>((ref) {
         tasks: tasks,
         themeId: themeId,
         bgTransparencyPct: bgPct,
+        tags: ref.read(eventTagsProvider).value ?? const <EventTag>[],
       ));
       await sink.refresh();
     } catch (_) {
@@ -100,5 +102,6 @@ final widgetSyncProvider = Provider<void>((ref) {
 
   ref.listen(eventsFromProvider(from), (_, _) => schedule(), fireImmediately: true);
   ref.listen(tasksProvider, (_, _) => schedule(), fireImmediately: true);
+  ref.listen(eventTagsProvider, (_, _) => schedule(), fireImmediately: true);
   ref.listen(settingsProvider, (_, _) => schedule(), fireImmediately: true);
 });

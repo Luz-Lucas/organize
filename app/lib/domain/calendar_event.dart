@@ -14,6 +14,7 @@ class CalendarEvent {
     this.externalId,
     this.seriesId,
     this.recurrence,
+    this.tagId,
   });
 
   final String id;
@@ -32,6 +33,9 @@ class CalendarEvent {
   /// Regra que gerou a série (informativa).
   final Recurrence? recurrence;
 
+  /// Etiqueta colorida (`event_tags.id`); `null` = sem etiqueta.
+  final String? tagId;
+
   CalendarEvent copyWith({
     String? id,
     String? title,
@@ -42,9 +46,11 @@ class CalendarEvent {
     String? spaceId,
     String? seriesId,
     Recurrence? recurrence,
+    String? tagId,
     bool clearLocation = false,
     bool clearSpace = false,
     bool clearSeries = false,
+    bool clearTag = false,
   }) =>
       CalendarEvent(
         id: id ?? this.id,
@@ -58,6 +64,7 @@ class CalendarEvent {
         externalId: externalId,
         seriesId: clearSeries ? null : (seriesId ?? this.seriesId),
         recurrence: clearSeries ? null : (recurrence ?? this.recurrence),
+        tagId: clearTag ? null : (tagId ?? this.tagId),
       );
 
   CalendarEvent withoutSpace() => CalendarEvent(
@@ -71,6 +78,7 @@ class CalendarEvent {
         externalId: externalId,
         seriesId: seriesId,
         recurrence: recurrence,
+        tagId: tagId,
       );
 
   factory CalendarEvent.fromMap(Map<String, dynamic> m) => CalendarEvent(
@@ -87,6 +95,7 @@ class CalendarEvent {
         recurrence: m['recurrence'] is Map
             ? Recurrence.fromMap(Map<String, dynamic>.from(m['recurrence'] as Map))
             : null,
+        tagId: m['tag_id'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -101,6 +110,7 @@ class CalendarEvent {
         'external_id': externalId,
         'series_id': seriesId,
         'recurrence': recurrence?.toMap(),
+        'tag_id': tagId,
       };
 
   @override
@@ -116,9 +126,10 @@ class CalendarEvent {
       other.source == source &&
       other.externalId == externalId &&
       other.seriesId == seriesId &&
-      other.recurrence == recurrence;
+      other.recurrence == recurrence &&
+      other.tagId == tagId;
 
   @override
   int get hashCode => Object.hash(id, title, startsAt, endsAt, allDay,
-      location, spaceId, source, externalId, seriesId, recurrence);
+      location, spaceId, source, externalId, seriesId, recurrence, tagId);
 }

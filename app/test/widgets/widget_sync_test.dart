@@ -6,6 +6,7 @@ import 'package:organizacional/app/providers.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/data/memory_settings_repository.dart';
 import 'package:organizacional/domain/calendar_event.dart';
+import 'package:organizacional/domain/event_tag.dart';
 import 'package:organizacional/domain/task_item.dart';
 import 'package:organizacional/widgets/widget_background.dart';
 import 'package:organizacional/widgets/widget_sink.dart';
@@ -43,6 +44,9 @@ class FakeSource implements WidgetDataSource {
 
   @override
   Future<String> themeId() async => 'safira';
+
+  @override
+  Future<List<EventTag>> tags() async => const [];
 }
 
 void main() {

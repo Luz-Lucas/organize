@@ -7,6 +7,7 @@ import '../data/repository.dart';
 import '../data/settings_repository.dart';
 import '../domain/alexa.dart';
 import '../domain/calendar_event.dart';
+import '../domain/event_tag.dart';
 import '../domain/news.dart';
 import '../domain/note.dart';
 import '../domain/notice.dart';
@@ -41,6 +42,10 @@ final notesProvider =
 
 final tasksProvider =
     StreamProvider<List<TaskItem>>((ref) => ref.watch(repositoryProvider).watchTasks());
+
+/// Etiquetas coloridas dos eventos (por posição).
+final eventTagsProvider =
+    StreamProvider<List<EventTag>>((ref) => ref.watch(repositoryProvider).watchTags());
 
 final eventsFromProvider = StreamProvider.autoDispose.family<List<CalendarEvent>, DateTime>(
   (ref, from) => ref.watch(repositoryProvider).watchEvents(from: from),

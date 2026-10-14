@@ -10,6 +10,7 @@ import '../../data/location_repository.dart';
 import '../../data/repository.dart';
 import '../../domain/alexa.dart';
 import '../../domain/calendar_event.dart';
+import '../../domain/event_tag.dart';
 import '../../domain/home_presence.dart';
 import '../../domain/ids.dart';
 import '../../domain/note.dart';
@@ -24,6 +25,7 @@ import '../../ui/common.dart';
 import '../../ui/motif_painter.dart';
 import '../../ui/org_theme.dart';
 import '../agenda/event_dialog.dart';
+import '../agenda/tag_style.dart';
 import '../email/email_card.dart';
 import '../tasks/task_dialog.dart';
 import 'dashboard_cards.dart';
@@ -108,6 +110,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         initialStart: start,
         initialEnd: start.add(const Duration(hours: 1)),
         spaces: spaces,
+        tags: ref.read(eventTagsProvider).value ?? const <EventTag>[],
         onSave: (event) async {
           try {
             await repo.upsertEvent(event);
@@ -329,7 +332,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       plans: plans,
     );
 
-    final nowNext = NowNextCard(now: now, events: events, spaceNames: names);
+    final nowNext = NowNextCard(
+      now: now,
+      events: events,
+      spaceNames: names,
+      tags: tagMap(ref.watch(eventTagsProvider).value ?? const <EventTag>[]),
+    );
     final wakeCard = WakeCard(
       now: now,
       plans: plansAsync,

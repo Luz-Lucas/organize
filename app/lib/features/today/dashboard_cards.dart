@@ -6,12 +6,14 @@ import 'package:intl/intl.dart';
 import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/calendar_event.dart';
+import '../../domain/event_tag.dart';
 import '../../domain/ids.dart';
 import '../../domain/news.dart';
 import '../../domain/task_item.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
+import '../agenda/tag_style.dart';
 import 'dashboard_data.dart';
 
 /// Cabeçalho padrão dos cartões do painel: ícone, título e um destino
@@ -96,11 +98,20 @@ Widget? _pendingBody(BuildContext context, AsyncValue<Object?> value, String err
 // --- Agora e a seguir -------------------------------------------------------
 
 class NowNextCard extends StatelessWidget {
-  const NowNextCard({super.key, required this.now, required this.events, required this.spaceNames});
+  const NowNextCard({
+    super.key,
+    required this.now,
+    required this.events,
+    required this.spaceNames,
+    this.tags = const {},
+  });
 
   final DateTime now;
   final AsyncValue<List<CalendarEvent>> events;
   final Map<String, String> spaceNames;
+
+  /// Etiquetas por id; sem elas a linha segue sem cor de etiqueta.
+  final Map<String, EventTag> tags;
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +139,7 @@ class NowNextCard extends StatelessWidget {
             if (nn.allDay.isNotEmpty) ...[
               const _MiniLabel('Dia todo'),
               for (final e in nn.allDay)
-                _EventRow(key: ValueKey('now-${e.id}'), event: e, spaceName: spaceNames[e.spaceId]),
+                _EventRow(key: ValueKey('now-${e.id}'), event: e, spaceName: spaceNames[e.spaceId], tags: tags),
             ],
             if (nn.current.isNotEmpty) ...[
               _MiniLabel('Agora', color: org.accentText),
@@ -137,13 +148,14 @@ class NowNextCard extends StatelessWidget {
                   key: ValueKey('now-${e.id}'),
                   event: e,
                   spaceName: spaceNames[e.spaceId],
+                  tags: tags,
                   highlight: true,
                 ),
             ],
             if (next.isNotEmpty) ...[
               const _MiniLabel('A seguir'),
               for (final e in next)
-                _EventRow(key: ValueKey('next-${e.id}'), event: e, spaceName: spaceNames[e.spaceId]),
+                _EventRow(key: ValueKey('next-${e.id}'), event: e, spaceName: spaceNames[e.spaceId], tags: tags),
               if (more > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
@@ -178,10 +190,11 @@ class NowNextCard extends StatelessWidget {
 }
 
 class _EventRow extends StatelessWidget {
-  const _EventRow({super.key, required this.event, this.spaceName, this.highlight = false});
+  const _EventRow({super.key, required this.event, this.spaceName, this.tags = const {}, this.highlight = false});
 
   final CalendarEvent event;
   final String? spaceName;
+  final Map<String, EventTag> tags;
   final bool highlight;
 
   @override
@@ -195,39 +208,52 @@ class _EventRow extends StatelessWidget {
       ?spaceName,
       if (location != null && location.isNotEmpty) location,
     ].join(' · ');
+    final look = eventLook(org, e, tags);
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 4,
+          height: 36,
+          margin: const EdgeInsets.only(right: 12, top: 2),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: look.tagged ? null : (highlight ? org.accentText : org.line),
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: look.tagged ? ColoredBox(key: ValueKey('tag-bar-${e.id}-dash'), color: look.accent) : null,
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(e.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: look.taggedWeight)),
+              if (details.isNotEmpty)
+                Text(
+                  details,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 44),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 4,
-              height: 36,
-              margin: const EdgeInsets.only(right: 12, top: 2),
-              decoration: BoxDecoration(
-                color: highlight ? org.accentText : org.line,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
-                  if (details.isNotEmpty)
-                    Text(
-                      details,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        // Com etiqueta, a linha ganha o fundo suave da cor dela.
+        child: look.tagged
+            ? DecoratedBox(
+                decoration: BoxDecoration(color: look.fill, borderRadius: BorderRadius.circular(org.radiusSm)),
+                child: Padding(padding: const EdgeInsets.fromLTRB(0, 0, 8, 0), child: row),
+              )
+            : row,
       ),
     );
   }

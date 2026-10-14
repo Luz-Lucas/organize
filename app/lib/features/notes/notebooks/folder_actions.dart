@@ -286,7 +286,7 @@ class _FolderDialogState extends State<FolderDialog> {
               runSpacing: 8,
               children: [
                 for (final c in folderPalette)
-                  _Swatch(
+                  PaletteSwatch(
                     key: Key('folder-color-${folderColorHex(c).substring(1)}'),
                     color: c,
                     selected: folderColorHex(c) == _color.toUpperCase(),
@@ -330,8 +330,9 @@ class _FolderDialogState extends State<FolderDialog> {
       Navigator.of(context).pop(FolderForm(name: _name.text.trim(), color: _color.toUpperCase(), kind: _kind));
 }
 
-class _Swatch extends StatelessWidget {
-  const _Swatch({super.key, required this.color, required this.selected, required this.onTap});
+/// Bolinha de cor da paleta fixa (pastas e etiquetas): marcada com um check quando escolhida.
+class PaletteSwatch extends StatelessWidget {
+  const PaletteSwatch({super.key, required this.color, required this.selected, required this.onTap});
 
   final Color color;
   final bool selected;

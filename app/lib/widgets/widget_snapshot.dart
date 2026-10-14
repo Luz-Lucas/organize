@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:ui' show Color;
 
 import '../domain/calendar_event.dart';
+import '../domain/event_tag.dart';
 import '../domain/task_item.dart';
+import '../features/notes/notebooks/notebooks_logic.dart' show folderColorHex, parseFolderColor;
 import '../ui/themes.dart';
 import 'widget_appearance.dart';
 
@@ -48,6 +50,7 @@ DateTime widgetWindowEnd(DateTime now) => DateTime(now.year, now.month, now.day 
 /// `state` aceita apenas `ok` ou `signed_out`; `error` é gravado pelo
 /// segundo plano sem tocar nas demais chaves. `bgTransparencyPct` (preferência do
 /// aparelho) vira `w_bg_alpha`; sem ele a chave não é gravada, preservando a escolha.
+/// Com [tags], cada evento etiquetado leva `tagColor` (`#RRGGBB`) para o widget desenhar o ponto colorido.
 Map<String, String> buildWidgetSnapshot({
   required DateTime now,
   required Iterable<CalendarEvent> events,
@@ -55,6 +58,7 @@ Map<String, String> buildWidgetSnapshot({
   required String themeId,
   String state = 'ok',
   int? bgTransparencyPct,
+  Iterable<EventTag> tags = const [],
 }) {
   assert(state == 'ok' || state == 'signed_out', 'state inválido: $state');
   final signedOut = state == 'signed_out';
@@ -81,6 +85,10 @@ Map<String, String> buildWidgetSnapshot({
           return a.dueAt!.compareTo(b.dueAt!);
         }));
 
+  final tagColors = <String, String>{
+    for (final t in tags)
+      if (parseFolderColor(t.color) case final c?) t.id: folderColorHex(c),
+  };
   final eventsJson = evs
       .map((e) => {
             'id': e.id,
@@ -90,6 +98,7 @@ Map<String, String> buildWidgetSnapshot({
             'allDay': e.allDay,
             'location': (e.location == null || e.location!.trim().isEmpty) ? null : e.location,
             'kind': _kind(e.title),
+            'tagColor': e.tagId == null ? null : tagColors[e.tagId],
           })
       .toList();
   final tasksJson = open

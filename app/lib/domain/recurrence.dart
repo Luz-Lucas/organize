@@ -173,7 +173,7 @@ class SeriesOps {
   /// Registros a gravar ao editar [target] para [edited] com o [scope].
   ///
   /// - `one`: só o alvo, que sai da série.
-  /// - `all`: todas recebem título/local/espaço/dia-inteiro, o mesmo
+  /// - `all`: todas recebem título/local/espaço/etiqueta/dia-inteiro, o mesmo
   ///   deslocamento de início (dias e minutos) e a nova duração.
   /// - `following`: igual a `all`, mas só as ocorrências a partir do alvo, que
   ///   passam a formar uma série nova (a menos que o alvo seja a primeira).
@@ -216,6 +216,8 @@ class SeriesOps {
             seriesId: seriesId,
             clearLocation: edited.location == null,
             clearSpace: edited.spaceId == null,
+            tagId: edited.tagId,
+            clearTag: edited.tagId == null,
           );
         }(),
     ];

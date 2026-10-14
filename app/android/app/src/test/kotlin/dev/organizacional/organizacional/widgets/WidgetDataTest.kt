@@ -134,4 +134,35 @@ class WidgetDataTest {
         assertEquals(t.accentText, WidgetData.taskTitleColor(WidgetTask("1", "x", "doing", null), t))
         assertEquals(t.ink, WidgetData.taskTitleColor(WidgetTask("1", "x", "todo", null), t))
     }
+
+    // ---- Etiquetas coloridas (tagColor) ----
+
+    @Test fun parsesTagColorWhenPresent() {
+        val evs = WidgetData.parseEventsJson(
+            """[{"id":"a","title":"Cálculo","start":5,"end":9,"allDay":false,"location":null,"kind":"aula","tagColor":"#3E63DD"}]""",
+        )
+        assertEquals(0xFF3E63DD.toInt(), evs[0].tagColor)
+    }
+
+    @Test fun tagColorIsNullWhenMissingNullOrInvalid() {
+        val evs = WidgetData.parseEventsJson(
+            """[
+              {"id":"a","title":"a","start":1,"end":2,"allDay":false},
+              {"id":"b","title":"b","start":3,"end":4,"allDay":false,"tagColor":null},
+              {"id":"c","title":"c","start":5,"end":6,"allDay":false,"tagColor":"azul"},
+              {"id":"d","title":"d","start":7,"end":8,"allDay":false,"tagColor":"#12345"},
+              {"id":"e","title":"e","start":9,"end":10,"allDay":false,"tagColor":""}
+            ]""",
+        )
+        assertEquals(5, evs.size)
+        evs.forEach { assertNull(it.id, it.tagColor) }
+    }
+
+    @Test fun titleGetsAColoredDotOnlyWhenTagged() {
+        val plain = ev("Dentista", 1, 2)
+        val tagged = WidgetEvent("t", "Cálculo", 1, 2, false, null, "aula", 0xFF3E63DD.toInt())
+        assertEquals("Dentista", WidgetData.titleWithDot(plain))
+        assertEquals("${WidgetData.TAG_DOT} Cálculo", WidgetData.titleWithDot(tagged))
+        assertTrue(WidgetData.titleWithDot(tagged).startsWith(WidgetData.TAG_DOT))
+    }
 }
