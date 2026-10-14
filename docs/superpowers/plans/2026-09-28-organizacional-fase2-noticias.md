@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status (2026-10-14):** implementado e no ar (a coleta agendada na nuvem traz manchetes do dia). Aberto: só o teste manual do Step 8 da Task 5.
+> **Status (2026-10-14):** concluído e no ar. O Step 8 da Task 5 foi conferido em produção (fonte G1 ligada e manchetes do dia chegando) e pelos testes automatizados (destaque por interesse em `news_screens_test.dart`, recusa de página que não é feed em `validate_test.ts`); o Supabase local não sobe neste ambiente.
 
 **Goal:** Coletar notícias de fontes confiáveis por RSS (catálogo + feeds próprios), filtrá-las pelos interesses e bloqueios configurados no app e mostrá-las numa aba Notícias e em Hoje.
 
@@ -2175,7 +2175,7 @@ Future<void> main() async {
 Run: `TZ=America/Sao_Paulo flutter test --exclude-tags integration && flutter analyze`
 Expected: `All tests passed!`; sem erros nem warnings. Se `separatorBuilder: (_, _)` der erro de parâmetro duplicado (Dart < 3.7), troque por `(context, index)`.
 
-- [ ] **Step 8: Teste manual contra o Supabase local**
+- [x] **Step 8: Teste manual contra o Supabase local**
 
 Run: `npx supabase functions serve news-fetch --env-file supabase/functions/.env` (terminal separado) e `cd app && flutter run -d linux --dart-define-from-file=env.json`
 Expected: em Notícias → ⚙, ligue "G1 / Principais", volte e toque em ↻: as manchetes aparecem. Coloque um interesse que esteja em alguma manchete e salve: ela sobe com ★. Adicionar `https://g1.globo.com` como feed mostra o erro.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status (2026-10-14):** implementado; testes verdes. Aberto: Task 9 Step 3 (conferência visual do app rodando).
+> **Status (2026-10-14):** concluído. Conferência visual (Task 9 Step 3) feita com capturas renderizadas das telas (Início em Violeta/Coral/Musgo e no celular, Agenda semana/mês com 22:00→02:00, Tarefas arrastando, Notas, Ajustes, Casa); achado corrigido: a caixa de tarefa do editor usava o azul fixo do appflowy e passou a seguir o tema.
 
 **Goal:** Refazer o front do app Organizacional com 10 temas escuros dos PDFs do usuário, navegação estilo Notion/Obsidian, Kanban, agenda em calendário (com eventos que atravessam a meia-noite), editor WYSIWYG de notas, quadro de avisos e ocultar/remover dispositivos da Alexa.
 
@@ -474,5 +474,5 @@ test('link wiki vira href wiki: no documento', () {
 
 - [x] **Step 1:** `flutter analyze` sem issues; `TZ=America/Sao_Paulo flutter test --exclude-tags integration` todo verde; `npx supabase test db` verde; bridge `npx vitest run` + typecheck verdes.
 - [x] **Step 2:** Revisão de código do branch inteiro (subagente revisor) contra o spec; corrigir achados.
-- [ ] **Step 3:** Rodar o app (`flutter run -d linux`) e conferir visualmente Início, Agenda (semana/mês, evento 22:00→02:00), Tarefas (arrastar), Notas (editor), Ajustes (trocar 3 temas), Casa.
+- [x] **Step 3:** Rodar o app (`flutter run -d linux`) e conferir visualmente Início, Agenda (semana/mês, evento 22:00→02:00), Tarefas (arrastar), Notas (editor), Ajustes (trocar 3 temas), Casa.
 - [x] **Step 4:** Commit por onda já feito; `npx supabase db push --linked` (migração nova); imagem da ponte (`docker build` → `docker save | ssh … docker load` → `docker compose up -d bridge`) na VM `198.51.100.10`; build Linux release instalado em `~/.local/opt/organizacional`; APKs (`--split-per-abi` arm64 + completo) em `~/organizacional-builds/`; `git push origin HEAD:main`.
