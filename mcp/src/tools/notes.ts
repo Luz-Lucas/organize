@@ -9,9 +9,10 @@ type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
 
 const MAX_BODY = 100_000;
 const title = z.string().trim().min(1).max(200);
+const PAGE_SEP = '\n\n';
 
 function noteSummary(r: Row, tz: string) {
-  return { id: r.id, title: r.title, spaceId: r.space_id, updatedAt: toIso(r.updated_at, tz) };
+  return { id: r.id, title: r.title, kind: r.kind ?? 'text', spaceId: r.space_id, updatedAt: toIso(r.updated_at, tz) };
 }
 
 export function snippet(body: string, query: string, len = 160): string {
@@ -64,13 +65,33 @@ async function findNote(ctx: ToolContext, ref: { id?: string; title?: string }):
   throw new UserError('Informe o id ou o título da nota.');
 }
 
+/** Páginas (idx, recognized_text) de um caderno, em ordem; filtra por dono. */
+async function notebookPages(ctx: ToolContext, noteId: string): Promise<Row[]> {
+  return check(await ctx.db.from('note_pages').select('idx, recognized_text')
+    .eq('user_id', ctx.userId).eq('note_id', noteId).order('idx', { ascending: true }).limit(2000)) as Row[];
+}
+
+/** Texto reconhecido (não vazio) de todas as páginas do usuário, agrupado por nota e na ordem das páginas. */
+async function recognizedTextByNote(ctx: ToolContext): Promise<Map<string, string>> {
+  const rows = check(await ctx.db.from('note_pages').select('note_id, idx, recognized_text')
+    .eq('user_id', ctx.userId).neq('recognized_text', '')
+    .order('note_id', { ascending: true }).order('idx', { ascending: true }).limit(20000)) as Row[];
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    const prev = out.get(r.note_id);
+    out.set(r.note_id, prev ? `${prev}${PAGE_SEP}${r.recognized_text}` : r.recognized_text);
+  }
+  return out;
+}
+
 export function registerNotes(server: McpServer, ctx: ToolContext): void {
   const tz = ctx.timeZone;
 
   server.registerTool('search_notes', {
     title: 'Buscar notas',
     description:
-      'Busca notas por título/corpo, sem diferenciar acentos nem maiúsculas; devolve id, título e trecho. ' +
+      'Busca notas por título/corpo, sem diferenciar acentos nem maiúsculas; devolve id, título, tipo (`kind`: text ou notebook) e trecho. ' +
+      'Cadernos manuscritos (`notebook`) são achados também pelo texto reconhecido da escrita. ' +
       'Informe `id` ou `title` (exato, sem diferenciar caixa/espaços) para obter uma nota com o corpo completo. ' +
       'Sem argumentos, lista as notas mais recentes.',
     inputSchema: {
@@ -81,17 +102,29 @@ export function registerNotes(server: McpServer, ctx: ToolContext): void {
   }, safe(async (a) => {
     if (a.id || a.title) {
       const n = await findNote(ctx, a);
-      return okData({ note: { ...noteSummary(n, tz), parentId: n.parent_id, body: n.body } });
+      const note: Record<string, unknown> = { ...noteSummary(n, tz), parentId: n.parent_id, body: n.body };
+      if (n.kind === 'notebook') {
+        const pages = await notebookPages(ctx, n.id);
+        note.pageCount = pages.length;
+        note.recognizedText = pages.map((p) => p.recognized_text as string).filter((t) => t).join(PAGE_SEP);
+      }
+      return okData({ note });
     }
     let q = ctx.db.from('notes').select('*').eq('user_id', ctx.userId);
     if (a.spaceId) q = q.eq('space_id', a.spaceId);
     const rows = check(await q.order('updated_at', { ascending: false }).limit(5000)) as Row[];
     const needle = fold((a.query ?? '').trim());
+    const recognized = needle ? await recognizedTextByNote(ctx) : new Map<string, string>();
     const hits = needle
-      ? rows.filter((n) => fold(n.title).includes(needle) || fold(n.body ?? '').includes(needle))
+      ? rows.filter((n) => fold(n.title).includes(needle) || fold(n.body ?? '').includes(needle)
+        || fold(recognized.get(n.id) ?? '').includes(needle))
       : rows;
     return okData({
-      notes: hits.slice(0, clampLimit(a.limit, 20)).map((n) => ({ ...noteSummary(n, tz), snippet: snippet(n.body ?? '', a.query ?? '') })),
+      notes: hits.slice(0, clampLimit(a.limit, 20)).map((n) => {
+        const body: string = n.body ?? '';
+        const text = needle && !fold(body).includes(needle) && recognized.has(n.id) ? recognized.get(n.id)! : body;
+        return { ...noteSummary(n, tz), snippet: snippet(text, a.query ?? '') };
+      }),
     });
   }));
 
@@ -119,6 +152,7 @@ export function registerNotes(server: McpServer, ctx: ToolContext): void {
   }, safe(async (a) => {
     for (let attempt = 0; attempt < 5; attempt++) {
       const n = await findNote(ctx, a);
+      if (n.kind === 'notebook') throw new UserError('Esta nota é um caderno manuscrito; não dá para acrescentar texto a ela.');
       const existing: string = n.body ?? '';
       const trimmed = existing.replace(/\s+$/, '');
       const body = trimmed ? `${trimmed}\n\n${a.text}` : a.text;

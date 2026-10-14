@@ -12,8 +12,12 @@ import '../../domain/note.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
+import '../../files/drive_file_opener.dart';
+import '../../files/files_platform.dart';
+import '../import/importer.dart' show driveFileIdFromLink, driveLinkFileName, driveLinkInBody;
 import 'markdown_bridge.dart';
 import 'rich_note_editor.dart';
+import '../../app/back_navigation.dart';
 
 class NoteScreen extends ConsumerStatefulWidget {
   const NoteScreen({super.key, required this.noteId});
@@ -49,6 +53,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   bool _saveAgain = false;
   bool _disposed = false;
   bool _deleted = false;
+  // Nota recém-criada ("Sem título…" e vazia): foca o título com tudo selecionado.
+  bool _focusTitle = false;
+  // "Editar no Samsung Notes": baixando; erro do download; ou o aviso de que nenhum app abriu o arquivo.
+  bool _opening = false;
+  String? _openError;
+  bool _openNotOpened = false;
+  String? _openStale;
+  OpenCancel? _openCancel;
 
   @override
   void initState() {
@@ -149,6 +161,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Future<void> _delete(BuildContext context) async {
     final note = _note;
     if (note == null) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -162,11 +175,13 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     );
     if (confirmed != true) return;
     _debounce?.cancel();
+    final restore = _draftNote(note);
     _deleted = true;
     try {
       await _repo.deleteNote(note.id);
       _drafts.take(note.id);
-      if (context.mounted) context.pop();
+      if (context.mounted) context.popOrGo('/notas');
+      showUndo(messenger, 'Nota excluída', () => _repo.upsertNote(restore));
     } on RepositoryException {
       _deleted = false;
       if (context.mounted) showError(context, 'Não foi possível excluir a nota.');
@@ -190,16 +205,123 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
+  /// Abre o arquivo do link pelo aparelho (cache do Drive): o app padrão do sistema para o tipo do arquivo.
+  Future<void> _openDriveFile(String fileId, String link) async {
+    if (_opening) return;
+    final cancel = OpenCancel();
+    setState(() {
+      _opening = true;
+      _openCancel = cancel;
+      _openError = null;
+      _openNotOpened = false;
+      _openStale = null;
+    });
+    final result = await ref.read(driveFileOpenerProvider).open(fileId, cancel: cancel);
+    if (!mounted || !identical(_openCancel, cancel)) return; // cancelado: a tela já voltou ao normal
+    setState(() {
+      _opening = false;
+      _openCancel = null;
+      _openError = result.outcome == OpenOutcome.failed ? result.message : null;
+      _openNotOpened = result.outcome == OpenOutcome.notOpened;
+      _openStale = result.outcome == OpenOutcome.openedStale ? result.message : null;
+    });
+    if (result.outcome == OpenOutcome.needsBrowser) await ref.read(linkOpenerProvider)(Uri.parse(link));
+  }
+
+  void _cancelOpen() => setState(() {
+        _openCancel?.cancel();
+        _openCancel = null;
+        _opening = false;
+      });
+
+  /// Botões das notas-link (nota com a linha "Arquivo no Google Drive: [nome](link)").
+  Widget _driveLinkActions(String link, String body) {
+    final fileName = driveLinkFileName(body);
+    final fileId = driveFileIdFromLink(link);
+    final canOpenFile = ref.watch(filesPlatformProvider).supported && fileId != null && fileName != null;
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('open-drive-link'),
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text('Abrir no Drive'),
+                onPressed: () => ref.read(linkOpenerProvider)(Uri.parse(link)),
+              ),
+              if (canOpenFile)
+                OutlinedButton.icon(
+                  key: const Key('open-drive-file'),
+                  icon: _opening
+                      ? const SizedBox(
+                          key: Key('open-drive-progress'),
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.file_open_outlined, size: 18),
+                  label: Text(_opening ? 'Baixando…' : 'Abrir'),
+                  onPressed: _opening ? null : () => _openDriveFile(fileId, link),
+                ),
+              if (_opening)
+                TextButton(key: const Key('drive-open-cancel'), onPressed: _cancelOpen, child: const Text('Cancelar')),
+            ],
+          ),
+          if (_openError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_openError!, key: const Key('open-drive-error'), style: TextStyle(color: theme.colorScheme.error)),
+            ),
+          if (_openStale != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_openStale!, key: const Key('open-drive-stale'), style: theme.textTheme.bodySmall),
+            ),
+          if (_openNotOpened)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Não encontrei um app para abrir este arquivo.',
+                    key: const Key('open-drive-notice'),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  TextButton(
+                    key: const Key('open-drive-notice-link'),
+                    onPressed: () => ref.read(linkOpenerProvider)(Uri.parse(link)),
+                    child: const Text('Abrir no Drive'),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBody(
       BuildContext context, ThemeData theme, List<Note> all, List<Note> backlinks) {
+    final driveLink = _note == null ? null : driveLinkInBody(_note!.body);
     final header = <Widget>[
       TextField(
         key: const Key('note-title'),
         controller: _title,
+        autofocus: _focusTitle,
+        textCapitalization: TextCapitalization.sentences,
         onChanged: (_) => _changed(),
         style: theme.textTheme.headlineMedium,
         decoration: const InputDecoration.collapsed(hintText: 'Título'),
       ),
+      if (driveLink != null) _driveLinkActions(driveLink, _note!.body),
       if (_saveError != null)
         Padding(
           padding: const EdgeInsets.only(top: 8),
@@ -311,6 +433,10 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           final content = draft ?? current;
           _title.text = content.title;
           _body.text = content.body;
+          if (draft == null && content.title.startsWith('Sem título') && content.body.isEmpty) {
+            _focusTitle = true;
+            _title.selection = TextSelection(baseOffset: 0, extentOffset: content.title.length);
+          }
           _richUnsafe = !canRoundTripMarkdown(content.body);
           _markdownMode = _richUnsafe;
           if (draft != null) {

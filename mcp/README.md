@@ -44,7 +44,7 @@ PKCE S256 obrigatório; `redirect_uri` com comparação exata contra o registrad
 
 ## Ferramentas
 
-`list_agenda`, `create_event`, `update_event`, `delete_event`, `list_tasks`, `create_task`, `update_task`, `delete_task`, `search_notes`, `create_note`, `append_to_note`, `create_study_plan`, `list_notices`, `create_notice`, `archive_notice`, `list_news`, `create_news_digest`, `list_alexa_devices`, `list_alexa_routines`, `alexa_speak`, `alexa_run_routine`, `alexa_device`, `list_wake_plans`, `upsert_wake_plan`. Leitura = `readOnlyHint`; apagar/agir na casa = `destructiveHint` (o Claude pede confirmação).
+`list_agenda`, `create_event`, `update_event`, `delete_event`, `list_event_tags`, `list_tasks`, `create_task`, `update_task`, `delete_task`, `search_notes`, `create_note`, `append_to_note`, `create_study_plan`, `list_notices`, `create_notice`, `archive_notice`, `list_news`, `create_news_digest`, `list_alexa_devices`, `list_alexa_routines`, `alexa_speak`, `alexa_run_routine`, `alexa_device`, `list_wake_plans`, `upsert_wake_plan`. Leitura = `readOnlyHint`; apagar/agir na casa = `destructiveHint` (o Claude pede confirmação).
 
 ## Desenvolvimento
 

@@ -128,6 +128,8 @@ void main() {
     testWidgets('despertar novo começa em 10 s e salva a escolha de 20 s', (tester) async {
       final alexa = _alexa(plans: const []);
       await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/novo', now: _now, alexa: alexa, size: _tall);
+      expect(find.byKey(const Key('briefing-delay-10')), findsNothing); // "Avançado" fechado
+      await expandAdvanced(tester);
       expect(find.text('Falar o resumo após'), findsOneWidget);
       expect(find.text('A música toca primeiro para você acordar de verdade.'), findsOneWidget);
       expect(selected(tester, 'briefing-delay-10'), isTrue);
@@ -228,6 +230,7 @@ void main() {
     testWidgets('sem busca do Spotify o seletor de parada não aparece', (tester) async {
       final alexa = _alexa(plans: const []);
       await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/novo', now: _now, alexa: alexa, size: _tall);
+      await expandAdvanced(tester);
       expect(find.text('Parar a música após'), findsNothing);
       expect(find.byKey(const Key('music-stop-30')), findsNothing);
       await tester.enterText(find.byKey(const Key('wake-spotify')), 'rock');
@@ -242,6 +245,7 @@ void main() {
     testWidgets('sem busca do Spotify a opção "Encerrar" fica desabilitada; com busca, habilitada', (tester) async {
       final alexa = _alexa(plans: const []);
       await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/novo', now: _now, alexa: alexa, size: _tall);
+      await expandAdvanced(tester);
       bool endEnabled() => tester
           .widget<SegmentedButton<AfterMusic>>(find.byType(SegmentedButton<AfterMusic>))
           .segments
@@ -453,4 +457,11 @@ void main() {
       expect(find.byKey(const ValueKey('device-luz1')), findsOneWidget);
     });
   });
+}
+
+/// "Avançado" começa fechado em despertares com valores padrão: abre antes de mexer nos controles.
+Future<void> expandAdvanced(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const Key('wake-advanced')));
+  await tester.tap(find.byKey(const Key('wake-advanced')));
+  await tester.pumpAndSettle();
 }

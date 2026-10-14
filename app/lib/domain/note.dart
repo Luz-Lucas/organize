@@ -1,5 +1,13 @@
 import 'json.dart';
 
+/// Tipo da nota: texto (Markdown) ou caderno (páginas manuscritas).
+enum NoteKind {
+  text,
+  notebook;
+
+  static NoteKind parse(Object? v) => v == 'notebook' ? notebook : text;
+}
+
 class Note {
   const Note({
     required this.id,
@@ -8,6 +16,7 @@ class Note {
     this.spaceId,
     this.parentId,
     this.updatedAt,
+    this.kind = NoteKind.text,
   });
 
   final String id;
@@ -16,6 +25,9 @@ class Note {
   final String? spaceId;
   final String? parentId;
   final DateTime? updatedAt;
+  final NoteKind kind;
+
+  bool get isNotebook => kind == NoteKind.notebook;
 
   factory Note.fromMap(Map<String, dynamic> m) => Note(
         id: m['id'] as String,
@@ -24,6 +36,7 @@ class Note {
         spaceId: m['space_id'] as String?,
         parentId: m['parent_id'] as String?,
         updatedAt: parseDate(m['updated_at']),
+        kind: NoteKind.parse(m['kind']),
       );
 
   Map<String, dynamic> toMap() => {
@@ -32,6 +45,7 @@ class Note {
         'body': body,
         'space_id': spaceId,
         'parent_id': parentId,
+        'kind': kind.name,
       };
 
   Note copyWith({String? title, String? body}) => Note(
@@ -41,6 +55,18 @@ class Note {
         spaceId: spaceId,
         parentId: parentId,
         updatedAt: updatedAt,
+        kind: kind,
+      );
+
+  /// Mesma nota em outro espaço (ou sem espaço, com `null`).
+  Note withSpace(String? spaceId) => Note(
+        id: id,
+        title: title,
+        body: body,
+        spaceId: spaceId,
+        parentId: parentId,
+        updatedAt: updatedAt,
+        kind: kind,
       );
 
   @override
@@ -50,8 +76,9 @@ class Note {
       other.title == title &&
       other.body == body &&
       other.spaceId == spaceId &&
-      other.parentId == parentId;
+      other.parentId == parentId &&
+      other.kind == kind;
 
   @override
-  int get hashCode => Object.hash(id, title, body, spaceId, parentId);
+  int get hashCode => Object.hash(id, title, body, spaceId, parentId, kind);
 }

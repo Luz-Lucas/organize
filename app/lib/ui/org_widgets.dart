@@ -5,18 +5,21 @@ import 'org_theme.dart';
 /// Cartão padrão do app: fundo `surfaceRaised`, borda fina `line`, `radiusMd`.
 /// Com [onTap] vira clicável (com efeito de toque recortado no raio).
 class OrgCard extends StatelessWidget {
-  const OrgCard({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.onTap});
+  const OrgCard({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.onTap, this.color});
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
+
+  /// Fundo; o padrão é `surfaceRaised`.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final org = context.org;
     final radius = BorderRadius.circular(org.radiusMd);
     return Material(
-      color: org.surfaceRaised,
+      color: color ?? org.surfaceRaised,
       shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: org.line)),
       clipBehavior: Clip.antiAlias,
       child: onTap == null
@@ -85,8 +88,10 @@ class PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Celular: margens de 16 para sobrar espaço ao conteúdo.
+    final gutter = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+      padding: EdgeInsets.fromLTRB(gutter, gutter, gutter, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [

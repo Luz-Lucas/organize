@@ -1,12 +1,32 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './index.js';
-import { ACT, READ, UserError, check, ok, okData, requireEcho, requireRow, safe } from './util.js';
+import { ACT, READ, UserError, check, localYmd, ok, okData, requireEcho, requireRow, safe } from './util.js';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'use HH:MM');
 const days = z.array(z.number().int().min(1).max(7)).min(1).max(7);
+
+const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'use YYYY-MM-DD');
+
+/** Data de calendário que existe de verdade (2026-02-31 não). */
+function assertRealDate(date: string): void {
+  const [y, m, d] = date.split('-').map(Number);
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) {
+    throw new UserError(`Data inexistente: "${date}".`);
+  }
+}
+
+async function requirePlan(ctx: ToolContext, planId: string): Promise<void> {
+  const plan = check(await ctx.db.from('wake_plans').select('id').eq('id', planId).eq('user_id', ctx.userId).maybeSingle());
+  if (!plan) throw new UserError('Despertar não encontrado.');
+}
+
+const overrideOut = (r: Row) => ({
+  date: String(r.run_date), skip: r.skip === true, time: typeof r.time === 'string' ? r.time.slice(0, 5) : null,
+});
 
 const deviceAction = z.object({
   entityId: z.string().min(1).max(200),
@@ -49,12 +69,69 @@ async function resolveDeviceActions(ctx: ToolContext, input: z.infer<typeof devi
 export function registerWake(server: McpServer, ctx: ToolContext): void {
   server.registerTool('list_wake_plans', {
     title: 'Listar despertares',
-    description: 'Lista os despertares configurados. `days` usa 1 = segunda … 7 = domingo.',
+    description:
+      'Lista os despertares configurados. `days` usa 1 = segunda … 7 = domingo. ' +
+      '`overrides` traz as exceções de uma data só (de hoje em diante): `skip` = não toca naquele dia; ' +
+      '`time` = toca nesse horário em vez do normal (mesmo num dia fora de `days`).',
     inputSchema: {},
     annotations: READ,
   }, safe(async () => {
     const rows = check(await ctx.db.from('wake_plans').select('*').eq('user_id', ctx.userId).order('time', { ascending: true })) as Row[];
-    return okData({ wakePlans: rows.map(planOut) });
+    const today = localYmd(ctx.now(), ctx.timeZone);
+    const overrides = check(await ctx.db.from('wake_overrides').select('plan_id, run_date, skip, time')
+      .eq('user_id', ctx.userId).gte('run_date', today).order('run_date', { ascending: true })) as Row[];
+    return okData({
+      wakePlans: rows.map((r) => ({
+        ...planOut(r),
+        overrides: overrides.filter((o) => o.plan_id === r.id).map(overrideOut),
+      })),
+    });
+  }));
+
+  server.registerTool('set_wake_override', {
+    title: 'Pular ou mudar um despertar só num dia',
+    description:
+      'Exceção de UM dia para um despertar de list_wake_plans, sem mexer na regra semanal. ' +
+      'Informe `skip: true` para não tocar naquele dia, ou `time` (HH:MM) para tocar nesse horário só naquele dia ' +
+      '(vale até num dia da semana que não está em `days`). Informe um dos dois, nunca ambos. ' +
+      '`date`: YYYY-MM-DD no fuso do usuário, de hoje em diante. Uma nova chamada para a mesma data substitui a anterior. ' +
+      'Age na casa (o Echo vai deixar de tocar ou tocar em outro horário): confirme com o usuário.',
+    inputSchema: { plan_id: z.string().uuid(), date: ymd, skip: z.boolean().optional(), time: time.optional() },
+    annotations: { ...ACT, idempotentHint: true },
+  }, safe(async (a) => {
+    assertRealDate(a.date);
+    if (a.skip === true && a.time !== undefined) throw new UserError('Informe skip ou time, não os dois.');
+    if (a.skip !== true && a.time === undefined) throw new UserError('Informe skip: true (não tocar) ou time (HH:MM).');
+    const today = localYmd(ctx.now(), ctx.timeZone);
+    if (a.date < today) throw new UserError('A data precisa ser de hoje em diante.');
+    await requirePlan(ctx, a.plan_id);
+    if (a.date === today) {
+      // Hoje o despertar pode já ter rodado: a exceção não teria mais efeito, então não finja que mudou.
+      const run = check(await ctx.db.from('wake_runs').select('status')
+        .eq('user_id', ctx.userId).eq('plan_id', a.plan_id).eq('run_date', a.date).maybeSingle()) as Row | null;
+      if (run && ['done', 'running', 'failed', 'skipped'].includes(String(run.status))) {
+        throw new UserError('O despertar de hoje já tocou/foi pulado; a mudança vale só para datas futuras.');
+      }
+    }
+    const row = check(await ctx.db.from('wake_overrides').upsert({
+      user_id: ctx.userId, plan_id: a.plan_id, run_date: a.date,
+      skip: a.skip === true, time: a.skip === true ? null : a.time,
+    }, { onConflict: 'plan_id,run_date' }).select('plan_id, run_date, skip, time').single()) as Row;
+    return ok({ override: { planId: row.plan_id, ...overrideOut(row) } });
+  }));
+
+  server.registerTool('clear_wake_override', {
+    title: 'Voltar um despertar ao normal num dia',
+    description:
+      'Apaga a exceção de uma data (set_wake_override), voltando o despertar à regra semanal naquele dia. ' +
+      'Não faz nada se não houver exceção. `date`: YYYY-MM-DD.',
+    inputSchema: { plan_id: z.string().uuid(), date: ymd },
+    annotations: { ...ACT, idempotentHint: true },
+  }, safe(async (a) => {
+    assertRealDate(a.date);
+    check(await ctx.db.from('wake_overrides').delete()
+      .eq('user_id', ctx.userId).eq('plan_id', a.plan_id).eq('run_date', a.date));
+    return ok({ planId: a.plan_id, date: a.date, cleared: true });
   }));
 
   server.registerTool('upsert_wake_plan', {

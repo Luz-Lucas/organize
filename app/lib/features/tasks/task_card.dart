@@ -1,22 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../domain/task_item.dart';
+import '../../ui/date_labels.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 
-/// Rótulo do prazo: "hoje", "amanhã" ou "sex, 16".
-String dueLabel(DateTime due, DateTime now) {
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(due.year, due.month, due.day);
-  final diff = day.difference(today).inDays;
-  if (diff == 0) return 'hoje';
-  if (diff == 1) return 'amanhã';
-  return DateFormat('EEE, d', 'pt_BR').format(due);
-}
+export '../../ui/date_labels.dart' show dueLabel;
 
-/// Cartão de tarefa do Kanban: título, prioridade (só alta e baixa), espaço,
-/// prazo e ícone de nota.
+/// Cartão de tarefa do Kanban: botão de concluir, título, prioridade (só alta
+/// e baixa), espaço, prazo e ícone de nota.
 class TaskCard extends StatelessWidget {
   const TaskCard({
     super.key,
@@ -25,6 +17,7 @@ class TaskCard extends StatelessWidget {
     this.spaceName,
     this.onTap,
     this.onLongPress,
+    this.onToggleDone,
   });
 
   final TaskItem task;
@@ -33,20 +26,25 @@ class TaskCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
+  /// Concluir (ou reabrir) com um toque. Sem ele o botão não aparece.
+  final VoidCallback? onToggleDone;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final org = context.org;
     final due = task.dueAt;
     final urgent = !task.isDone && due != null && due.difference(now) <= const Duration(days: 1);
-    final card = OrgCard(
-      padding: const EdgeInsets.all(12),
-      onTap: onTap,
+    final toggle = onToggleDone;
+    final content = Padding(
+      padding: EdgeInsets.fromLTRB(toggle == null ? 12 : 0, 12, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             task.title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodyLarge?.copyWith(
               decoration: task.isDone ? TextDecoration.lineThrough : null,
               color: task.isDone ? org.inkMuted : org.ink,
@@ -69,7 +67,7 @@ class TaskCard extends StatelessWidget {
                 if (spaceName != null) OrgBadge(spaceName!),
                 if (due != null)
                   OrgBadge(
-                    dueLabel(due, now),
+                    dueLabel(due, now, done: task.isDone),
                     tone: urgent ? OrgBadgeTone.danger : OrgBadgeTone.neutral,
                   ),
                 if (task.noteId != null)
@@ -80,9 +78,41 @@ class TaskCard extends StatelessWidget {
         ],
       ),
     );
+    final card = OrgCard(
+      padding: EdgeInsets.zero,
+      onTap: onTap,
+      child: toggle == null
+          ? content
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, top: 4),
+                  child: IconButton(
+                    key: ValueKey('task-done-${task.id}'),
+                    tooltip: task.isDone ? 'Reabrir tarefa' : 'Concluir tarefa',
+                    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                    icon: Icon(
+                      task.isDone ? Icons.check_circle : Icons.radio_button_unchecked,
+                      color: task.isDone ? org.accentText : org.inkMuted,
+                    ),
+                    onPressed: toggle,
+                  ),
+                ),
+                Expanded(child: content),
+              ],
+            ),
+    );
     final body = onLongPress == null
         ? card
-        : GestureDetector(behavior: HitTestBehavior.deferToChild, onLongPress: onLongPress, child: card);
-    return Opacity(opacity: task.isDone ? 0.55 : 1, child: body);
+        : Semantics(
+            onLongPressHint: 'Mover para…',
+            child: GestureDetector(
+              behavior: HitTestBehavior.deferToChild,
+              onLongPress: onLongPress,
+              child: card,
+            ),
+          );
+    return body;
   }
 }

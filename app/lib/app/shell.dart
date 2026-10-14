@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/notes/notes_tree.dart';
+import '../update/update_banner.dart';
+import 'back_navigation.dart';
 import '../ui/org_theme.dart';
 
 typedef _Dest = ({String path, IconData icon, String label});
@@ -59,6 +61,10 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final active = _activePath(widget.location);
+    return BackHandler(location: widget.location, child: _scaffold(context, active));
+  }
+
+  Widget _scaffold(BuildContext context, String? active) {
     if (MediaQuery.sizeOf(context).width >= AppShell.wideBreakpoint) {
       return Scaffold(
         body: Row(
@@ -69,7 +75,7 @@ class _AppShellState extends State<AppShell> {
               noteId: _noteId,
               onToggle: () => setState(() => _collapsed = !_collapsed),
             ),
-            Expanded(child: widget.child),
+            Expanded(child: UpdateBannerHost(child: widget.child)),
           ],
         ),
       );
@@ -78,7 +84,7 @@ class _AppShellState extends State<AppShell> {
     final moreActive = const {'/noticias', '/casa', '/ajustes', '/mais'}.contains(active);
     final index = moreActive ? 4 : _bottomItems.indexWhere((d) => d.path == active);
     return Scaffold(
-      body: widget.child,
+      body: UpdateBannerHost(child: widget.child),
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(border: Border(top: BorderSide(color: context.org.line))),
         child: NavigationBar(
@@ -145,7 +151,7 @@ class _Sidebar extends StatelessWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Organizacional',
+                              'Organize',
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleMedium,
                             ),

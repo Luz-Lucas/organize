@@ -454,6 +454,32 @@ describe('applyWakeActions', () => {
     expect(store.log[0]).toMatch(/^finish p1 2026-09-28 failed spotify: playSpotify falhou; fala: speak falhou/);
   });
 
+  it('rearmar: falha ao apagar o reserva antigo é registrada (não engolida) e o novo é armado', async () => {
+    const gw = new FakeGateway();
+    gw.failOn.add('deleteAlarm');
+    const store = new MemoryWakeStore();
+    const logs: string[] = [];
+    const armed: WakeRun = { id: 'r1', planId: 'p1', runDate: '2026-09-28', plannedFor: new Date('2026-09-28T10:00:00Z'), status: 'armed', fallbackHandle: 'reserva-1' };
+    await applyWakeActions([{
+      type: 'rearm', plan: plan(), run: armed,
+      plannedFor: new Date('2026-09-28T11:00:00Z'), fallbackAt: new Date('2026-09-28T11:10:00Z'),
+    }], { ...deps(gw, store), log: (m: string) => logs.push(m) }, new Set());
+    expect(logs.some((m) => m.includes('não apagou o alarme reserva'))).toBe(true);
+    expect(gw.calls.some((c) => c.startsWith('createAlarm'))).toBe(true);
+    expect(store.log).toHaveLength(1);
+  });
+
+  it('cancelar com falha ao apagar registra "não apagou o alarme reserva" e ainda marca cancelled', async () => {
+    const gw = new FakeGateway();
+    gw.failOn.add('deleteAlarm');
+    const store = new MemoryWakeStore();
+    const logs: string[] = [];
+    const armed: WakeRun = { id: 'r1', planId: null, runDate: '2026-09-28', plannedFor: new Date(), status: 'armed', fallbackHandle: 'reserva-1' };
+    await applyWakeActions([{ type: 'cancel', run: armed }], { ...deps(gw, store), log: (m: string) => logs.push(m) }, new Set());
+    expect(logs.some((m) => m.includes('não apagou o alarme reserva'))).toBe(true);
+    expect(store.log).toEqual(['status r1 cancelled']);
+  });
+
   it('cancelar apaga o alarme e marca cancelled; miss só marca', async () => {
     const gw = new FakeGateway();
     const store = new MemoryWakeStore();

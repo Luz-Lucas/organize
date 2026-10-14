@@ -21,6 +21,16 @@ void main() {
     await sub.cancel();
   });
 
+  test('excluir espaço nunca apaga cadernos: ficam sem espaço (como o gatilho do banco)', () async {
+    await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I'));
+    await repo.upsertNote(const Note(id: 'c1', title: 'Caderno', spaceId: 's1', kind: NoteKind.notebook));
+    await repo.upsertNote(const Note(id: 'n1', title: 'Limites', spaceId: 's1'));
+    await repo.deleteSpace('s1');
+    final notes = await repo.watchNotes().first;
+    expect(notes.map((n) => n.id), ['c1']);
+    expect(notes.single.spaceId, isNull);
+  });
+
   test('excluir espaço apaga notas e tarefas e mantém eventos sem espaço', () async {
     await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I'));
     await repo.upsertNote(const Note(id: 'n1', title: 'Limites', spaceId: 's1'));
@@ -87,5 +97,75 @@ void main() {
     expect((await repo.watchNotices().first).map((n) => n.id), ['a']);
     repo.failWrites = true;
     await expectLater(repo.upsertNotice(const Notice(id: 'c', title: 'C')), throwsA(isA<RepositoryException>()));
+  });
+
+  CalendarEvent ev(String id, int day, {String? seriesId}) => CalendarEvent(
+        id: id,
+        title: id,
+        startsAt: DateTime(2026, 10, day, 8),
+        endsAt: DateTime(2026, 10, day, 9),
+        seriesId: seriesId,
+      );
+
+  test('upsertEvents grava em lote com uma só emissão; deleteEvents apaga em lote', () async {
+    final emissions = <int>[];
+    final sub = repo.watchEvents(from: DateTime(2026, 10, 1)).listen((l) => emissions.add(l.length));
+    await Future<void>.delayed(Duration.zero);
+    await repo.upsertEvents([ev('a', 1), ev('b', 2), ev('c', 3)]);
+    await Future<void>.delayed(Duration.zero);
+    expect(emissions, [0, 3]);
+    await repo.deleteEvents(['a', 'c', 'inexistente']);
+    await Future<void>.delayed(Duration.zero);
+    expect(emissions, [0, 3, 1]);
+    await sub.cancel();
+  });
+
+  test('upsertEvents/deleteEvents respeitam failWrites', () async {
+    repo.failWrites = true;
+    await expectLater(repo.upsertEvents([ev('a', 1)]), throwsA(isA<RepositoryException>()));
+    await expectLater(repo.deleteEvents(['a']), throwsA(isA<RepositoryException>()));
+  });
+
+  test('deleteSeries apaga a série inteira ou só a partir de um instante, sem tocar nas outras', () async {
+    await repo.upsertEvents([
+      ev('a', 1, seriesId: 's1'),
+      ev('b', 10, seriesId: 's1'),
+      ev('c', 20, seriesId: 's1'),
+      ev('x', 12, seriesId: 's2'),
+      ev('solto', 15),
+    ]);
+    final emissions = <int>[];
+    final sub = repo.watchEvents(from: DateTime(2026, 10, 1)).listen((l) => emissions.add(l.length));
+    await Future<void>.delayed(Duration.zero);
+
+    await repo.deleteSeries('s1', from: DateTime(2026, 10, 10, 8)); // inclusive
+    await Future<void>.delayed(Duration.zero);
+    expect((await repo.listSeries('s1')).map((e) => e.id), ['a']);
+    expect(emissions, [5, 3]);
+
+    await repo.deleteSeries('s1');
+    expect(await repo.listSeries('s1'), isEmpty);
+    expect((await repo.listSeries('s2')).map((e) => e.id), ['x']);
+    expect((await repo.watchEvents(from: DateTime(2026, 10, 1)).first).map((e) => e.id), ['x', 'solto']);
+    await sub.cancel();
+  });
+
+  test('deleteSeries de série inexistente não faz nada e respeita failWrites', () async {
+    await repo.upsertEvents([ev('a', 1, seriesId: 's1')]);
+    await repo.deleteSeries('nada');
+    expect(await repo.listSeries('s1'), hasLength(1));
+    repo.failWrites = true;
+    await expectLater(repo.deleteSeries('s1'), throwsA(isA<RepositoryException>()));
+  });
+
+  test('listSeries devolve só as ocorrências da série, em ordem, mesmo as já passadas', () async {
+    await repo.upsertEvents([
+      ev('c', 20, seriesId: 's1'),
+      ev('a', 1, seriesId: 's1'),
+      ev('x', 5, seriesId: 's2'),
+      ev('solto', 6),
+    ]);
+    expect((await repo.listSeries('s1')).map((e) => e.id), ['a', 'c']);
+    expect(await repo.listSeries('nada'), isEmpty);
   });
 }

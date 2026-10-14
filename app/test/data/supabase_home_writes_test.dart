@@ -43,6 +43,18 @@ void main() {
     expect(sent[2].body, {'user_id': 'u1', 'require_home': false});
   });
 
+  test('setNotebookPrefs grava só a coluna notebook_prefs, com o user_id', () async {
+    final sent = <_Sent>[];
+    final repo = SupabaseSettingsRepository(_client(sent), userId: () => 'u1');
+    await repo.setNotebookPrefs({'v': 1, 'compact': true});
+    expect(sent.single.path, '/rest/v1/user_settings');
+    expect(sent.single.prefer, contains('resolution=merge-duplicates'));
+    expect(sent.single.body, {
+      'user_id': 'u1',
+      'notebook_prefs': {'v': 1, 'compact': true},
+    });
+  });
+
   test('erro do servidor vira RepositoryException', () async {
     final sent = <_Sent>[];
     final repo = SupabaseSettingsRepository(

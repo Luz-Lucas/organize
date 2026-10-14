@@ -16,6 +16,7 @@ class UserSettings {
     this.homeLon,
     this.homeRadiusM = defaultHomeRadiusM,
     this.requireHome = true,
+    this.notebookPrefs = const {},
   });
 
   final String theme;
@@ -29,6 +30,10 @@ class UserSettings {
   /// Só toca o despertar quando o usuário está em casa (vale só com a casa definida).
   final bool requireHome;
 
+  /// Favoritos do Caderno (canetas, cores, modo da barra) em JSON; `{}` = nunca
+  /// personalizado. O formato é interpretado em `notebook/ui/notebook_prefs.dart`.
+  final Map<String, dynamic> notebookPrefs;
+
   bool get hasHome => homeLat != null && homeLon != null;
 
   GeoPoint? get home => hasHome ? GeoPoint(homeLat!, homeLon!) : null;
@@ -40,6 +45,7 @@ class UserSettings {
     final hasHome = lat is num && lon is num;
     final radius = m['home_radius_m'];
     final require = m['require_home'];
+    final prefs = m['notebook_prefs'];
     return UserSettings(
       theme: theme is String && themeIds.contains(theme) ? theme : 'violeta',
       hiddenAlexaDevices: ((m['hidden_alexa_devices'] as List?) ?? const []).cast<String>(),
@@ -47,6 +53,7 @@ class UserSettings {
       homeLon: hasHome ? lon.toDouble() : null,
       homeRadiusM: radius is num ? radius.toInt() : defaultHomeRadiusM,
       requireHome: require is bool ? require : true,
+      notebookPrefs: prefs is Map ? prefs.cast<String, dynamic>() : const {},
     );
   }
 
@@ -57,6 +64,7 @@ class UserSettings {
         'home_lon': homeLon,
         'home_radius_m': homeRadiusM,
         'require_home': requireHome,
+        'notebook_prefs': notebookPrefs,
       };
 
   UserSettings copyWith({
@@ -67,6 +75,7 @@ class UserSettings {
     bool clearHome = false,
     int? homeRadiusM,
     bool? requireHome,
+    Map<String, dynamic>? notebookPrefs,
   }) =>
       UserSettings(
         theme: theme ?? this.theme,
@@ -75,5 +84,6 @@ class UserSettings {
         homeLon: clearHome ? null : (homeLon ?? this.homeLon),
         homeRadiusM: homeRadiusM ?? this.homeRadiusM,
         requireHome: requireHome ?? this.requireHome,
+        notebookPrefs: notebookPrefs ?? this.notebookPrefs,
       );
 }

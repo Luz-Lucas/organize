@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../domain/alexa.dart';
 import '../domain/ids.dart';
+import '../domain/wake_override.dart';
 import 'alexa_repository.dart';
 import 'repository.dart';
 
@@ -22,6 +23,7 @@ class MemoryAlexaRepository implements AlexaRepository {
   final List<AlexaDevice> _devices;
   final List<AlexaRoutine> _routines;
   final Map<String, WakePlan> _plans;
+  final Map<String, WakeOverride> _overrides = {}; // '<plano>|<data>'
   final CommandStatus? respondWith;
   final String? respondResult;
   final sent = <({String kind, Map<String, Object?> payload})>[];
@@ -78,6 +80,30 @@ class MemoryAlexaRepository implements AlexaRepository {
   Future<void> deleteWakePlan(String id) async {
     _checkWrite();
     _plans.remove(id);
+    _overrides.removeWhere((_, o) => o.planId == id); // como a cascata do banco
+    _changes.add(null);
+  }
+
+  static String _overrideKey(String planId, DateTime date) => '$planId|${dateKey(date)}';
+
+  @override
+  Stream<List<WakeOverride>> watchOverrides() => _watch(() => _overrides.values.toList()
+    ..sort((a, b) {
+      final byDate = a.date.compareTo(b.date);
+      return byDate != 0 ? byDate : a.planId.compareTo(b.planId);
+    }));
+
+  @override
+  Future<void> setOverride(WakeOverride override) async {
+    _checkWrite();
+    _overrides[_overrideKey(override.planId, override.date)] = override;
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> clearOverride(String planId, DateTime date) async {
+    _checkWrite();
+    _overrides.remove(_overrideKey(planId, date));
     _changes.add(null);
   }
 

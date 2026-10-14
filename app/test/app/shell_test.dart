@@ -31,13 +31,13 @@ void main() {
 
   testWidgets('recolher esconde rótulos e a árvore; expandir traz de volta', (tester) async {
     await pumpApp(tester, MemoryRepository(), size: const Size(1000, 800));
-    expect(find.text('Organizacional'), findsOneWidget);
+    expect(find.text('Organize'), findsOneWidget);
     expect(find.text('Agenda'), findsOneWidget);
     expect(find.byKey(const Key('notes-search')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('sidebar-collapse')));
     await tester.pumpAndSettle();
-    expect(find.text('Organizacional'), findsNothing);
+    expect(find.text('Organize'), findsNothing);
     expect(find.text('Agenda'), findsNothing);
     expect(find.byKey(const Key('notes-search')), findsNothing);
     // Os itens continuam clicáveis, só com ícones.
@@ -47,7 +47,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('sidebar-collapse')));
     await tester.pumpAndSettle();
-    expect(find.text('Organizacional'), findsOneWidget);
+    expect(find.text('Organize'), findsOneWidget);
   });
 
   testWidgets('celular mostra 5 destinos e Mais abre Notícias, Casa e Ajustes', (tester) async {

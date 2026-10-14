@@ -73,13 +73,49 @@ class WidgetDataTest {
         assertTrue(!WidgetData.isStale(0L, 2L * 3600 * 1000))
     }
 
-    @Test fun splitRowsSharesSpaceAndKeepsAtLeastOneEach() {
-        assertEquals(4 to 4, WidgetData.splitRows(8, 10, 10))
-        assertEquals(2 to 3, WidgetData.splitRows(5, 2, 9))
-        assertEquals(1 to 1, WidgetData.splitRows(2, 0, 0))
-        assertEquals(1 to 1, WidgetData.splitRows(0, 4, 4))
-        assertEquals(2 to 3, WidgetData.splitRows(5, 4, 4))
-        assertEquals(1 to 4, WidgetData.splitRows(8, 0, 9))
+    @Test fun sectionRowsFillEachHalfUpToSix() {
+        // 4x4 típico (~300 dp): quatro linhas por metade; mais alto, até o teto de seis.
+        assertEquals(4, WidgetData.sectionRows(300))
+        assertEquals(6, WidgetData.sectionRows(360))
+        assertEquals(6, WidgetData.sectionRows(900))
+        assertEquals(2, WidgetData.sectionRows(200))
+        // Muito baixo: sempre pelo menos uma linha (cabe a mensagem de vazio).
+        assertEquals(1, WidgetData.sectionRows(100))
+        // Altura desconhecida: mantém o padrão antigo de quatro linhas.
+        assertEquals(4, WidgetData.sectionRows(0))
+    }
+
+    @Test fun effectiveHeightUsesMaxInPortraitAndMinInLandscape() {
+        assertEquals(380, WidgetData.effectiveHeightDp(minDp = 280, maxDp = 380, portrait = true))
+        assertEquals(280, WidgetData.effectiveHeightDp(minDp = 280, maxDp = 380, portrait = false))
+        // Sem MAX informado, cai para o MIN; sem nada, 0 (= desconhecida).
+        assertEquals(280, WidgetData.effectiveHeightDp(minDp = 280, maxDp = 0, portrait = true))
+        assertEquals(0, WidgetData.effectiveHeightDp(minDp = 0, maxDp = 0, portrait = true))
+    }
+
+    @Test fun backgroundAlphaIsParsedAndClamped() {
+        assertEquals(255, WidgetData.parseBgAlpha(null))
+        assertEquals(255, WidgetData.parseBgAlpha(""))
+        assertEquals(255, WidgetData.parseBgAlpha("abc"))
+        assertEquals(191, WidgetData.parseBgAlpha("191"))
+        assertEquals(128, WidgetData.parseBgAlpha(" 128 "))
+        assertEquals(0, WidgetData.parseBgAlpha("-5"))
+        assertEquals(255, WidgetData.parseBgAlpha("300"))
+    }
+
+    @Test fun moreLabelSaysHowManyMore() {
+        assertEquals("+3 mais", WidgetData.moreLabel(3))
+        assertEquals("+1 mais", WidgetData.moreLabel(1))
+    }
+
+    @Test fun compactEventTimeKeepsTheColumnNarrow() {
+        val d11 = ms(2026, 10, 11, 12)
+        val d12 = ms(2026, 10, 12, 12)
+        val night = ev("Plantão", ms(2026, 10, 11, 22), ms(2026, 10, 12, 2))
+        assertEquals("22:00 →", WidgetData.eventTimeCompact(night, d11, sp))
+        assertEquals("→ 02:00", WidgetData.eventTimeCompact(night, d12, sp))
+        assertEquals("14:00", WidgetData.eventTimeCompact(ev("a", ms(2026, 10, 11, 14), ms(2026, 10, 11, 15)), d11, sp))
+        assertEquals("Dia todo", WidgetData.eventTimeCompact(ev("b", ms(2026, 10, 11), ms(2026, 10, 12), allDay = true), d11, sp))
     }
 
     @Test fun rowColorsFollowTheDisplayRules() {
@@ -97,5 +133,36 @@ class WidgetDataTest {
         assertEquals(t.inkMuted, WidgetData.taskDueColor(ms(2026, 10, 11, 8), now, sp, t))
         assertEquals(t.accentText, WidgetData.taskTitleColor(WidgetTask("1", "x", "doing", null), t))
         assertEquals(t.ink, WidgetData.taskTitleColor(WidgetTask("1", "x", "todo", null), t))
+    }
+
+    // ---- Etiquetas coloridas (tagColor) ----
+
+    @Test fun parsesTagColorWhenPresent() {
+        val evs = WidgetData.parseEventsJson(
+            """[{"id":"a","title":"Cálculo","start":5,"end":9,"allDay":false,"location":null,"kind":"aula","tagColor":"#3E63DD"}]""",
+        )
+        assertEquals(0xFF3E63DD.toInt(), evs[0].tagColor)
+    }
+
+    @Test fun tagColorIsNullWhenMissingNullOrInvalid() {
+        val evs = WidgetData.parseEventsJson(
+            """[
+              {"id":"a","title":"a","start":1,"end":2,"allDay":false},
+              {"id":"b","title":"b","start":3,"end":4,"allDay":false,"tagColor":null},
+              {"id":"c","title":"c","start":5,"end":6,"allDay":false,"tagColor":"azul"},
+              {"id":"d","title":"d","start":7,"end":8,"allDay":false,"tagColor":"#12345"},
+              {"id":"e","title":"e","start":9,"end":10,"allDay":false,"tagColor":""}
+            ]""",
+        )
+        assertEquals(5, evs.size)
+        evs.forEach { assertNull(it.id, it.tagColor) }
+    }
+
+    @Test fun titleGetsAColoredDotOnlyWhenTagged() {
+        val plain = ev("Dentista", 1, 2)
+        val tagged = WidgetEvent("t", "Cálculo", 1, 2, false, null, "aula", 0xFF3E63DD.toInt())
+        assertEquals("Dentista", WidgetData.titleWithDot(plain))
+        assertEquals("${WidgetData.TAG_DOT} Cálculo", WidgetData.titleWithDot(tagged))
+        assertTrue(WidgetData.titleWithDot(tagged).startsWith(WidgetData.TAG_DOT))
     }
 }

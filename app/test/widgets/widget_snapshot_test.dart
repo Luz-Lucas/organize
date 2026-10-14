@@ -111,4 +111,19 @@ void main() {
     expect(s['w_events'], '[]');
     expect(s['w_tasks'], '[]');
   });
+
+  test('w_bg_alpha: sem transparência pedida, a chave não é gravada (não sobrescreve a preferência)', () {
+    expect(build().containsKey('w_bg_alpha'), isFalse);
+  });
+
+  test('w_bg_alpha: porcentagem de transparência vira opacidade 0-255 junto do tema', () {
+    Map<String, String> withPct(int pct) => buildWidgetSnapshot(
+        now: now, events: const [], tasks: const [], themeId: 'violeta', bgTransparencyPct: pct);
+    expect(withPct(0)['w_bg_alpha'], '255');
+    expect(withPct(25)['w_bg_alpha'], '191');
+    expect(withPct(50)['w_bg_alpha'], '128');
+    expect(withPct(75)['w_bg_alpha'], '64');
+    expect(withPct(90)['w_bg_alpha'], '26');
+    expect(withPct(0).containsKey('w_theme'), isTrue);
+  });
 }

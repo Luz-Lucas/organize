@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_hoje_label">Organizacional · Hoje</string>
+    <string name="widget_hoje_label">Organize · Hoje</string>
     <string name="widget_hoje_desc">Compromissos de hoje</string>
-    <string name="widget_tarefas_label">Organizacional · Tarefas</string>
+    <string name="widget_tarefas_label">Organize · Tarefas</string>
     <string name="widget_tarefas_desc">Suas tarefas em aberto</string>
-    <string name="widget_prova_label">Organizacional · Próxima prova</string>
+    <string name="widget_prova_label">Organize · Próxima prova</string>
     <string name="widget_prova_desc">Contagem para a próxima prova</string>
-    <string name="widget_agenda_tarefas_label">Organizacional · Agenda e Tarefas</string>
+    <string name="widget_agenda_tarefas_label">Organize · Agenda e Tarefas</string>
     <string name="widget_agenda_tarefas_desc">Eventos de hoje e tarefas em aberto</string>
     <string name="widget_hoje_title">HOJE</string>
     <string name="widget_tarefas_title">TAREFAS</string>

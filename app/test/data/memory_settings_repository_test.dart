@@ -56,4 +56,13 @@ void main() {
     final s = await repo.watchSettings().first;
     expect([s.hasHome, s.requireHome], [false, true]);
   });
+
+  test('setNotebookPrefs grava só os favoritos do caderno', () async {
+    final repo = MemorySettingsRepository(initial: const UserSettings(theme: 'coral'));
+    await repo.setNotebookPrefs({'v': 1, 'compact': false});
+    final s = await repo.watchSettings().first;
+    expect([s.notebookPrefs, s.theme], [{'v': 1, 'compact': false}, 'coral']);
+    repo.failWrites = true;
+    await expectLater(repo.setNotebookPrefs({'v': 1}), throwsA(isA<RepositoryException>()));
+  });
 }

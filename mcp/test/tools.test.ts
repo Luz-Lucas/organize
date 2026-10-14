@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -68,16 +69,17 @@ describe.skipIf(!hasDb)('ferramentas MCP (Supabase local)', () => {
       'delete_task', 'search_notes', 'create_note', 'append_to_note', 'create_study_plan', 'list_notices',
       'create_notice', 'archive_notice', 'list_news', 'create_news_digest', 'list_alexa_devices',
       'list_alexa_routines', 'alexa_speak', 'alexa_run_routine', 'alexa_device', 'list_wake_plans', 'upsert_wake_plan',
+      'set_wake_override', 'clear_wake_override', 'list_event_tags',
     ];
     for (const n of names) expect(by[n], n).toBeDefined();
     expect(tools.length).toBe(names.length);
-    for (const n of ['list_agenda', 'list_tasks', 'search_notes', 'list_notices', 'list_news', 'list_alexa_devices', 'list_alexa_routines', 'list_wake_plans']) {
+    for (const n of ['list_agenda', 'list_tasks', 'search_notes', 'list_notices', 'list_news', 'list_alexa_devices', 'list_alexa_routines', 'list_wake_plans', 'list_event_tags']) {
       expect(by[n].readOnlyHint, n).toBe(true);
     }
-    for (const n of ['delete_event', 'delete_task', 'update_event', 'alexa_speak', 'alexa_run_routine', 'alexa_device', 'upsert_wake_plan']) {
+    for (const n of ['delete_event', 'delete_task', 'update_event', 'alexa_speak', 'alexa_run_routine', 'alexa_device', 'upsert_wake_plan', 'set_wake_override', 'clear_wake_override']) {
       expect(by[n].destructiveHint, n).toBe(true);
     }
-    for (const n of ['alexa_speak', 'alexa_run_routine', 'alexa_device', 'upsert_wake_plan']) {
+    for (const n of ['alexa_speak', 'alexa_run_routine', 'alexa_device', 'upsert_wake_plan', 'set_wake_override', 'clear_wake_override']) {
       expect(by[n].openWorldHint, n).toBe(true);
     }
     for (const n of ['create_event', 'create_task', 'update_task', 'create_note', 'append_to_note', 'create_notice']) {
@@ -146,6 +148,121 @@ describe.skipIf(!hasDb)('ferramentas MCP (Supabase local)', () => {
       const d = await call(a.client, 'delete_event', { id });
       expect(d.isError).toBe(false);
       expect((await call(a.client, 'delete_event', { id })).isError).toBe(true);
+    });
+
+    describe('séries (repeat / scope)', () => {
+      const titles = async (day0: string, day1: string, title: string) => {
+        const l = await call(a.client, 'list_agenda', { from: day0, to: day1, limit: 200 });
+        return l.data.events.filter((e: any) => e.title === title) as any[];
+      };
+
+      it('create_event com repeat semanal ter+qui cria as ocorrências com o mesmo seriesId', async () => {
+        const r = await call(a.client, 'create_event', {
+          title: 'Série semanal', startsAt: '2026-12-01T18:00:00', endsAt: '2026-12-01T19:40:00',
+          repeat: { freq: 'weekly', days: [2, 4], count: 4 },
+        });
+        expect(r.isError).toBe(false);
+        expect(r.data.occurrences).toBe(4);
+        const evs = await titles('2026-12-01', '2026-12-31', 'Série semanal');
+        expect(evs).toHaveLength(4);
+        expect(evs.map((e) => e.startsAt.slice(0, 10))).toEqual(['2026-12-01', '2026-12-03', '2026-12-08', '2026-12-10']);
+        expect(new Set(evs.map((e) => e.seriesId)).size).toBe(1);
+        expect(evs[0].seriesId).toBe(r.data.seriesId);
+        expect(evs.every((e) => e.endsAt.slice(11, 16) === '19:40')).toBe(true);
+        const row = (await db.from('events').select('recurrence').eq('id', evs[0].id).single()).data!;
+        expect(row.recurrence).toEqual({ freq: 'weekly', days: [2, 4], until: null, count: 4 });
+      });
+
+      it('sem until nem count o fim padrão é 3 meses; until antes do início é recusado', async () => {
+        const r = await call(a.client, 'create_event', {
+          title: 'Série padrão', startsAt: '2027-02-01T08:00:00', repeat: { freq: 'monthly' },
+        });
+        expect(r.isError).toBe(false);
+        expect(r.data.occurrences).toBe(4); // fev, mar, abr, mai (até 1º/mai, inclusivo)
+        const bad = await call(a.client, 'create_event', {
+          title: 'X', startsAt: '2027-02-01T08:00:00', repeat: { freq: 'daily', until: '2027-01-01' },
+        });
+        expect(bad.isError).toBe(true);
+        expect(bad.text).toMatch(/data final/i);
+        const dias = await call(a.client, 'create_event', {
+          title: 'X', startsAt: '2027-02-01T08:00:00', repeat: { freq: 'weekly', days: [0] },
+        });
+        expect(dias.isError).toBe(true);
+      });
+
+      it('update_event numa ocorrência de série tira só essa da série (series_id e recurrence nulos)', async () => {
+        const r = await call(a.client, 'create_event', {
+          title: 'Série editada', startsAt: '2027-04-01T10:00:00', repeat: { freq: 'daily', count: 3 },
+        });
+        expect(r.isError).toBe(false);
+        const evs = await titles('2027-04-01', '2027-04-10', 'Série editada');
+        expect(evs).toHaveLength(3);
+        const u = await call(a.client, 'update_event', { id: evs[1].id, location: 'Sala 9' });
+        expect(u.isError, u.text).toBe(false);
+        expect(u.data.event.seriesId).toBeNull();
+        const rows = (await db.from('events').select('id, series_id, recurrence').in('id', evs.map((e) => e.id))).data!;
+        const byId = new Map(rows.map((x) => [x.id, x]));
+        expect(byId.get(evs[1].id)).toMatchObject({ series_id: null, recurrence: null });
+        for (const e of [evs[0], evs[2]]) {
+          expect(byId.get(e.id)!.series_id).toBe(r.data.seriesId);
+          expect(byId.get(e.id)!.recurrence).not.toBeNull();
+        }
+        // evento fora de série segue sem série
+        const solo = (await call(a.client, 'create_event', { title: 'Solta 2', startsAt: '2027-04-01T10:00:00' })).data.event;
+        const us = await call(a.client, 'update_event', { id: solo.id, location: 'X' });
+        expect(us.data.event.seriesId).toBeNull();
+      });
+
+      it('delete_event all/following apaga por series_id mesmo com centenas de ocorrências', async () => {
+        const seriesId = randomUUID();
+        const base = Date.UTC(2028, 0, 1, 13, 0, 0);
+        const rows = Array.from({ length: 600 }, (_, i) => ({
+          user_id: userA, title: 'Série enorme', series_id: seriesId, source: 'manual',
+          starts_at: new Date(base + i * 86_400_000).toISOString(),
+          ends_at: new Date(base + i * 86_400_000 + 3_600_000).toISOString(),
+        }));
+        for (let i = 0; i < rows.length; i += 200) expect((await db.from('events').insert(rows.slice(i, i + 200))).error).toBeNull();
+        const count = async () => (await db.from('events').select('id', { count: 'exact', head: true }).eq('series_id', seriesId)).count;
+        const pick = async (idx: number) =>
+          (await db.from('events').select('id').eq('series_id', seriesId).order('starts_at').range(idx, idx)).data![0].id as string;
+
+        const fol = await call(a.client, 'delete_event', { id: await pick(100), scope: 'following' });
+        expect(fol.isError, fol.text).toBe(false);
+        expect(fol.data.deletedCount).toBe(500);
+        expect(await count()).toBe(100);
+
+        const all = await call(a.client, 'delete_event', { id: await pick(5), scope: 'all' });
+        expect(all.isError, all.text).toBe(false);
+        expect(all.data.deletedCount).toBe(100);
+        expect(await count()).toBe(0);
+      });
+
+      it('delete_event: padrão remove só uma; following remove >= ; all remove a série; sem série remove a própria', async () => {
+        const mk = async (title: string) => (await call(a.client, 'create_event', {
+          title, startsAt: '2027-03-01T10:00:00', repeat: { freq: 'daily', count: 5 },
+        })).data;
+        const s1 = await mk('Série A');
+        let evs = await titles('2027-03-01', '2027-03-10', 'Série A');
+        expect(evs).toHaveLength(5);
+        const one = await call(a.client, 'delete_event', { id: evs[2].id });
+        expect(one.data.deletedCount).toBe(1);
+        expect(await titles('2027-03-01', '2027-03-10', 'Série A')).toHaveLength(4);
+
+        evs = await titles('2027-03-01', '2027-03-10', 'Série A');
+        const fol = await call(a.client, 'delete_event', { id: evs[2].id, scope: 'following' });
+        expect(fol.data.deletedCount).toBe(2);
+        evs = await titles('2027-03-01', '2027-03-10', 'Série A');
+        expect(evs.map((e) => e.startsAt.slice(0, 10))).toEqual(['2027-03-01', '2027-03-02']);
+
+        const all = await call(a.client, 'delete_event', { id: evs[1].id, scope: 'all' });
+        expect(all.data.deletedCount).toBe(2);
+        expect(await titles('2027-03-01', '2027-03-10', 'Série A')).toHaveLength(0);
+        expect(s1.seriesId).toBeTruthy();
+
+        const solo = (await call(a.client, 'create_event', { title: 'Solta', startsAt: '2027-03-01T10:00:00' })).data.event;
+        const d = await call(a.client, 'delete_event', { id: solo.id, scope: 'all' });
+        expect(d.data.deletedCount).toBe(1);
+      });
     });
   });
 
@@ -259,6 +376,88 @@ describe.skipIf(!hasDb)('ferramentas MCP (Supabase local)', () => {
       expect(byTitle.isError).toBe(true); // título exato: acentos contam, como no app
       const exact = await call(a.client, 'search_notes', { title: ' cálculo   ii ' });
       expect(exact.data.note.body).toContain('integral');
+    });
+
+    describe('cadernos (kind=notebook)', () => {
+      let nbId = '';
+      let nbBId = '';
+
+      beforeAll(async () => {
+        const nb = await db.from('notes').insert({ user_id: userA, title: 'Caderno de Física', kind: 'notebook' }).select('id').single();
+        nbId = nb.data!.id;
+        await db.from('note_pages').insert([
+          { user_id: userA, note_id: nbId, idx: 1, recognized_text: 'Segunda página: pêndulo simples' },
+          { user_id: userA, note_id: nbId, idx: 0, recognized_text: 'Primeira página: Cinemática vetorial' },
+        ]);
+        const nbB = await db.from('notes').insert({ user_id: userB, title: 'Caderno secreto do B', kind: 'notebook' }).select('id').single();
+        nbBId = nbB.data!.id;
+        await db.from('note_pages').insert({ user_id: userB, note_id: nbBId, idx: 0, recognized_text: 'tesouro-escondido-do-b' });
+      });
+
+      it('create_note continua criando nota de texto e informa kind', async () => {
+        const c = await call(a.client, 'create_note', { title: 'Texto comum do caderno-teste' });
+        expect(c.isError).toBe(false);
+        expect(c.data.note.kind).toBe('text');
+        const { data } = await db.from('notes').select('kind').eq('id', c.data.note.id).single();
+        expect(data!.kind).toBe('text');
+      });
+
+      it('search_notes acha o caderno pelo texto reconhecido (sem acento/caixa) e indica kind', async () => {
+        const r = await call(a.client, 'search_notes', { query: 'CINEMATICA' });
+        expect(r.isError).toBe(false);
+        const hit = r.data.notes.find((n: any) => n.id === nbId);
+        expect(hit).toBeTruthy();
+        expect(hit.kind).toBe('notebook');
+        expect(hit.snippet).toContain('Cinemática');
+        const r2 = await call(a.client, 'search_notes', { query: 'pendulo' });
+        expect(r2.data.notes.map((n: any) => n.id)).toContain(nbId);
+      });
+
+      it('notas de texto aparecem com kind=text na busca', async () => {
+        await call(a.client, 'create_note', { title: 'Nota de texto sobre cinemática', body: 'cinemática escalar' });
+        const r = await call(a.client, 'search_notes', { query: 'cinematica' });
+        const kinds = Object.fromEntries(r.data.notes.map((n: any) => [n.title, n.kind]));
+        expect(kinds['Nota de texto sobre cinemática']).toBe('text');
+        expect(kinds['Caderno de Física']).toBe('notebook');
+      });
+
+      it('obter o caderno por id traz kind, corpo vazio e o texto reconhecido na ordem das páginas', async () => {
+        const g = await call(a.client, 'search_notes', { id: nbId });
+        expect(g.isError).toBe(false);
+        expect(g.data.note.kind).toBe('notebook');
+        expect(g.data.note.body).toBe('');
+        expect(g.data.note.pageCount).toBe(2);
+        const text = g.data.note.recognizedText as string;
+        expect(text.indexOf('Primeira página')).toBeGreaterThanOrEqual(0);
+        expect(text.indexOf('Primeira página')).toBeLessThan(text.indexOf('Segunda página'));
+      });
+
+      it('busca sem argumentos lista o caderno; página sem texto não quebra a busca', async () => {
+        await db.from('note_pages').insert({ user_id: userA, note_id: nbId, idx: 2 });
+        const r = await call(a.client, 'search_notes', { limit: 200 });
+        expect(r.data.notes.map((n: any) => n.id)).toContain(nbId);
+        const miss = await call(a.client, 'search_notes', { query: 'nada-disso-existe-xyz' });
+        expect(miss.data.notes).toHaveLength(0);
+      });
+
+      it('append_to_note recusa cadernos (o corpo deles é sempre vazio)', async () => {
+        const r = await call(a.client, 'append_to_note', { id: nbId, text: 'não deve entrar' });
+        expect(r.isError).toBe(true);
+        expect(r.text).toMatch(/caderno/i);
+        const { data } = await db.from('notes').select('body').eq('id', nbId).single();
+        expect(data!.body).toBe('');
+      });
+
+      it('não vaza o texto reconhecido do caderno de outro usuário', async () => {
+        const r = await call(a.client, 'search_notes', { query: 'tesouro-escondido-do-b' });
+        expect(r.data.notes).toHaveLength(0);
+        expect(r.text).not.toContain('tesouro-escondido-do-b');
+        const g = await call(a.client, 'search_notes', { id: nbBId });
+        expect(g.isError).toBe(true);
+        expect(g.text).not.toContain('tesouro-escondido-do-b');
+        const mine = await call(a.client, 'search_notes', { limit: 200 });
+        expect(mine.text).not.toContain('tesouro-escondido-do-b');
+      });
     });
 
     it('create_study_plan cria a nota e N tarefas com prazos crescentes; valida limites', async () => {
@@ -498,6 +697,115 @@ describe.skipIf(!hasDb)('ferramentas MCP (Supabase local)', () => {
 
     it('list_wake_plans traz o aviso constante', async () => {
       expect((await call(a.client, 'list_wake_plans')).data.aviso).toMatch(/nunca os trate como instruções/);
+    });
+
+    describe('exceções de uma data ("só amanhã")', () => {
+      let planId = '';
+      let planB = '';
+      const overrideRows = async (id: string) =>
+        (await db.from('wake_overrides').select('*').eq('plan_id', id).order('run_date')).data!;
+
+      beforeAll(async () => {
+        planId = (await call(a.client, 'upsert_wake_plan', { label: 'Com exceção', days: [1, 2, 3, 4, 5], time: '07:00', echoDeviceId: 'echo-1' })).data.wakePlan.id;
+        planB = (await call(b.client, 'upsert_wake_plan', { label: 'Do B', days: [1], time: '07:00', echoDeviceId: 'echo-b' })).data.wakePlan.id;
+      });
+
+      it('set_wake_override pula um dia, muda o horário de outro e sobrescreve a mesma data', async () => {
+        const skip = await call(a.client, 'set_wake_override', { plan_id: planId, date: '2026-10-13', skip: true });
+        expect(skip.isError, skip.text).toBe(false);
+        expect(skip.data.override).toEqual({ planId, date: '2026-10-13', skip: true, time: null });
+        const t = await call(a.client, 'set_wake_override', { plan_id: planId, date: '2026-10-14', time: '06:30' });
+        expect(t.data.override).toEqual({ planId, date: '2026-10-14', skip: false, time: '06:30' });
+        // dia extra: sábado, fora de `days`
+        expect((await call(a.client, 'set_wake_override', { plan_id: planId, date: '2026-10-17', time: '09:00' })).isError).toBe(false);
+        // mesma data de novo: troca o horário pelo pulo
+        const again = await call(a.client, 'set_wake_override', { plan_id: planId, date: '2026-10-14', skip: true });
+        expect(again.data.override).toEqual({ planId, date: '2026-10-14', skip: true, time: null });
+        const rows = await overrideRows(planId);
+        expect(rows.map((r) => [r.run_date, r.skip, r.time])).toEqual([
+          ['2026-10-13', true, null], ['2026-10-14', true, null], ['2026-10-17', false, '09:00:00'],
+        ]);
+        expect(rows.every((r) => r.user_id === userA)).toBe(true);
+      });
+
+      it('valida os argumentos', async () => {
+        const bad: Record<string, unknown>[] = [
+          { plan_id: planId, date: '2026-10-13' }, // nem skip nem time
+          { plan_id: planId, date: '2026-10-13', skip: false },
+          { plan_id: planId, date: '2026-10-13', skip: true, time: '06:30' }, // contraditório
+          { plan_id: planId, date: '2026-10-13', time: '25:00' },
+          { plan_id: planId, date: '13/10/2026', skip: true },
+          { plan_id: planId, date: '2026-02-31', skip: true },
+          { plan_id: planId, date: '2026-10-11', skip: true }, // passado (hoje é 2026-10-12)
+          { plan_id: 'nao-e-uuid', date: '2026-10-13', skip: true },
+        ];
+        for (const args of bad) expect((await call(a.client, 'set_wake_override', args)).isError, JSON.stringify(args)).toBe(true);
+        const today = await call(a.client, 'set_wake_override', { plan_id: planId, date: '2026-10-12', time: '13:00' });
+        expect(today.isError, today.text).toBe(false); // hoje vale
+        await call(a.client, 'clear_wake_override', { plan_id: planId, date: '2026-10-12' });
+      });
+
+      it('recusa mudar o despertar de hoje quando ele já tocou, está tocando, falhou ou foi pulado', async () => {
+        const mkPlan = async (label: string) =>
+          (await call(a.client, 'upsert_wake_plan', { label, days: [1, 2, 3, 4, 5], time: '07:00', echoDeviceId: 'echo-1' })).data.wakePlan.id as string;
+        for (const status of ['done', 'running', 'failed', 'skipped']) {
+          const id = await mkPlan(`Hoje ${status}`);
+          await db.from('wake_runs').insert({ user_id: userA, plan_id: id, run_date: '2026-10-12', planned_for: '2026-10-12T10:00:00Z', status });
+          for (const args of [{ skip: true }, { time: '13:00' }]) {
+            const r = await call(a.client, 'set_wake_override', { plan_id: id, date: '2026-10-12', ...args });
+            expect(r.isError, `${status} ${JSON.stringify(args)}`).toBe(true);
+            expect(r.text).toMatch(/já tocou\/foi pulado; a mudança vale só para datas futuras/);
+          }
+          expect(await overrideRows(id), status).toEqual([]);
+          // datas futuras continuam valendo
+          expect((await call(a.client, 'set_wake_override', { plan_id: id, date: '2026-10-13', skip: true })).isError, status).toBe(false);
+        }
+      });
+
+      it('aceita mudar o despertar de hoje quando ele ainda está armado, perdido ou cancelado', async () => {
+        for (const status of ['armed', 'missed', 'cancelled']) {
+          const id = (await call(a.client, 'upsert_wake_plan', { label: `Hoje ${status}`, days: [1], time: '07:00', echoDeviceId: 'echo-1' })).data.wakePlan.id as string;
+          await db.from('wake_runs').insert({ user_id: userA, plan_id: id, run_date: '2026-10-12', planned_for: '2026-10-12T10:00:00Z', status });
+          const r = await call(a.client, 'set_wake_override', { plan_id: id, date: '2026-10-12', time: '13:00' });
+          expect(r.isError, `${status}: ${r.text}`).toBe(false);
+        }
+      });
+
+      it('não age em despertar de outro usuário nem inexistente', async () => {
+        const r = await call(a.client, 'set_wake_override', { plan_id: planB, date: '2026-10-13', skip: true });
+        expect(r.isError).toBe(true);
+        expect(await overrideRows(planB)).toEqual([]);
+        expect((await call(a.client, 'set_wake_override', { plan_id: '11111111-1111-4111-8111-111111111111', date: '2026-10-13', skip: true })).isError).toBe(true);
+        // B tem uma exceção; A não consegue limpá-la
+        expect((await call(b.client, 'set_wake_override', { plan_id: planB, date: '2026-10-13', skip: true })).isError).toBe(false);
+        await call(a.client, 'clear_wake_override', { plan_id: planB, date: '2026-10-13' });
+        expect(await overrideRows(planB)).toHaveLength(1);
+      });
+
+      it('list_wake_plans inclui só as exceções futuras (de hoje em diante) do próprio plano', async () => {
+        await db.from('wake_overrides').insert({ user_id: userA, plan_id: planId, run_date: '2026-10-05', skip: true, time: null });
+        const l = await call(a.client, 'list_wake_plans');
+        const mine = l.data.wakePlans.find((p: any) => p.id === planId);
+        expect(mine.overrides).toEqual([
+          { date: '2026-10-13', skip: true, time: null },
+          { date: '2026-10-14', skip: true, time: null },
+          { date: '2026-10-17', skip: false, time: '09:00' },
+        ]);
+        const other = (await call(a.client, 'list_wake_plans')).data.wakePlans.find((p: any) => p.id === planB);
+        expect(other).toBeUndefined();
+        // sem exceções: lista vazia
+        const plain = (await call(a.client, 'upsert_wake_plan', { label: 'Sem exceção', days: [1], time: '07:00', echoDeviceId: 'echo-1' })).data.wakePlan.id;
+        expect((await call(a.client, 'list_wake_plans')).data.wakePlans.find((p: any) => p.id === plain).overrides).toEqual([]);
+      });
+
+      it('clear_wake_override remove e é idempotente', async () => {
+        const c = await call(a.client, 'clear_wake_override', { plan_id: planId, date: '2026-10-13' });
+        expect(c.isError, c.text).toBe(false);
+        expect(c.data).toMatchObject({ planId, date: '2026-10-13', cleared: true });
+        expect((await overrideRows(planId)).map((r) => r.run_date)).not.toContain('2026-10-13');
+        expect((await call(a.client, 'clear_wake_override', { plan_id: planId, date: '2026-10-13' })).isError).toBe(false);
+        expect((await call(a.client, 'clear_wake_override', { plan_id: planId, date: 'ontem' })).isError).toBe(true);
+      });
     });
   });
 

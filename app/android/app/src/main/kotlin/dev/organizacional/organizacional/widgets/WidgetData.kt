@@ -33,6 +33,8 @@ data class WidgetEvent(
     val allDay: Boolean,
     val location: String?,
     val kind: String,
+    /** Cor da etiqueta do evento (ARGB), ou null se não tiver etiqueta. */
+    val tagColor: Int? = null,
 )
 
 data class WidgetTask(
@@ -48,6 +50,8 @@ object WidgetData {
     const val KEY_THEME = "w_theme"
     const val KEY_EVENTS = "w_events"
     const val KEY_TASKS = "w_tasks"
+    /** Opacidade do fundo (0-255), preferência do aparelho gravada pelo app; ausente = opaco. */
+    const val KEY_BG_ALPHA = "w_bg_alpha"
 
     const val STATE_OK = "ok"
     const val STATE_SIGNED_OUT = "signed_out"
@@ -83,6 +87,21 @@ object WidgetData {
         }
     }
 
+    /** '#RRGGBB' / '#AARRGGBB' válido -> cor; vazio, nulo ou inválido -> null (evento sem etiqueta). */
+    fun parseOptionalColor(value: String?): Int? {
+        if (value.isNullOrBlank()) return null
+        val s = value.trim().removePrefix("#")
+        if (s.length != 6 && s.length != 8) return null
+        if (!s.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) return null
+        return parseColor(value, 0)
+    }
+
+    /** Marca que antecede o título de um evento com etiqueta (o ponto é pintado com a cor dela). */
+    const val TAG_DOT = "●"
+
+    /** Título com o ponto da etiqueta na frente; sem etiqueta, o título como está. */
+    fun titleWithDot(e: WidgetEvent): String = if (e.tagColor == null) e.title else "$TAG_DOT ${e.title}"
+
     fun parseThemeJson(json: String?): WidgetTheme {
         val o = try {
             if (json.isNullOrBlank()) null else JSONObject(json)
@@ -104,6 +123,10 @@ object WidgetData {
             danger = c("danger", v.danger),
         )
     }
+
+    /** Opacidade do fundo: número 0-255 (limitado); ausente ou inválido -> 255 (opaco). */
+    fun parseBgAlpha(value: String?): Int =
+        value?.trim()?.toIntOrNull()?.coerceIn(0, 255) ?: 255
 
     fun parseEventsJson(json: String?): List<WidgetEvent> {
         val arr = try {
@@ -127,6 +150,7 @@ object WidgetData {
                     location = if (o.isNull("location")) null
                     else o.optString("location", "").ifBlank { null },
                     kind = o.optString("kind", "outro"),
+                    tagColor = parseOptionalColor(o.optString("tagColor", "")),
                 ),
             )
         }
@@ -157,6 +181,7 @@ object WidgetData {
     fun parseTheme(p: SharedPreferences) = parseThemeJson(p.getString(KEY_THEME, null))
     fun parseEvents(p: SharedPreferences) = parseEventsJson(p.getString(KEY_EVENTS, null))
     fun parseTasks(p: SharedPreferences) = parseTasksJson(p.getString(KEY_TASKS, null))
+    fun bgAlpha(p: SharedPreferences): Int = parseBgAlpha(p.getString(KEY_BG_ALPHA, null))
     fun state(p: SharedPreferences): String = p.getString(KEY_STATE, null) ?: STATE_OK
     fun generatedAt(p: SharedPreferences): Long? = p.getString(KEY_GENERATED_AT, null)?.toLongOrNull()
 
@@ -221,6 +246,15 @@ object WidgetData {
         }
     }
 
+    /** Como [eventTimeLabel], porém curto o bastante para uma coluna de largura fixa. */
+    fun eventTimeCompact(e: WidgetEvent, nowMillis: Long, zone: ZoneId): String {
+        val label = eventTimeLabel(e, nowMillis, zone)
+        return if (label.endsWith(" → amanhã")) "${hhmm(e.start, zone)} →" else label
+    }
+
+    /** "+N mais". */
+    fun moreLabel(extra: Int): String = "+$extra mais"
+
     /** Primeira prova que ainda não terminou. */
     fun nextExam(events: List<WidgetEvent>, nowMillis: Long): WidgetEvent? =
         events.filter { it.kind == "prova" && maxOf(it.end, it.start) > nowMillis }
@@ -263,18 +297,29 @@ object WidgetData {
         if (isOverdue(due, nowMillis, zone)) theme.danger else theme.inkMuted
 
     /**
-     * Divide [total] linhas entre duas seções, cada uma com no mínimo 1 linha (a mensagem de
-     * vazio ocupa uma) e no máximo [capEach]; quando falta espaço, tira da seção maior.
+     * Linhas por seção do widget "Agenda e Tarefas" (duas metades iguais, em cima e embaixo),
+     * de 1 até [cap]. Descontam o padding (24 dp), o separador (13 dp) e, por metade, o título e
+     * a linha "+N mais" ([sectionFixedDp]). Altura desconhecida (<= 0) -> 4 linhas.
      */
-    fun splitRows(total: Int, needA: Int, needB: Int, capEach: Int = 4): Pair<Int, Int> {
-        var a = needA.coerceIn(1, capEach)
-        var b = needB.coerceIn(1, capEach)
-        val t = maxOf(total, 2)
-        while (a + b > t) {
-            if (a >= b) a-- else b--
-        }
-        return a to b
+    fun sectionRows(
+        heightDp: Int,
+        cap: Int = 6,
+        paddingDp: Int = 24,
+        dividerDp: Int = 13,
+        sectionFixedDp: Int = 36,
+        rowDp: Int = 20,
+    ): Int {
+        if (heightDp <= 0) return minOf(4, cap)
+        val half = (heightDp - paddingDp - dividerDp) / 2
+        return ((half - sectionFixedDp) / rowDp).coerceIn(1, cap)
     }
+
+    /**
+     * Altura (dp) realmente disponível: em pé vale o MAX_HEIGHT do launcher, deitado o
+     * MIN_HEIGHT. Sem MAX informado, cai para o MIN; 0 = desconhecida.
+     */
+    fun effectiveHeightDp(minDp: Int, maxDp: Int, portrait: Boolean): Int =
+        if (portrait && maxDp > 0) maxDp else minDp
 
     /** Quantas linhas cabem na altura (dp) do widget, limitado a [cap]. */
     fun rowsFor(heightDp: Int, cap: Int, fixedDp: Int = 44, rowDp: Int = 18): Int {

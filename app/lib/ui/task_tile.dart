@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../app/providers.dart';
 import '../data/repository.dart';
 import '../domain/task_item.dart';
 import 'common.dart';
+import 'date_labels.dart';
 
 class TaskTile extends ConsumerWidget {
   const TaskTile({super.key, required this.task, this.spaceName});
@@ -23,8 +23,11 @@ class TaskTile extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final repo = ref.read(repositoryProvider);
+    final messenger = ScaffoldMessenger.maybeOf(context);
     try {
-      await ref.read(repositoryProvider).deleteTask(task.id);
+      await repo.deleteTask(task.id);
+      showUndo(messenger, 'Tarefa excluída', () => repo.upsertTask(task));
     } on RepositoryException {
       if (context.mounted) showError(context, 'Não foi possível excluir a tarefa.');
     }
@@ -36,7 +39,7 @@ class TaskTile extends ConsumerWidget {
     final due = task.dueAt;
     final subtitle = [
       ?spaceName,
-      if (due != null) DateFormat('d MMM', 'pt_BR').format(due),
+      if (due != null) dueLabel(due, ref.read(clockProvider)(), done: task.isDone),
     ].join(' · ');
     return ListTile(
       leading: Checkbox(
@@ -53,7 +56,14 @@ class TaskTile extends ConsumerWidget {
               )
             : null,
       ),
-      subtitle: subtitle.isEmpty ? null : Text(subtitle),
+      subtitle: subtitle.isEmpty
+          ? null
+          : Text(
+              subtitle,
+              style: !task.isDone && due != null && isOverdue(due, ref.read(clockProvider)())
+                  ? TextStyle(color: theme.colorScheme.error)
+                  : null,
+            ),
       trailing: IconButton(
         key: ValueKey('delete-task-${task.id}'),
         tooltip: 'Excluir',
