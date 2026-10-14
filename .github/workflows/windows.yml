@@ -1,0 +1,38 @@
+name: App Windows
+
+# Compila o app de Windows numa máquina Windows do GitHub (o Flutter não compila Windows a partir do Linux).
+# Rodar: criar e enviar uma tag `windows-vN` (ou Actions > Run workflow quando estiver na main).
+on:
+  workflow_dispatch:
+  push:
+    tags: ['windows-v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+      - name: Configuração (URL e chave pública do Supabase)
+        shell: pwsh
+        env:
+          ENV_JSON: ${{ secrets.ENV_JSON }}
+        run: Set-Content -Path env.json -Value $env:ENV_JSON -NoNewline
+      - run: flutter pub get
+      - run: flutter build windows --release --dart-define-from-file=env.json
+      - name: Empacotar
+        shell: pwsh
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath Organize-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Organize-windows
+          path: app/Organize-windows.zip
+          retention-days: 7

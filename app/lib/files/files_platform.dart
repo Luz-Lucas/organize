@@ -93,5 +93,39 @@ class LinuxFilesPlatform implements FilesPlatform {
   }
 }
 
+/// Windows: abre no app padrão pelo `url.dll` (devolve 0 quando o Windows aceitou abrir);
+/// a pasta fica em `%LOCALAPPDATA%\\Organize\\drive_cache`.
+class WindowsFilesPlatform implements FilesPlatform {
+  WindowsFilesPlatform({Map<String, String>? env, ProcessRun? run})
+      : _env = env ?? Platform.environment,
+        _run = run ?? _runProcess;
+
+  final Map<String, String> _env;
+  final ProcessRun _run;
+
+  static final _absolute = RegExp(r'^[A-Za-z]:[\\/]');
+
+  @override
+  bool get supported => true;
+
+  @override
+  Future<String?> cacheRoot() async {
+    final base = _env['LOCALAPPDATA'] ?? _env['APPDATA'];
+    if (base == null || !_absolute.hasMatch(base)) return null;
+    return '$base\\Organize\\drive_cache';
+  }
+
+  @override
+  Future<bool> openFile(String path, String mime) async {
+    // Só caminho absoluto com letra de unidade (nada de URLs nem argumentos soltos).
+    if (!_absolute.hasMatch(path)) return false;
+    try {
+      return await _run('rundll32', ['url.dll,FileProtocolHandler', path]) == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 /// Quem abre arquivos e guarda o cache neste aparelho (a `main` troca por Android/Linux).
 final filesPlatformProvider = Provider<FilesPlatform>((ref) => const NoopFilesPlatform());

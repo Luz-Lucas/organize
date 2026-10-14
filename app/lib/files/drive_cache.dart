@@ -121,7 +121,7 @@ class DriveCache {
       if (FileSystemEntity.typeSync(abs, followLinks: false) != FileSystemEntityType.file) return null;
       final canonRoot = await Directory(root).resolveSymbolicLinks();
       final canonFile = await File(abs).resolveSymbolicLinks();
-      if (canonFile != '$canonRoot/$relative') return null; // algum componente é link (ou escapa da raiz)
+      if (!samePath(canonFile, '$canonRoot/$relative')) return null; // algum componente é link (ou escapa da raiz)
     } on FileSystemException {
       return null;
     }
@@ -253,4 +253,12 @@ class DriveCache {
       index.remove(id);
     }
   }
+}
+
+/// Compara caminhos canônicos. No Windows o sistema devolve `\` e não diferencia maiúsculas;
+/// no Linux/Android a comparação é exata.
+bool samePath(String a, String b, {bool? windows}) {
+  if (!(windows ?? Platform.isWindows)) return a == b;
+  String n(String s) => s.replaceAll('\\', '/').toLowerCase();
+  return n(a) == n(b);
 }

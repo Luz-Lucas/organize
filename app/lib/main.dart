@@ -92,7 +92,11 @@ Future<void> main() async {
       notebookImageStoreFactoryProvider
           .overrideWithValue((noteId) => SupabaseNotebookImageStore(client, noteId: noteId)),
       filesPlatformProvider.overrideWithValue(
-          isAndroid ? MethodChannelFilesPlatform() : (!kIsWeb && Platform.isLinux ? LinuxFilesPlatform() : const NoopFilesPlatform())),
+          isAndroid
+              ? MethodChannelFilesPlatform()
+              : (!kIsWeb && Platform.isLinux
+                  ? LinuxFilesPlatform()
+                  : (!kIsWeb && Platform.isWindows ? WindowsFilesPlatform() : const NoopFilesPlatform()))),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
       if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
       if (isAndroid) locationServiceProvider.overrideWithValue(const GeolocatorLocationService()),
