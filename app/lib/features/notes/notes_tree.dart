@@ -6,10 +6,13 @@ import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/ids.dart';
 import '../../domain/note.dart';
+import '../../domain/notebook_cover.dart';
 import '../../domain/space.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
+import '../../notebook/core/ink_types.dart' show pageHeight, pageWidth;
 import '../../notebook/create_notebook.dart';
+import '../../notebook/notebook_cover_view.dart';
 import '../../notebook/notebook_thumbnail.dart';
 import '../../notebook/state/notebook_providers.dart';
 import '../../ui/org_theme.dart';
@@ -97,7 +100,7 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
     // Cadernos: também o texto reconhecido da escrita (só buscado quando há busca).
     final recognized = searching ? (ref.watch(notebookRecognizedTextProvider).value ?? const <String, String>{}) : const <String, String>{};
     bool bodyHit(Note n) =>
-        foldSearch(n.body).contains(q) || (n.isNotebook && foldSearch(recognized[n.id] ?? '').contains(q));
+        foldSearch(n.isNotebook ? n.coverSearchText : n.body).contains(q) || (n.isNotebook && foldSearch(recognized[n.id] ?? '').contains(q));
     final visible = [
       for (final n in notes)
         if (!searching || titleHit(n) || bodyHit(n)) n,
@@ -327,7 +330,14 @@ class _NoteRow extends StatelessWidget {
                 ),
                 if (note.isNotebook) ...[
                   const SizedBox(width: 8),
-                  NotebookThumbnail(noteId: note.id, stamp: note.updatedAt?.millisecondsSinceEpoch ?? 0, width: 20),
+                  if (note.cover case final cover?)
+                    SizedBox(
+                      width: 20,
+                      height: 20 * pageHeight / pageWidth,
+                      child: NotebookCoverView(noteId: note.id, cover: cover, radius: 1),
+                    )
+                  else
+                    NotebookThumbnail(noteId: note.id, stamp: note.updatedAt?.millisecondsSinceEpoch ?? 0, width: 20),
                 ],
               ],
             ),

@@ -10,16 +10,22 @@ import '../../../domain/space.dart';
 import '../../../notebook/data/notebook_image_purger.dart';
 import '../../../notebook/state/notebook_providers.dart';
 import '../../../ui/common.dart';
+import 'cover_editor.dart';
 import 'notebooks_logic.dart';
 
 /// Menu de um caderno (segurar na árvore de notas ou na grade de Cadernos):
-/// Mover para pasta, Renomear e Excluir.
+/// Capa, Mover para pasta, Renomear e Excluir.
 Future<void> showNotebookMenu(BuildContext context, WidgetRef ref, Note note) async {
   final action = await showDialog<String>(
     context: context,
     builder: (ctx) => SimpleDialog(
       title: Text(note.title, overflow: TextOverflow.ellipsis),
       children: [
+        SimpleDialogOption(
+          key: const Key('notebook-menu-cover'),
+          onPressed: () => Navigator.of(ctx).pop('cover'),
+          child: const Text('Capa…'),
+        ),
         SimpleDialogOption(
           key: const Key('notebook-menu-move'),
           onPressed: () => Navigator.of(ctx).pop('move'),
@@ -40,6 +46,8 @@ Future<void> showNotebookMenu(BuildContext context, WidgetRef ref, Note note) as
   );
   if (!context.mounted) return;
   switch (action) {
+    case 'cover':
+      await editNotebookCover(context, ref, note);
     case 'move':
       await moveNotebook(context, ref, note);
     case 'rename':
