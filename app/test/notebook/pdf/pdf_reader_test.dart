@@ -31,6 +31,11 @@ Widget fakePdfView(BuildContext context, PdfViewRequest r) => Column(
       onPressed: () => r.onSelection(const PdfSelection('O limite\nde f(x)', page: 3)),
       child: const Text('selecionar'),
     ),
+    TextButton(
+      key: const Key('fake-select-more'),
+      onPressed: () => r.onSelection(const PdfSelection('O limite de f(x) quando x tende a zero', page: 3)),
+      child: const Text('arrastar'),
+    ),
     TextButton(key: const Key('fake-unselect'), onPressed: () => r.onSelection(null), child: const Text('limpar')),
     TextButton(
       key: const Key('fake-menu-note'),
@@ -119,6 +124,21 @@ void main() {
     expect(created.spaceId, 's1', reason: 'na mesma pasta do caderno');
     expect(find.text('Nota “Limites” criada.'), findsOneWidget);
     expect(_key('pdf-create-note'), findsNothing, reason: 'a seleção já virou nota');
+  });
+
+  testWidgets('arrastar a seleção: o botão fica e a nota leva o trecho final', (tester) async {
+    await open(tester);
+    await tester.tap(_key('fake-select'));
+    await tester.pumpAndSettle();
+    await tester.tap(_key('fake-select-more'));
+    await tester.pumpAndSettle();
+    expect(_key('pdf-create-note'), findsOneWidget);
+    await tester.tap(_key('pdf-create-note'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: _key('pdf-note-body'), matching: find.text('O limite de f(x) quando x tende a zero')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('"Criar nota" do menu do leitor também cria', (tester) async {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -55,9 +56,22 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
 
   void _retry() => setState(() => _load = null);
 
+  /// Muda o estado fora de uma fase de build/layout: o leitor avisa de página e
+  /// seleção enquanto se desenha, e um setState ali quebraria a tela.
+  void _update(VoidCallback change) {
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(change);
+      });
+    } else {
+      setState(change);
+    }
+  }
+
   void _onPage(String path, int page, int count) {
     if (!mounted || (page == _page && count == _count)) return;
-    setState(() {
+    _update(() {
       _page = page;
       _count = count;
     });
@@ -66,7 +80,13 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
 
   void _onSelection(PdfSelection? s) {
     if (!mounted) return;
-    setState(() => _selection = s == null || s.isEmpty ? null : s);
+    final next = s == null || s.isEmpty ? null : s;
+    // Arrastando a seleção chegam muitas: só redesenha quando o botão aparece ou some.
+    if ((next == null) == (_selection == null)) {
+      _selection = next;
+      return;
+    }
+    _update(() => _selection = next);
   }
 
   Future<void> _createNote(PdfSelection sel, String bookTitle) async {

@@ -39,9 +39,51 @@ class _PdfrxViewState extends State<_PdfrxView> {
     if (seq == _selectionSeq && mounted) widget.request.onSelection(sel.isEmpty ? null : sel);
   }
 
+  /// Os parâmetros do leitor, criados uma vez só. O pdfrx compara os parâmetros a
+  /// cada reconstrução e **recarrega o documento** se mudaram (callbacks novos
+  /// contam como mudança): a tela piscava em cinza e a seleção se perdia no meio
+  /// do arraste, porque a seleção reconstrói a tela (o botão "Criar nota").
+  /// Por isso os callbacks leem `widget.request` na hora, em vez de capturá-lo.
+  PdfViewerParams? _params;
+  Color? _paramsBackground;
+
+  PdfViewerParams _paramsFor(Color background) {
+    final cached = _params;
+    if (cached != null && _paramsBackground == background) return cached;
+    _paramsBackground = background;
+    return _params = PdfViewerParams(
+      backgroundColor: background,
+      textSelectionParams: PdfTextSelectionParams(onTextSelectionChange: (s) => unawaited(_selectionChanged(s))),
+      customizeContextMenuItems: (params, items) {
+        if (!params.textSelectionDelegate.hasSelectedText) return;
+        items.insert(
+          0,
+          ContextMenuButtonItem(
+            label: 'Criar nota',
+            onPressed: () async {
+              final sel = await _selectionOf(params.textSelectionDelegate);
+              params.dismissContextMenu();
+              if (!sel.isEmpty && mounted) widget.request.onCreateNote(sel);
+            },
+          ),
+        );
+      },
+      onPageChanged: (page) {
+        if (page != null && _controller.isReady && mounted) widget.request.onPage?.call(page, _controller.pageCount);
+      },
+      onViewerReady: (doc, controller) {
+        if (mounted) widget.request.onPage?.call(controller.pageNumber ?? widget.request.initialPage, doc.pages.length);
+      },
+      loadingBannerBuilder: (context, bytesDownloaded, totalBytes) => const Center(child: CircularProgressIndicator()),
+      errorBannerBuilder: (context, error, stackTrace, documentRef) =>
+          const Center(child: Text('Não foi possível abrir o PDF.')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = widget.request;
+    final background = Theme.of(context).colorScheme.surfaceContainerHighest;
     return FutureBuilder<void>(
       future: _ready,
       builder: (context, snap) {
@@ -51,33 +93,7 @@ class _PdfrxViewState extends State<_PdfrxView> {
           sourceName: r.sourceName,
           controller: _controller,
           initialPageNumber: r.initialPage,
-          params: PdfViewerParams(
-            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-            textSelectionParams: PdfTextSelectionParams(onTextSelectionChange: (s) => unawaited(_selectionChanged(s))),
-            customizeContextMenuItems: (params, items) {
-              if (!params.textSelectionDelegate.hasSelectedText) return;
-              items.insert(
-                0,
-                ContextMenuButtonItem(
-                  label: 'Criar nota',
-                  onPressed: () async {
-                    final sel = await _selectionOf(params.textSelectionDelegate);
-                    params.dismissContextMenu();
-                    if (!sel.isEmpty) r.onCreateNote(sel);
-                  },
-                ),
-              );
-            },
-            onPageChanged: (page) {
-              if (page != null && _controller.isReady) r.onPage?.call(page, _controller.pageCount);
-            },
-            onViewerReady: (doc, controller) =>
-                r.onPage?.call(controller.pageNumber ?? r.initialPage, doc.pages.length),
-            loadingBannerBuilder: (context, bytesDownloaded, totalBytes) =>
-                const Center(child: CircularProgressIndicator()),
-            errorBannerBuilder: (context, error, stackTrace, documentRef) =>
-                const Center(child: Text('Não foi possível abrir o PDF.')),
-          ),
+          params: _paramsFor(background),
         );
       },
     );
