@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io' show NetworkInterface, Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'recognizer.dart';
@@ -95,12 +96,14 @@ class InkModelManager extends Notifier<InkModelState> {
             : const InkModelState(InkModelStatus.error, error: 'Não foi possível baixar o modelo. Tente de novo.');
       }
       return ready ? InkDownloadOutcome.finished : InkDownloadOutcome.failed;
-    } catch (_) {
+    } catch (e) {
       _busy = false;
+      debugPrint('Caderno: download do modelo de escrita falhou: $e');
       if (ref.mounted) {
-        state = const InkModelState(
+        state = InkModelState(
           InkModelStatus.error,
-          error: 'Não foi possível baixar o modelo. Verifique a conexão e tente de novo.',
+          error: 'Não foi possível baixar o modelo. Verifique a conexão e tente de novo.\n'
+              'Detalhe: ${downloadErrorDetail(e)}',
         );
       }
       return InkDownloadOutcome.failed;
@@ -120,3 +123,14 @@ class InkModelManager extends Notifier<InkModelState> {
 }
 
 final inkModelManagerProvider = NotifierProvider<InkModelManager, InkModelState>(InkModelManager.new);
+
+/// O motivo técnico de uma falha no download, curto o bastante para a tela
+/// (o reconhecedor do Android devolve o código e a mensagem da exceção nativa).
+String downloadErrorDetail(Object e) {
+  final text = switch (e) {
+    PlatformException(:final code, :final message) => message == null || message.isEmpty ? code : '$code: $message',
+    StateError(:final message) => message,
+    _ => e.toString(),
+  };
+  return text.length > 200 ? '${text.substring(0, 200)}…' : text;
+}
