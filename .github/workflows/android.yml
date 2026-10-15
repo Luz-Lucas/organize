@@ -47,9 +47,9 @@ jobs:
         env:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
         run: |
-          mkdir -p ~/.android
           if [ -n "$KEYSTORE" ]; then
-            printf '%s' "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+            printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/organize.keystore"
+            echo "ORGANIZE_KEYSTORE=$RUNNER_TEMP/organize.keystore" >> "$GITHUB_ENV"
             echo "Assinado com a chave do segredo ANDROID_KEYSTORE_B64: atualiza o app instalado." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::warning::Sem o segredo ANDROID_KEYSTORE_B64: o APK sai com uma chave nova e só instala depois de desinstalar o app."
@@ -72,6 +72,20 @@ jobs:
           flutter build apk --release --split-per-abi --target-platform android-arm64
           --dart-define-from-file=env.json
           --build-name=${{ steps.ver.outputs.name }} --build-number=${{ steps.ver.outputs.build }}
+      - name: Conferir a assinatura
+        if: env.ORGANIZE_KEYSTORE != ''
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
+          apk=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          got="$("$apksigner" verify --print-certs "$apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n1)"
+          want="$(keytool -exportcert -keystore "$ORGANIZE_KEYSTORE" -storepass android -alias androiddebugkey 2>/dev/null | sha256sum | cut -d' ' -f1)"
+          echo "APK:   $got"
+          echo "chave: $want"
+          echo "Assinatura (SHA-256): \`$got\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$got" ] || [ "$got" != "$want" ]; then
+            echo "::error::O APK não saiu assinado com a chave do segredo ANDROID_KEYSTORE_B64."
+            exit 1
+          fi
       - name: Renomear
         run: cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk Organize-android-${{ steps.ver.outputs.build }}.apk
       - uses: actions/upload-artifact@v4
