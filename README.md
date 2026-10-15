@@ -3,6 +3,8 @@
 Agenda, tarefas, matérias, trabalhos e hobbies num só lugar. Flutter (Linux/Windows/Android) + Supabase.
 
 ## Estrutura
+Guia completo (arquitetura, como acrescentar/tirar funcionalidades, rodar sem servidor): [`docs/GUIA-DO-DESENVOLVEDOR.md`](docs/GUIA-DO-DESENVOLVEDOR.md).
+
 - `supabase/`: migrations SQL e testes pgTAP (`npx supabase test db`)
 - `app/`: app Flutter (`lib/domain` regras puras, `lib/data` repositórios, `lib/features` telas)
 - `docs/superpowers/`: spec e planos por fase
