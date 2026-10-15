@@ -5,9 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../../app/providers.dart';
 import '../../../data/repository.dart';
 import '../../../domain/note.dart';
+import '../../../domain/notebook_cover.dart';
 import '../../../domain/space.dart';
 import '../../../notebook/core/ink_types.dart' show pageHeight, pageWidth;
 import '../../../notebook/create_notebook.dart';
+import '../../../notebook/notebook_cover_view.dart';
 import '../../../notebook/notebook_thumbnail.dart';
 import '../../../notebook/pdf/pdf_import.dart' show notebookTitleForPdf;
 import '../../../notebook/pdf/pdf_providers.dart';
@@ -573,21 +575,25 @@ class _NotebookCard extends StatelessWidget {
                       child: SizedBox(
                         width: w,
                         height: w * pageHeight / pageWidth,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: org.surface,
-                                border: Border.all(color: org.line, width: 0.5),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                              child: Icon(Icons.menu_book_outlined, color: org.inkMuted, size: (w * 0.4).clamp(0, 40)),
+                        child: switch (note.cover) {
+                          final cover? => NotebookCoverView(noteId: note.id, cover: cover),
+                          null => Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: org.surface,
+                                    border: Border.all(color: org.line, width: 0.5),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                  child:
+                                      Icon(Icons.menu_book_outlined, color: org.inkMuted, size: (w * 0.4).clamp(0, 40)),
+                                ),
+                                NotebookThumbnail(
+                                    noteId: note.id, stamp: note.updatedAt?.millisecondsSinceEpoch ?? 0, width: w),
+                              ],
                             ),
-                            NotebookThumbnail(
-                                noteId: note.id, stamp: note.updatedAt?.millisecondsSinceEpoch ?? 0, width: w),
-                          ],
-                        ),
+                        },
                       ),
                     );
                   },
