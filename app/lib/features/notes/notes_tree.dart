@@ -15,6 +15,7 @@ import '../../notebook/state/notebook_providers.dart';
 import '../../ui/org_theme.dart';
 import '../import/import_flow.dart';
 import '../spaces/spaces_screen.dart' show iconForKind;
+import 'note_actions.dart';
 import 'notebooks/notebook_actions.dart';
 import 'search_fold.dart';
 
@@ -80,7 +81,10 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
     }
   }
 
-  Future<void> _notebookMenu(Note note) => showNotebookMenu(context, ref, note);
+  /// Segurar uma nota ou caderno: o menu de cada um (renomear, excluir…).
+  Future<void> _itemMenu(Note note) => note.isNotebook
+      ? showNotebookMenu(context, ref, note)
+      : showNoteMenu(context, ref, note, activeNoteId: widget.activeNoteId);
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +188,7 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                   expanded: searching || inSpace(space.id).any((n) => n.id == widget.activeNoteId),
                   activeNoteId: widget.activeNoteId,
                   onOpen: _open,
-                  onMenu: _notebookMenu,
+                  onMenu: _itemMenu,
                 ),
               ),
           if (loose.isNotEmpty) ...[
@@ -199,7 +203,7 @@ class _NotesTreeState extends ConsumerState<NotesTree> {
                 ),
               ),
             for (final n in loose)
-              _NoteRow(note: n, active: n.id == widget.activeNoteId, onOpen: _open, onMenu: _notebookMenu),
+              _NoteRow(note: n, active: n.id == widget.activeNoteId, onOpen: _open, onMenu: _itemMenu),
           ],
         ],
       ],
@@ -300,7 +304,7 @@ class _NoteRow extends StatelessWidget {
         child: InkWell(
           key: ValueKey('tree-note-${note.id}'),
           onTap: () => onOpen(note),
-          onLongPress: note.isNotebook ? () => onMenu(note) : null,
+          onLongPress: () => onMenu(note),
           child: Container(
             constraints: BoxConstraints(minHeight: MediaQuery.sizeOf(context).width < 720 ? 48 : 0),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),

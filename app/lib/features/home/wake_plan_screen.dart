@@ -234,7 +234,7 @@ class _WakePlanScreenState extends ConsumerState<WakePlanScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (var i = 1; i <= 7; i++)
+                for (final i in daysSundayFirst)
                   FilterChip(
                     key: ValueKey('day-$i'),
                     label: Text(weekdayShort[i - 1]),

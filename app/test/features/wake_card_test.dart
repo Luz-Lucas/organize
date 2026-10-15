@@ -224,6 +224,18 @@ void main() {
       expect(find.text('Não foi possível gravar a exceção.'), findsOneWidget);
     });
 
+    testWidgets('de madrugada, o "Só …" edita o toque de hoje, não o de amanhã', (tester) async {
+      final alexa = _alexa();
+      final dawn = DateTime(2026, 9, 29, 2); // terça, 02:00; Aula cedo toca às 07:00
+      await pumpApp(tester, MemoryRepository(), now: dawn, size: _phone, alexa: alexa);
+      expect(_inCard(find.text('Só hoje')), findsOneWidget);
+      await _tap(tester, find.byKey(const Key('wake-tomorrow-p1')));
+      expect(find.text('Não tocar hoje'), findsOneWidget);
+      await _tap(tester, find.byKey(const Key('wake-tomorrow-skip')));
+      expect(await alexa.watchOverrides().first, [WakeOverride.skip('p1', DateTime(2026, 9, 29))]);
+      expect(_inCard(find.text('Hoje: pulado')), findsOneWidget);
+    });
+
     testWidgets('o editor mostra o próximo toque considerando a exceção', (tester) async {
       final alexa = _alexa(overrides: [WakeOverride.skip('p1', _tomorrow)]);
       await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: alexa, size: _phone);
@@ -445,5 +457,12 @@ void main() {
       final left = tester.getTopLeft(find.byKey(const Key('card-now-next'))).dx;
       expect(tester.getTopLeft(find.byKey(const Key('wake-card'))).dx, left);
     });
+  });
+
+  testWidgets('dias no editor do despertar começam pelo domingo', (tester) async {
+    await pumpApp(tester, MemoryRepository(), location: '/casa/despertar/p1', now: _now, alexa: _alexa(), size: _phone);
+    final dom = tester.getTopLeft(find.byKey(const ValueKey('day-7')));
+    final seg = tester.getTopLeft(find.byKey(const ValueKey('day-1')));
+    expect(dom.dx, lessThan(seg.dx));
   });
 }

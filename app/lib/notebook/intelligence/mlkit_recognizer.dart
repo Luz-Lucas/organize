@@ -1,7 +1,7 @@
 import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/services.dart' show MethodChannel, MissingPluginException, PlatformException;
 import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart' as mlkit;
 
 import '../core/notebook_core.dart';
@@ -62,9 +62,24 @@ class MlKitInkRecognizer extends InkRecognizer {
 
   @override
   Stream<double> downloadModel() async* {
-    final ok = await _withTag((tag) => _models.downloadModel(tag, isWifiRequired: policy.wifiRequired));
+    final bool ok;
+    try {
+      ok = await _withTag((tag) => _models.downloadModel(tag, isWifiRequired: policy.wifiRequired));
+    } on MissingPluginException {
+      // O plugin nativo não registrou: o lado Android guarda o motivo (InkChannel.kt).
+      throw StateError('O reconhecedor do Android não iniciou: ${await nativeRegistrationError() ?? 'motivo desconhecido'}');
+    }
     if (!ok) throw StateError('O download do modelo não terminou.');
     yield 1.0;
+  }
+
+  /// O erro guardado pelo Android ao ligar o plugin do ML Kit (`null` = registrou bem).
+  static Future<String?> nativeRegistrationError() async {
+    try {
+      return await const MethodChannel('dev.organizacional/ink').invokeMethod<String>('registrationError');
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

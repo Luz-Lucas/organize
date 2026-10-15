@@ -89,6 +89,9 @@ class AlexaRoutine {
 
 const weekdayShort = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
+/// Ordem de exibição dos dias (1 = segunda … 7 = domingo): domingo primeiro.
+const daysSundayFirst = [7, 1, 2, 3, 4, 5, 6];
+
 String twoDigits(int n) => n.toString().padLeft(2, '0');
 
 /// O que vem depois da música (só vale com "música primeiro").
@@ -425,7 +428,7 @@ String formatDays(List<int> days) {
   if (set.length == 7) return 'Todos os dias';
   if (setEquals(set, {1, 2, 3, 4, 5})) return 'Dias úteis';
   if (setEquals(set, {6, 7})) return 'Fim de semana';
-  return (set.toList()..sort()).map((d) => weekdayShort[d - 1]).join(', ');
+  return (set.toList()..sort((a, b) => (a % 7).compareTo(b % 7))).map((d) => weekdayShort[d - 1]).join(', ');
 }
 
 String wakeSummary(WakePlan p, Map<String, String> echoNames) {

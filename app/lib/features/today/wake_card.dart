@@ -22,20 +22,25 @@ enum _TomorrowChoice { time, skip, reset }
 
 enum _WakeMenu { edit, tomorrow, duplicate, delete }
 
-/// Domingo primeiro, como no resto do app (1 = segunda … 7 = domingo).
-const _daysSundayFirst = [7, 1, 2, 3, 4, 5, 6];
-
 /// Um despertar já resolvido para exibição (próximo toque considerando as
 /// exceções de data).
 class _WakeRowData {
-  const _WakeRowData(this.plan, this.next, this.tomorrow);
+  const _WakeRowData(this.plan, this.next, this.date, this.exception);
 
   final WakePlan plan;
   final DateTime? next;
 
-  /// Exceção de amanhã, se houver.
-  final WakeOverride? tomorrow;
+  /// Dia do próximo toque (mesmo pulado): é o que o "Só …" edita.
+  final DateTime date;
+
+  /// Exceção desse dia, se houver.
+  final WakeOverride? exception;
 }
+
+/// "hoje", "amanhã" ou "qua, 21 out": o dia do próximo toque, relativo a [now].
+String _dayWord(DateTime date, DateTime now) => dayLabel(date, now);
+
+String _capitalized(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
 /// Despertares ativos primeiro, pelo próximo toque; depois os sem próximo toque
 /// e, por fim, os desligados (por horário).
@@ -44,17 +49,20 @@ List<_WakeRowData> _sorted(
   List<WakeOverride> overrides,
   DateTime now,
 ) {
-  final tomorrowKey = dateKey(DateTime(now.year, now.month, now.day + 1));
-  final rows = [
-    for (final p in plans)
-      _WakeRowData(
-        p,
-        nextWake(p, overrides, now),
-        overrides
-            .where((o) => o.planId == p.id && o.dateKey == tomorrowKey)
-            .firstOrNull,
-      ),
-  ];
+  final tomorrow = DateTime(now.year, now.month, now.day + 1);
+  _WakeRowData row(WakePlan p) {
+    // Sem nenhum dia escolhido, o "Só …" vale para amanhã (pode criar um toque extra).
+    final date = nextOccurrenceDate(p, overrides, now) ?? tomorrow;
+    final key = dateKey(date);
+    return _WakeRowData(
+      p,
+      nextWake(p, overrides, now),
+      date,
+      overrides.where((o) => o.planId == p.id && o.dateKey == key).firstOrNull,
+    );
+  }
+
+  final rows = [for (final p in plans) row(p)];
   int group(_WakeRowData r) => !r.plan.enabled ? 2 : (r.next == null ? 1 : 0);
   rows.sort((a, b) {
     final g = group(a).compareTo(group(b));
@@ -68,7 +76,7 @@ List<_WakeRowData> _sorted(
 }
 
 /// Cartão "Despertares" do painel: liga/desliga, próximo toque e o atalho
-/// "Só amanhã" (pular ou mudar o horário apenas amanhã).
+/// "Só hoje/amanhã/…" (pular ou mudar o horário só no próximo toque).
 class WakeCard extends ConsumerStatefulWidget {
   const WakeCard({
     super.key,
@@ -114,7 +122,7 @@ class _WakeCardState extends ConsumerState<WakeCard> {
     }
   }
 
-  /// Muda o horário padrão do despertar. A exceção "só amanhã" não é tocada.
+  /// Muda o horário padrão do despertar. A exceção do próximo toque não é tocada.
   Future<void> _editTime(WakePlan plan) async {
     final messenger = ScaffoldMessenger.of(context);
     final picked = await showTimePicker(
@@ -238,9 +246,10 @@ class _WakeCardState extends ConsumerState<WakeCard> {
 
   Future<void> _tomorrow(_WakeRowData row) async {
     final now = ref.read(clockProvider)();
-    final date = DateTime(now.year, now.month, now.day + 1);
+    final date = row.date;
+    final word = _dayWord(date, now);
     final plan = row.plan;
-    final existing = row.tomorrow;
+    final existing = row.exception;
     final choice = await showModalBottomSheet<_TomorrowChoice>(
       context: context,
       showDragHandle: true,
@@ -252,20 +261,20 @@ class _WakeCardState extends ConsumerState<WakeCard> {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
               child: Text(
-                '${plan.label} · amanhã (${DateFormat('EEE, d MMM', 'pt_BR').format(date)})',
+                '${plan.label} · $word (${DateFormat('EEE, d MMM', 'pt_BR').format(date)})',
                 style: Theme.of(ctx).textTheme.titleMedium,
               ),
             ),
             ListTile(
               key: const Key('wake-tomorrow-time'),
               leading: const Icon(Icons.schedule),
-              title: const Text('Mudar horário só amanhã'),
+              title: Text('Mudar horário só $word'),
               onTap: () => Navigator.of(ctx).pop(_TomorrowChoice.time),
             ),
             ListTile(
               key: const Key('wake-tomorrow-skip'),
               leading: const Icon(Icons.alarm_off_outlined),
-              title: const Text('Não tocar amanhã'),
+              title: Text('Não tocar $word'),
               onTap: () => Navigator.of(ctx).pop(_TomorrowChoice.skip),
             ),
             if (existing != null)
@@ -305,12 +314,12 @@ class _WakeCardState extends ConsumerState<WakeCard> {
     }
   }
 
-  /// Horário e dias (cada um é um botão de 48 dp) e, se houver, o horário de amanhã.
+  /// Horário e dias (cada um é um botão de 48 dp) e, se houver, o horário trocado do próximo toque.
   Widget _timeLine(_WakeRowData row) {
     final theme = Theme.of(context);
     final org = context.org;
     final p = row.plan;
-    final t = row.tomorrow;
+    final t = row.exception;
     final muted = theme.textTheme.bodyMedium?.copyWith(color: org.inkMuted);
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -361,26 +370,20 @@ class _WakeCardState extends ConsumerState<WakeCard> {
         if (t != null && !t.skip)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text('amanhã ${_hhmm(t.hour!, t.minute!)}', style: muted),
+            child: Text('${_dayWord(row.date, widget.now)} ${_hhmm(t.hour!, t.minute!)}', style: muted),
           ),
       ],
     );
   }
 
-  /// "Toca amanhã às 06:30 · em 7 h 20 min", "Desligado" ou "Amanhã: pulado".
+  /// "Toca amanhã às 06:30 · em 7 h 20 min", "Desligado" ou "Hoje: pulado"
+  /// (o próximo toque foi pulado).
   String _status(_WakeRowData row) {
     if (!row.plan.enabled) return 'Desligado';
     final next = row.next;
-    final skipTomorrow = row.tomorrow?.skip ?? false;
-    if (next == null) {
-      return skipTomorrow ? 'Amanhã: pulado' : 'Sem próximo toque';
-    }
-    final today = DateTime(widget.now.year, widget.now.month, widget.now.day);
-    final nextIsToday = DateTime(next.year, next.month, next.day) == today;
-    if (skipTomorrow && !nextIsToday) return 'Amanhã: pulado';
-    final text =
-        'Toca ${dayLabel(next, widget.now)} às ${hm(next)} · ${wakeCountdown(next, widget.now)}';
-    return skipTomorrow ? '$text · amanhã pulado' : text;
+    if (row.exception?.skip ?? false) return '${_capitalized(_dayWord(row.date, widget.now))}: pulado';
+    if (next == null) return 'Sem próximo toque';
+    return 'Toca ${dayLabel(next, widget.now)} às ${hm(next)} · ${wakeCountdown(next, widget.now)}';
   }
 
   Widget _row(_WakeRowData row) {
@@ -388,7 +391,8 @@ class _WakeCardState extends ConsumerState<WakeCard> {
     final org = context.org;
     final plan = row.plan;
     final status = _status(row);
-    final muted = !plan.enabled || status.startsWith('Amanhã: pulado');
+    final word = _dayWord(row.date, widget.now);
+    final muted = !plan.enabled || status.endsWith(': pulado');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -431,23 +435,23 @@ class _WakeCardState extends ConsumerState<WakeCard> {
                     tooltip: 'Mais opções: ${plan.label}',
                     padding: const EdgeInsets.all(12),
                     onSelected: (c) => _onMenu(c, row),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
                         key: Key('wake-menu-edit'),
                         value: _WakeMenu.edit,
                         child: Text('Editar tudo…'),
                       ),
                       PopupMenuItem(
-                        key: Key('wake-menu-tomorrow'),
+                        key: const Key('wake-menu-tomorrow'),
                         value: _WakeMenu.tomorrow,
-                        child: Text('Só amanhã…'),
+                        child: Text('Só $word…'),
                       ),
-                      PopupMenuItem(
+                      const PopupMenuItem(
                         key: Key('wake-menu-duplicate'),
                         value: _WakeMenu.duplicate,
                         child: Text('Duplicar'),
                       ),
-                      PopupMenuItem(
+                      const PopupMenuItem(
                         key: Key('wake-menu-delete'),
                         value: _WakeMenu.delete,
                         child: Text('Excluir'),
@@ -464,7 +468,7 @@ class _WakeCardState extends ConsumerState<WakeCard> {
           style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
           onPressed: () => _tomorrow(row),
           icon: const Icon(Icons.event_busy_outlined, size: 18),
-          label: Text('Só amanhã', semanticsLabel: 'Só amanhã: ${plan.label}'),
+          label: Text('Só $word', semanticsLabel: 'Só $word: ${plan.label}'),
         ),
       ],
     );
@@ -575,7 +579,7 @@ class _DaysSheetState extends State<_DaysSheet> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final d in _daysSundayFirst)
+                for (final d in daysSundayFirst)
                   FilterChip(
                     key: ValueKey('wake-days-chip-$d'),
                     label: Text(weekdayShort[d - 1]),
