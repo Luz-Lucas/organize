@@ -39,11 +39,26 @@ android {
         }
     }
 
+    // A chave que assina o app instalado: o Android só aceita uma atualização assinada
+    // com a mesma chave. Por padrão é a ~/.android/debug.keystore do computador que gera
+    // os releases; o GitHub Actions aponta ORGANIZE_KEYSTORE para a cópia do segredo
+    // ANDROID_KEYSTORE_B64. O caminho é explícito para o build não cair numa chave nova
+    // gerada na hora (o que quebrava as atualizações).
+    val organizeKeystore = file(
+        System.getenv("ORGANIZE_KEYSTORE") ?: "${System.getProperty("user.home")}/.android/debug.keystore",
+    )
+    signingConfigs {
+        create("organize") {
+            storeFile = organizeKeystore
+            storePassword = System.getenv("ORGANIZE_KEYSTORE_PASSWORD") ?: "android"
+            keyAlias = System.getenv("ORGANIZE_KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword = System.getenv("ORGANIZE_KEY_PASSWORD") ?: "android"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (organizeKeystore.isFile) "organize" else "debug")
         }
     }
 }

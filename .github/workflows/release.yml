@@ -58,8 +58,8 @@ jobs:
             *) echo "::error::ENV_JSON precisa do SUPABASE_URL de produção (https://…), não '$url'"; exit 1 ;;
           esac
           echo "SUPABASE_URL=$url" >> "$GITHUB_ENV"
-          mkdir -p ~/.android
-          printf '%s' "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+          printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/organize.keystore"
+          echo "ORGANIZE_KEYSTORE=$RUNNER_TEMP/organize.keystore" >> "$GITHUB_ENV"
 
       - name: Versão (do pubspec)
         id: ver
@@ -113,6 +113,22 @@ jobs:
           --obfuscate --split-debug-info=build/symbols
           --dart-define-from-file=env.json
           --build-name=${{ steps.ver.outputs.name }} --build-number=${{ steps.ver.outputs.build }}
+
+      # O APK tem de sair assinado com a chave do segredo; senão o celular recusa a
+      # atualização ("App not installed"). Para aqui, antes de publicar, se não sair.
+      - name: Conferir a assinatura
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
+          apk=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          got="$("$apksigner" verify --print-certs "$apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n1)"
+          want="$(keytool -exportcert -keystore "$ORGANIZE_KEYSTORE" -storepass android -alias androiddebugkey 2>/dev/null | sha256sum | cut -d' ' -f1)"
+          echo "APK:   $got"
+          echo "chave: $want"
+          echo "Assinatura (SHA-256): \`$got\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$got" ] || [ "$got" != "$want" ]; then
+            echo "::error::O APK não saiu assinado com a chave do segredo ANDROID_KEYSTORE_B64. Nada foi publicado."
+            exit 1
+          fi
 
       - name: Enviar e registrar
         env:
