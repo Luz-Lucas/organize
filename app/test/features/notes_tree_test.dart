@@ -55,4 +55,45 @@ void main() {
     expect(title.controller!.text, 'Sem título 2');
     expect((await repo.watchNotes().first).length, 5);
   });
+
+  testWidgets('segurar uma nota: renomear muda o título', (tester) async {
+    final repo = await seed();
+    await pumpApp(tester, repo);
+    await tester.longPress(find.byKey(const ValueKey('tree-note-n3')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('note-menu-rename')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('note-rename-field')), 'Ideias da semana');
+    await tester.tap(find.byKey(const Key('note-rename-ok')));
+    await tester.pumpAndSettle();
+    final n3 = (await repo.watchNotes().first).firstWhere((n) => n.id == 'n3');
+    expect(n3.title, 'Ideias da semana');
+    expect(find.text('Ideias da semana'), findsOneWidget);
+  });
+
+  testWidgets('segurar uma nota: excluir pede confirmação e dá para desfazer', (tester) async {
+    final repo = await seed();
+    await pumpApp(tester, repo);
+    await tester.longPress(find.byKey(const ValueKey('tree-note-n3')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('note-menu-delete')));
+    await tester.pumpAndSettle();
+    // Cancelar não apaga.
+    await tester.tap(find.byKey(const Key('note-delete-cancel')));
+    await tester.pumpAndSettle();
+    expect((await repo.watchNotes().first).map((n) => n.id), contains('n3'));
+
+    await tester.longPress(find.byKey(const ValueKey('tree-note-n3')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('note-menu-delete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('note-delete-confirm')));
+    await tester.pumpAndSettle();
+    expect((await repo.watchNotes().first).map((n) => n.id), isNot(contains('n3')));
+    expect(find.byKey(const ValueKey('tree-note-n3')), findsNothing);
+
+    await tester.tap(find.text('Desfazer'));
+    await tester.pumpAndSettle();
+    expect((await repo.watchNotes().first).map((n) => n.id), contains('n3'));
+  });
 }
