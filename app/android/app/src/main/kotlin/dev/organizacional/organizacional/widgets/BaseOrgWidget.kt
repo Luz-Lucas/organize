@@ -3,6 +3,7 @@ package dev.organizacional.organizacional.widgets
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -49,10 +50,18 @@ abstract class BaseOrgWidget : HomeWidgetProvider() {
     private fun draw(context: Context, mgr: AppWidgetManager, id: Int, prefs: SharedPreferences) {
         val views = RemoteViews(context.packageName, layoutId)
         val theme = WidgetData.parseTheme(prefs)
-        val heightDp = mgr.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+        val options = mgr.getAppWidgetOptions(id)
+        val portrait = context.resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
+        val heightDp = WidgetData.effectiveHeightDp(
+            minDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0),
+            maxDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0),
+            portrait = portrait,
+        )
         val now = System.currentTimeMillis()
 
+        // Fundo: cor do tema + transparência escolhida em Ajustes (só o fundo; o texto fica opaco).
         views.setInt(R.id.bg, "setColorFilter", theme.surface)
+        views.setInt(R.id.bg, "setImageAlpha", WidgetData.bgAlpha(prefs))
         views.setOnClickPendingIntent(
             R.id.root,
             HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java, Uri.parse(clickUri)),

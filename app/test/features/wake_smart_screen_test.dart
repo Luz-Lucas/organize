@@ -53,6 +53,8 @@ void main() {
     testWidgets('despertar novo vem com "Falar o clima" ligado; desligar salva include_weather false', (tester) async {
       final alexa = _alexa(plans: const []);
       await _open(tester, alexa, id: 'novo');
+      expect(find.text('Falar o clima'), findsNothing); // dentro de "Avançado", fechado
+      await expandAdvanced(tester);
       expect(find.text('Falar o clima'), findsOneWidget);
       expect(tester.widget<SwitchListTile>(find.byKey(const Key('weather-switch'))).value, isTrue);
       await tester.tap(find.byKey(const Key('weather-switch')));
@@ -204,4 +206,11 @@ void main() {
       expect(find.text('Cada dispositivo só pode aparecer uma vez no despertar.'), findsOneWidget);
     });
   });
+}
+
+/// "Avançado" começa fechado em despertares com valores padrão: abre antes de mexer nos controles.
+Future<void> expandAdvanced(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const Key('wake-advanced')));
+  await tester.tap(find.byKey(const Key('wake-advanced')));
+  await tester.pumpAndSettle();
 }

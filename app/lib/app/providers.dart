@@ -7,12 +7,14 @@ import '../data/repository.dart';
 import '../data/settings_repository.dart';
 import '../domain/alexa.dart';
 import '../domain/calendar_event.dart';
+import '../domain/event_tag.dart';
 import '../domain/news.dart';
 import '../domain/note.dart';
 import '../domain/notice.dart';
 import '../domain/space.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
+import '../domain/wake_override.dart';
 
 final repositoryProvider = Provider<Repository>(
   (ref) => throw UnimplementedError('repositoryProvider precisa de override'),
@@ -40,6 +42,10 @@ final notesProvider =
 
 final tasksProvider =
     StreamProvider<List<TaskItem>>((ref) => ref.watch(repositoryProvider).watchTasks());
+
+/// Etiquetas coloridas dos eventos (por posição).
+final eventTagsProvider =
+    StreamProvider<List<EventTag>>((ref) => ref.watch(repositoryProvider).watchTags());
 
 final eventsFromProvider = StreamProvider.autoDispose.family<List<CalendarEvent>, DateTime>(
   (ref, from) => ref.watch(repositoryProvider).watchEvents(from: from),
@@ -91,6 +97,9 @@ final alexaRoutinesProvider =
 
 final wakePlansProvider =
     StreamProvider<List<WakePlan>>((ref) => ref.watch(alexaRepositoryProvider).watchWakePlans());
+
+final wakeOverridesProvider =
+    StreamProvider<List<WakeOverride>>((ref) => ref.watch(alexaRepositoryProvider).watchOverrides());
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => throw UnimplementedError('settingsRepositoryProvider precisa de override'),

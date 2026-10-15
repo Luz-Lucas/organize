@@ -6,7 +6,7 @@ import 'package:organizacional/location/report_policy.dart';
 class FakeSource implements LocationBackendSource {
   FakeSource({
     this.hasSession = true,
-    this.config = const HomeReportConfig(homeLat: -19.9167, homeLon: -45.7),
+    this.config = const HomeReportConfig(homeLat: -19.93, homeLon: -43.94),
     this.failRead = false,
     this.failUpsert = false,
   });
@@ -35,7 +35,7 @@ class FakeService implements LocationService {
   FakeService({this.level = LocationPermissionLevel.always, this.throws = false});
 
   LocationPermissionLevel level;
-  GeoFix? fix = const GeoFix(lat: -19.9167, lon: -45.7, accuracyM: 9);
+  GeoFix? fix = const GeoFix(lat: -19.93, lon: -43.94, accuracyM: 9);
   bool throws;
   Duration? timeout;
   int fixCalls = 0;
@@ -82,7 +82,7 @@ void main() {
     for (final cfg in <HomeReportConfig?>[
       null,
       const HomeReportConfig(),
-      const HomeReportConfig(homeLat: -19.9167, homeLon: -45.7, requireHome: false),
+      const HomeReportConfig(homeLat: -19.93, homeLon: -43.94, requireHome: false),
     ]) {
       final source = FakeSource(config: cfg);
       final service = FakeService();

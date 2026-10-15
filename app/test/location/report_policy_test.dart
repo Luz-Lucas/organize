@@ -3,7 +3,7 @@ import 'package:organizacional/location/location_service.dart';
 import 'package:organizacional/location/report_policy.dart';
 
 void main() {
-  const home = HomeReportConfig(homeLat: -19.9167, homeLon: -45.7, requireHome: true);
+  const home = HomeReportConfig(homeLat: -19.93, homeLon: -43.94, requireHome: true);
   const levels = LocationPermissionLevel.values;
 
   group('shouldReportInBackground', () {
@@ -21,13 +21,13 @@ void main() {
       expect(shouldReportInBackground(const HomeReportConfig(), LocationPermissionLevel.always), isFalse);
       expect(
           shouldReportInBackground(
-              const HomeReportConfig(homeLat: -22.2), LocationPermissionLevel.always),
+              const HomeReportConfig(homeLat: -19.9), LocationPermissionLevel.always),
           isFalse);
       expect(shouldReportInBackground(null, LocationPermissionLevel.always), isFalse);
     });
 
     test('require_home desligado não reporta', () {
-      const off = HomeReportConfig(homeLat: -19.9167, homeLon: -45.7, requireHome: false);
+      const off = HomeReportConfig(homeLat: -19.93, homeLon: -43.94, requireHome: false);
       expect(shouldReportInBackground(off, LocationPermissionLevel.always), isFalse);
     });
   });
@@ -59,7 +59,7 @@ void main() {
   });
 
   test('HomeReportConfig tem igualdade por valor', () {
-    expect(home, const HomeReportConfig(homeLat: -19.9167, homeLon: -45.7));
-    expect(home == const HomeReportConfig(homeLat: -19.9167, homeLon: -45.7, requireHome: false), isFalse);
+    expect(home, const HomeReportConfig(homeLat: -19.93, homeLon: -43.94));
+    expect(home == const HomeReportConfig(homeLat: -19.93, homeLon: -43.94, requireHome: false), isFalse);
   });
 }

@@ -1,4 +1,5 @@
 import 'json.dart';
+import 'recurrence.dart';
 
 class CalendarEvent {
   const CalendarEvent({
@@ -11,6 +12,9 @@ class CalendarEvent {
     this.spaceId,
     this.source = 'manual',
     this.externalId,
+    this.seriesId,
+    this.recurrence,
+    this.tagId,
   });
 
   final String id;
@@ -23,6 +27,46 @@ class CalendarEvent {
   final String source;
   final String? externalId;
 
+  /// Ocorrências da mesma série compartilham o `seriesId`.
+  final String? seriesId;
+
+  /// Regra que gerou a série (informativa).
+  final Recurrence? recurrence;
+
+  /// Etiqueta colorida (`event_tags.id`); `null` = sem etiqueta.
+  final String? tagId;
+
+  CalendarEvent copyWith({
+    String? id,
+    String? title,
+    DateTime? startsAt,
+    DateTime? endsAt,
+    bool? allDay,
+    String? location,
+    String? spaceId,
+    String? seriesId,
+    Recurrence? recurrence,
+    String? tagId,
+    bool clearLocation = false,
+    bool clearSpace = false,
+    bool clearSeries = false,
+    bool clearTag = false,
+  }) =>
+      CalendarEvent(
+        id: id ?? this.id,
+        title: title ?? this.title,
+        startsAt: startsAt ?? this.startsAt,
+        endsAt: endsAt ?? this.endsAt,
+        allDay: allDay ?? this.allDay,
+        location: clearLocation ? null : (location ?? this.location),
+        spaceId: clearSpace ? null : (spaceId ?? this.spaceId),
+        source: source,
+        externalId: externalId,
+        seriesId: clearSeries ? null : (seriesId ?? this.seriesId),
+        recurrence: clearSeries ? null : (recurrence ?? this.recurrence),
+        tagId: clearTag ? null : (tagId ?? this.tagId),
+      );
+
   CalendarEvent withoutSpace() => CalendarEvent(
         id: id,
         title: title,
@@ -32,6 +76,9 @@ class CalendarEvent {
         location: location,
         source: source,
         externalId: externalId,
+        seriesId: seriesId,
+        recurrence: recurrence,
+        tagId: tagId,
       );
 
   factory CalendarEvent.fromMap(Map<String, dynamic> m) => CalendarEvent(
@@ -44,6 +91,11 @@ class CalendarEvent {
         spaceId: m['space_id'] as String?,
         source: (m['source'] as String?) ?? 'manual',
         externalId: m['external_id'] as String?,
+        seriesId: m['series_id'] as String?,
+        recurrence: m['recurrence'] is Map
+            ? Recurrence.fromMap(Map<String, dynamic>.from(m['recurrence'] as Map))
+            : null,
+        tagId: m['tag_id'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -56,6 +108,9 @@ class CalendarEvent {
         'space_id': spaceId,
         'source': source,
         'external_id': externalId,
+        'series_id': seriesId,
+        'recurrence': recurrence?.toMap(),
+        'tag_id': tagId,
       };
 
   @override
@@ -69,9 +124,12 @@ class CalendarEvent {
       other.location == location &&
       other.spaceId == spaceId &&
       other.source == source &&
-      other.externalId == externalId;
+      other.externalId == externalId &&
+      other.seriesId == seriesId &&
+      other.recurrence == recurrence &&
+      other.tagId == tagId;
 
   @override
   int get hashCode => Object.hash(id, title, startsAt, endsAt, allDay,
-      location, spaceId, source, externalId);
+      location, spaceId, source, externalId, seriesId, recurrence, tagId);
 }

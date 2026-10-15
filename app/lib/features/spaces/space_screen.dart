@@ -9,11 +9,13 @@ import '../../domain/note.dart';
 import '../../domain/space.dart';
 import '../../domain/task_item.dart';
 import '../../domain/wikilinks.dart';
+import '../../notebook/notebook_thumbnail.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 import 'spaces_screen.dart' show iconForKind;
 import '../../ui/task_tile.dart';
+import '../../app/back_navigation.dart';
 
 class SpaceScreen extends ConsumerWidget {
   const SpaceScreen({super.key, required this.spaceId});
@@ -37,7 +39,9 @@ class SpaceScreen extends ConsumerWidget {
     List<Note> notes,
     List<TaskItem> tasks,
   ) async {
-    final nNotes = notes.where((n) => n.spaceId == space.id).length;
+    final nNotes = notes.where((n) => n.spaceId == space.id && !n.isNotebook).length;
+    // Cadernos nunca são apagados com o espaço: ficam sem pasta (gatilho `spaces_keep_notebooks`).
+    final nNotebooks = notes.where((n) => n.spaceId == space.id && n.isNotebook).length;
     final nTasks = tasks.where((t) => t.spaceId == space.id).length;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -45,6 +49,7 @@ class SpaceScreen extends ConsumerWidget {
         title: Text('Excluir “${space.name}”?'),
         content: Text(
           'Isso apaga ${plural(nNotes, 'nota', 'notas')} e ${plural(nTasks, 'tarefa', 'tarefas')}. '
+          '${nNotebooks == 0 ? '' : '${plural(nNotebooks, 'caderno não é apagado: vai', 'cadernos não são apagados: vão')} para “Sem pasta”. '}'
           'Os eventos da agenda são mantidos.',
         ),
         actions: [
@@ -56,7 +61,7 @@ class SpaceScreen extends ConsumerWidget {
     if (confirmed != true) return;
     try {
       await ref.read(repositoryProvider).deleteSpace(space.id);
-      if (context.mounted) context.go('/espacos');
+      if (context.mounted) context.popOrGo('/espacos');
     } on RepositoryException {
       if (context.mounted) showError(context, 'Não foi possível excluir o espaço.');
     }
@@ -142,12 +147,16 @@ class SpaceScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: OrgCard(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        onTap: () => context.push('/nota/${n.id}'),
+                        onTap: () => context.push(n.isNotebook ? '/caderno/${n.id}' : '/nota/${n.id}'),
                         child: Row(
                           children: [
-                            Icon(Icons.description_outlined, color: context.org.inkMuted),
+                            Icon(n.isNotebook ? Icons.menu_book_outlined : Icons.description_outlined,
+                                key: ValueKey('space-note-icon-${n.id}'), color: context.org.inkMuted),
                             const SizedBox(width: 12),
                             Expanded(child: Text(n.title)),
+                            if (n.isNotebook)
+                              NotebookThumbnail(
+                                  noteId: n.id, stamp: n.updatedAt?.millisecondsSinceEpoch ?? 0, width: 28),
                           ],
                         ),
                       ),

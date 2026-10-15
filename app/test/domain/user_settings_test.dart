@@ -17,6 +17,7 @@ void main() {
       'home_lon': null,
       'home_radius_m': 50,
       'require_home': true,
+      'notebook_prefs': <String, dynamic>{},
     });
     expect(themeIds, hasLength(10));
   });
@@ -32,12 +33,12 @@ void main() {
 
     test('fromMap lê as colunas; ausentes ou inválidas caem nos padrões', () {
       final s = UserSettings.fromMap({
-        'home_lat': -19.9167,
+        'home_lat': -19.93,
         'home_lon': -45,
         'home_radius_m': 80,
         'require_home': false,
       });
-      expect(s.home, const GeoPoint(-19.9167, -45.0));
+      expect(s.home, const GeoPoint(-19.93, -45.0));
       expect(s.homeRadiusM, 80);
       expect(s.requireHome, isFalse);
       final bad = UserSettings.fromMap({'home_lat': 'x', 'home_lon': 1, 'home_radius_m': null, 'require_home': 'sim'});
@@ -47,9 +48,9 @@ void main() {
     });
 
     test('ida e volta por toMap/fromMap', () {
-      const s = UserSettings(homeLat: -19.9167, homeLon: -45.7, homeRadiusM: 120, requireHome: false);
+      const s = UserSettings(homeLat: -19.93, homeLon: -43.94, homeRadiusM: 120, requireHome: false);
       final r = UserSettings.fromMap(s.toMap());
-      expect([r.homeLat, r.homeLon, r.homeRadiusM, r.requireHome], [-19.9167, -45.7, 120, false]);
+      expect([r.homeLat, r.homeLon, r.homeRadiusM, r.requireHome], [-19.93, -43.94, 120, false]);
     });
 
     test('copyWith define e limpa a casa', () {
@@ -61,6 +62,24 @@ void main() {
       expect(cleared.theme, 'coral');
       expect(s.copyWith(requireHome: false).requireHome, isFalse);
       expect(s.copyWith(requireHome: false).homeLat, 1);
+    });
+  });
+
+  group('favoritos do caderno', () {
+    test('padrão é um mapa vazio; fromMap lê o objeto e ignora lixo', () {
+      expect(const UserSettings().notebookPrefs, isEmpty);
+      final s = UserSettings.fromMap({
+        'notebook_prefs': {'v': 1, 'compact': false},
+      });
+      expect(s.notebookPrefs, {'v': 1, 'compact': false});
+      expect(UserSettings.fromMap({'notebook_prefs': 'texto'}).notebookPrefs, isEmpty);
+      expect(UserSettings.fromMap({'notebook_prefs': null}).notebookPrefs, isEmpty);
+    });
+
+    test('ida e volta por toMap/fromMap e copyWith', () {
+      final s = const UserSettings().copyWith(notebookPrefs: {'v': 1}, theme: 'coral');
+      expect(UserSettings.fromMap(s.toMap()).notebookPrefs, {'v': 1});
+      expect(s.copyWith(theme: 'musgo').notebookPrefs, {'v': 1});
     });
   });
 }

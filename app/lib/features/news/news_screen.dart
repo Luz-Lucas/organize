@@ -49,7 +49,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> {
             key: const Key('news-settings'),
             tooltip: 'Fontes e interesses',
             icon: const Icon(Icons.tune),
-            onPressed: () => context.go('/noticias/ajustes'),
+            onPressed: () => context.push('/noticias/ajustes'),
           ),
         ],
       ),
@@ -61,7 +61,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> {
               children: [
                 const EmptyHint('Nenhuma notícia ainda.'),
                 TextButton(
-                  onPressed: () => context.go('/noticias/ajustes'),
+                  onPressed: () => context.push('/noticias/ajustes'),
                   child: const Text('Escolher fontes'),
                 ),
               ],

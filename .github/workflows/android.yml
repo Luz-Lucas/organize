@@ -1,0 +1,81 @@
+name: App Android
+
+# Compila o APK numa máquina Linux do GitHub (já tem o Android SDK). Rodar: Actions > App Android > Run workflow
+# (depois que este arquivo estiver na main), enviando uma tag `android-v<qualquer coisa>` ou em todo pull request
+# que mexe no app (serve de checagem: o APK compila com as dependências nativas, ML Kit incluído).
+# O caminho normal de release continua sendo o `tool/release.sh` (publica para o botão "Atualizar" do app);
+# este workflow serve para gerar o APK sem o computador de casa.
+#
+# Assinatura: com o segredo ANDROID_KEYSTORE_B64 (o `~/.android/debug.keystore` do computador que gera os
+# releases, em base64: `base64 -w0 ~/.android/debug.keystore`), o APK atualiza o app já instalado. Sem ele,
+# o APK sai com uma chave nova e só instala depois de desinstalar o app (o resumo da execução avisa).
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Número do build (precisa ser maior que o do app instalado); vazio = o do pubspec'
+        required: false
+        default: ''
+  push:
+    tags: ['android-v*']
+  pull_request:
+    paths: ['app/**', '.github/workflows/android.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+      - name: Configuração (URL e chave pública do Supabase)
+        env:
+          ENV_JSON: ${{ secrets.ENV_JSON }}
+        run: printf '%s' "$ENV_JSON" > env.json
+      - name: Chave de assinatura
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          mkdir -p ~/.android
+          if [ -n "$KEYSTORE" ]; then
+            printf '%s' "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+            echo "Assinado com a chave do segredo ANDROID_KEYSTORE_B64: atualiza o app instalado." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Sem o segredo ANDROID_KEYSTORE_B64: o APK sai com uma chave nova e só instala depois de desinstalar o app."
+            echo "**Atenção:** sem o segredo ANDROID_KEYSTORE_B64 o APK tem outra assinatura e não atualiza o app instalado." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - run: flutter pub get
+      - name: Versão (do pubspec)
+        id: ver
+        env:
+          BUILD_INPUT: ${{ inputs.build_number }}
+        run: |
+          v="$(sed -n 's/^version:[[:space:]]*\([0-9.]*\)+\([0-9]*\).*/\1 \2/p' pubspec.yaml | head -n1)"
+          [ -n "$v" ] || { echo "version: X.Y.Z+N não encontrado no pubspec.yaml"; exit 1; }
+          name="${v% *}"; build="${v#* }"
+          if [ -n "$BUILD_INPUT" ]; then build="$BUILD_INPUT"; fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Versão $name+$build" >> "$GITHUB_STEP_SUMMARY"
+      - run: >-
+          flutter build apk --release --split-per-abi --target-platform android-arm64
+          --dart-define-from-file=env.json
+          --build-name=${{ steps.ver.outputs.name }} --build-number=${{ steps.ver.outputs.build }}
+      - name: Renomear
+        run: cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk Organize-android-${{ steps.ver.outputs.build }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Organize-android
+          path: app/Organize-android-${{ steps.ver.outputs.build }}.apk
+          retention-days: 7

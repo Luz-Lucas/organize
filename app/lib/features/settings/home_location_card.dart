@@ -247,7 +247,7 @@ class _HomeLocationCardState extends ConsumerState<HomeLocationCard> {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'Para liberar: abra os Ajustes do Android, entre em Apps > Organizacional > Permissões > '
+                'Para liberar: abra os Ajustes do Android, entre em Apps > Organize > Permissões > '
                 'Localização e escolha "Permitir o tempo todo" (ou, no mínimo, "Permitir só com o app em uso"). '
                 'Depois volte aqui e tente de novo.',
                 key: const Key('home-permission-help'),

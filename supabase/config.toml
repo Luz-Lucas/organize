@@ -416,3 +416,31 @@ enabled = true
 
 [functions.news-fetch]
 verify_jwt = false
+
+# Gmail (somente leitura). connect/disconnect exigem JWT do usuário (padrão).
+# callback: redirecionamento do Google, sem JWT (a segurança é o `state` assinado).
+# sync: o cron envia x-cron-secret sem JWT; a função autoriza sozinha (segredo ou JWT).
+[functions.gmail-connect]
+verify_jwt = true
+
+[functions.gmail-callback]
+verify_jwt = false
+
+[functions.gmail-sync]
+verify_jwt = false
+
+[functions.gmail-disconnect]
+verify_jwt = true
+
+# Marcar e-mails como lidos (gmail.modify). JWT do usuário + GOOGLE_ALLOWED_USER_ID.
+[functions.gmail-action]
+verify_jwt = true
+
+# GitHub (issues pelo app). JWT do usuário + GITHUB_ALLOWED_USER_ID (só o dono).
+[functions.github]
+verify_jwt = true
+
+# Google Drive (Documentos). JWT do usuário; o refresh token fica cifrado em google_accounts.
+# O consentimento do Drive passa por gmail-connect/gmail-callback ({provider:'drive'}).
+[functions.drive]
+verify_jwt = true

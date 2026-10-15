@@ -4,7 +4,7 @@ import type { Command, CommandKind } from './commands.js';
 import type { EchoDevice, Routine, SmartDevice } from './gateway.js';
 import type { DeviceAction } from './gateway.js';
 import type { PresenceInput } from './presence.js';
-import type { AfterMusic, PhoneAlarm, RunStatus, WakeDeviceAction, WakePlan, WakeRun } from './scheduler.js';
+import type { AfterMusic, PhoneAlarm, RunStatus, WakeDeviceAction, WakeOverride, WakePlan, WakeRun } from './scheduler.js';
 import { zonedDayRange } from './time.js';
 import type { WakeStore } from './wake.js';
 
@@ -97,6 +97,13 @@ const toRun = (r: Row): WakeRun => ({
   fallbackHandle: r.fallback_handle,
 });
 
+export const toOverride = (r: Row): WakeOverride => ({
+  planId: r.plan_id,
+  runDate: r.run_date,
+  skip: r.skip === true,
+  time: typeof r.time === 'string' ? r.time : null,
+});
+
 export class SupabaseStore implements WakeStore {
   constructor(
     private readonly db: SupabaseClient,
@@ -161,6 +168,19 @@ export class SupabaseStore implements WakeStore {
   async listWakeRuns(sinceDate: string): Promise<WakeRun[]> {
     return (this.check(await this.db.from('wake_runs').select('*')
       .eq('user_id', this.userId).gte('run_date', sinceDate)) as Row[]).map(toRun);
+  }
+
+  /** Exceções de data ("só amanhã") do usuário entre `fromDate` e `toDate`, inclusive. */
+  async loadOverrides(fromDate: string, toDate: string): Promise<WakeOverride[]> {
+    return (this.check(await this.db.from('wake_overrides').select('plan_id, run_date, skip, time')
+      .eq('user_id', this.userId).gte('run_date', fromDate).lte('run_date', toDate)
+      .order('run_date')) as Row[]).map(toOverride);
+  }
+
+  /** Apaga exceções de datas anteriores a `beforeDate` (limpeza; best effort no chamador). */
+  async purgeOldOverrides(beforeDate: string): Promise<void> {
+    this.check(await this.db.from('wake_overrides').delete()
+      .eq('user_id', this.userId).lt('run_date', beforeDate));
   }
 
   async armRun(planId: string, runDate: string, plannedFor: Date, fallbackHandle: string): Promise<void> {

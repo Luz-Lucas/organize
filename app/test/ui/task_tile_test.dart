@@ -47,6 +47,16 @@ void main() {
     expect(await repo.watchTasks().first, isEmpty);
   });
 
+  testWidgets('excluir avisa "Tarefa excluída" e Desfazer recria a tarefa', (tester) async {
+    final repo = await pump(tester);
+    await tester.tap(find.byKey(const ValueKey('delete-task-t1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Tarefa excluída'), findsOneWidget);
+    await tester.tap(find.text('Desfazer'));
+    await tester.pumpAndSettle();
+    expect(await repo.watchTasks().first, [task]);
+  });
+
   testWidgets('falha ao excluir mostra aviso em pt-BR', (tester) async {
     final repo = await pump(tester);
     repo.failWrites = true;

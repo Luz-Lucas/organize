@@ -3,6 +3,8 @@
 Agenda, tarefas, matérias, trabalhos e hobbies num só lugar. Flutter (Linux/Windows/Android) + Supabase.
 
 ## Estrutura
+Guia completo (arquitetura, como acrescentar/tirar funcionalidades, rodar sem servidor): [`docs/GUIA-DO-DESENVOLVEDOR.md`](docs/GUIA-DO-DESENVOLVEDOR.md).
+
 - `supabase/`: migrations SQL e testes pgTAP (`npx supabase test db`)
 - `app/`: app Flutter (`lib/domain` regras puras, `lib/data` repositórios, `lib/features` telas)
 - `docs/superpowers/`: spec e planos por fase
@@ -82,7 +84,7 @@ Contra o Supabase local: `npx supabase functions serve news-fetch --env-file sup
 
 Código em `bridge/`. Testes: `cd bridge && npx vitest run` (integração com `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` do Supabase local).
 
-> **Status: pendente para você.** Os arquivos de deploy (`bridge/Dockerfile`, `docker-compose.yml`, `Caddyfile`, `.env.example`) estão prontos e a imagem foi validada localmente, mas os passos abaixo exigem a sua VPS, DuckDNS, conta Amazon e o console de desenvolvedor da Alexa. Nada disso foi executado.
+> **Status:** a ponte está no ar na VPS (Echos, rotinas e dispositivos sincronizados) e o MCP também. Os passos abaixo ficam como guia de reinstalação. Ainda falta conferir o passo 5 (skill no console da Alexa) e o teste manual da Fase 3 (despertar tocando sozinho no horário).
 
 ### 1. Publicar a migration na nuvem (na sua máquina)
 ```bash
@@ -103,6 +105,7 @@ Preencha o `.env` (fica só na VPS, nunca vai para o git):
 - `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`: Supabase, Project Settings → API.
 - `ORGANIZACIONAL_USER_ID`: Authentication → Users, o UUID do seu usuário.
 - `ALEXA_ALLOWED_USER_ID`: deixe vazio por enquanto (passo 5).
+- `CONTACT_EMAIL`: o e-mail de contato mostrado em `/privacidade` (a tela de consentimento do Google pede essa página).
 - Os demais (`TZ_NAME`, `ALEXA_COOKIE_FILE`, `AMAZON_PAGE`, `ALEXA_SERVICE_HOST`, `PORT`, `LOGIN_PROXY_PORT`) já vêm com valores certos para o Brasil.
 
 ### 3. Login da Alexa

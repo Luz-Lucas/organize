@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../data/repository.dart';
 
 export 'org_widgets.dart' show EmptyHint, SectionHeader;
 
@@ -64,3 +68,28 @@ String plural(int n, String one, String many) => '$n ${n == 1 ? one : many}';
 
 void showError(BuildContext context, String message) =>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
+/// Aviso com ação "Desfazer" (substitui o aviso anterior). [undo] pode lançar
+/// [RepositoryException]; nesse caso mostra "Não foi possível desfazer.".
+void showUndo(
+  ScaffoldMessengerState? messenger,
+  String message,
+  FutureOr<void> Function() undo,
+) {
+  if (messenger == null) return;
+  messenger
+    ..clearSnackBars()
+    ..showSnackBar(SnackBar(
+      content: Text(message),
+      action: SnackBarAction(
+        label: 'Desfazer',
+        onPressed: () async {
+          try {
+            await undo();
+          } on RepositoryException {
+            messenger.showSnackBar(const SnackBar(content: Text('Não foi possível desfazer.')));
+          }
+        },
+      ),
+    ));
+}

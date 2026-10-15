@@ -134,6 +134,26 @@ void main() {
     expect(await repo.watchSpaces().first, isEmpty);
     expect(await repo.watchNotes().first, isEmpty);
   });
+
+  testWidgets('excluir espaço não conta nem apaga cadernos: ficam sem pasta', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
+    await repo.upsertNote(const Note(id: 'n1', title: 'Limites', spaceId: 's1'));
+    await repo.upsertNote(const Note(id: 'c1', title: 'Caderno de Cálculo', spaceId: 's1', kind: NoteKind.notebook));
+    await pumpApp(tester, repo, location: '/espacos/s1');
+    await tester.tap(find.byKey(const Key('delete-space')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Isso apaga 1 nota e 0 tarefas. 1 caderno não é apagado: vai para “Sem pasta”. '
+          'Os eventos da agenda são mantidos.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Excluir'));
+    await tester.pumpAndSettle();
+    final notes = await repo.watchNotes().first;
+    expect(notes.map((n) => n.id), ['c1']);
+    expect(notes.single.spaceId, isNull);
+  });
 }
 
 /// Repositório de teste cujas notas/tarefas só passam a emitir depois que

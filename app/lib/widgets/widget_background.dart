@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../domain/calendar_event.dart';
+import '../domain/event_tag.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
 import '../location/location_background.dart';
@@ -20,6 +21,9 @@ abstract interface class WidgetDataSource {
   Future<List<CalendarEvent>> events(DateTime from, DateTime to);
   Future<List<TaskItem>> openTasks();
   Future<String> themeId();
+
+  /// Etiquetas dos eventos (só para a cor no widget).
+  Future<List<EventTag>> tags();
 }
 
 class SupabaseWidgetDataSource implements WidgetDataSource {
@@ -45,6 +49,12 @@ class SupabaseWidgetDataSource implements WidgetDataSource {
   }
 
   @override
+  Future<List<EventTag>> tags() async {
+    final rows = await _db.from('event_tags').select();
+    return rows.map(EventTag.fromMap).toList();
+  }
+
+  @override
   Future<String> themeId() async {
     final row = await _db.from('user_settings').select('theme').maybeSingle();
     final t = row?['theme'];
@@ -59,7 +69,12 @@ Future<Map<String, String>> fetchSnapshot(WidgetDataSource source, DateTime now)
     final events = await source.events(widgetWindowStart(now), widgetWindowEnd(now));
     final tasks = await source.openTasks();
     final theme = await source.themeId();
-    return buildWidgetSnapshot(now: now, events: events, tasks: tasks, themeId: theme);
+    // A cor é só enfeite: sem as etiquetas o resumo sai igual, sem o ponto colorido.
+    var tags = const <EventTag>[];
+    try {
+      tags = await source.tags();
+    } catch (_) {}
+    return buildWidgetSnapshot(now: now, events: events, tasks: tasks, themeId: theme, tags: tags);
   } catch (_) {
     return {'w_state': 'error'};
   }
@@ -105,6 +120,7 @@ void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
     try {
       WidgetsFlutterBinding.ensureInitialized();
+      if (isLegacySamsungTask(taskName)) return true; // sincronização removida: se ainda disparar, não faz nada
       final client = await _backgroundClient();
       if (taskName == locationReportTask) {
         await runLocationReportTask(client);
@@ -124,6 +140,7 @@ void callbackDispatcher() {
 
 Future<void> registerWidgetBackgroundRefresh() async {
   await Workmanager().initialize(callbackDispatcher);
+  await cancelLegacySamsungSync();
   await Workmanager().registerPeriodicTask(
     widgetsRefreshUniqueName,
     widgetsRefreshTask,
@@ -144,4 +161,19 @@ Future<void> registerLocationBackgroundReport() async {
     constraints: Constraints(networkType: NetworkType.connected),
     existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
   );
+}
+
+/// A sincronização do Samsung Notes foi removida. Quem instalou uma versão antiga ainda tem a tarefa periódica
+/// agendada: o app a cancela ao iniciar para ela não gastar bateria.
+const legacySamsungSyncTask = 'samsungNotesSync';
+const legacySamsungSyncUniqueName = 'samsung-notes-sync';
+
+bool isLegacySamsungTask(String taskName) => taskName == legacySamsungSyncTask;
+
+Future<void> cancelLegacySamsungSync({Future<void> Function(String uniqueName)? cancel}) async {
+  try {
+    await (cancel ?? (name) => Workmanager().cancelByUniqueName(name))(legacySamsungSyncUniqueName);
+  } catch (_) {
+    // sem a tarefa antiga ou sem plugin: nada a fazer
+  }
 }

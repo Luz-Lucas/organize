@@ -161,6 +161,32 @@ class RichNoteEditorState extends State<RichNoteEditor> {
           child: Icon(Icons.code, size: 16, color: org.inkMuted),
         ),
       ),
+      // O ícone padrão do appflowy é azul fixo; aqui segue o tema.
+      TodoListBlockKeys.type: TodoListBlockComponentBuilder(
+        configuration: standardBlockComponentBuilderMap[TodoListBlockKeys.type]!.configuration,
+        textStyleBuilder: (checked) => checked
+            ? TextStyle(decoration: TextDecoration.lineThrough, color: org.inkMuted)
+            : const TextStyle(),
+        iconBuilder: (context, node, onCheck) {
+          final checked = node.attributes[TodoListBlockKeys.checked] == true;
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onCheck,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6, top: 2),
+                child: Icon(
+                  checked ? Icons.check_box : Icons.check_box_outline_blank,
+                  key: ValueKey('todo-icon-${node.id}'),
+                  size: 20,
+                  color: checked ? org.accentText : org.inkMuted,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
       'heading': HeadingBlockComponentBuilder(
         configuration: blockText,
         textStyleBuilder: (level) => heading(switch (level) {

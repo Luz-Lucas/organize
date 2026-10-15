@@ -1,7 +1,7 @@
 # Sub-projeto A — Visual novo, Kanban, Calendário, Editor e Avisos
 
 **Data:** 2026-10-11 · **Base:** `docs/superpowers/specs/2026-09-28-organizacional-design.md`
-**Fora deste sub-projeto:** Documentos + Google Drive (conta `sua-conta@exemplo.com`) e Google Agenda (conta `seu-contato@exemplo.com`) → sub-projeto **B+C** (uma conexão Google por conta, escopos mínimos). Central de notificações (celular + Alexa) → sub-projeto **D**.
+**Fora deste sub-projeto:** Documentos + Google Drive (conta `sua-conta@gmail.com`) e Google Agenda (conta `seu-contato@gmail.com`) → sub-projeto **B+C** (uma conexão Google por conta, escopos mínimos). Central de notificações (celular + Alexa) → sub-projeto **D**.
 
 ## Decisões (aprovadas no brainstorming)
 

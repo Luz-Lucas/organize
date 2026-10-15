@@ -13,7 +13,7 @@ select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-1111111
 insert into wake_plans (id, label, days, time, echo_device_id)
   values ('aaaaaaaa-0000-0000-0000-000000000001', 'Aula cedo', '{1,2,3,4,5}', '07:00', 'ECHO1');
 insert into user_settings (theme) values ('coral');
-insert into user_locations (lat, lon, accuracy_m) values (-19.9167, -43.9345, 12.5);
+insert into user_locations (lat, lon, accuracy_m) values (-19.93, -43.94, 12.5);
 
 -- user_locations: checks
 select is((select count(*) from user_locations)::int, 1, 'A grava a própria localização');
@@ -37,13 +37,13 @@ select throws_ok(
 select is((select home_radius_m from user_settings), 50, 'raio padrão da casa é 50 m');
 select is((select require_home from user_settings), true, 'por padrão exige estar em casa');
 select is((select home_lat from user_settings), null, 'sem casa por padrão');
-select throws_ok($$ update user_settings set home_lat = -19.9167 $$, '23514', null, 'latitude sem longitude é rejeitada');
+select throws_ok($$ update user_settings set home_lat = -19.93 $$, '23514', null, 'latitude sem longitude é rejeitada');
 select throws_ok($$ update user_settings set home_lat = 91, home_lon = 0 $$, '23514', null, 'latitude da casa fora da faixa é rejeitada');
 select throws_ok($$ update user_settings set home_lat = 0, home_lon = 181 $$, '23514', null, 'longitude da casa fora da faixa é rejeitada');
 select throws_ok($$ update user_settings set home_radius_m = 19 $$, '23514', null, 'raio abaixo de 20 m é rejeitado');
 select throws_ok($$ update user_settings set home_radius_m = 501 $$, '23514', null, 'raio acima de 500 m é rejeitado');
 select lives_ok(
-  $$ update user_settings set home_lat = -19.9167, home_lon = -43.9345, home_radius_m = 20;
+  $$ update user_settings set home_lat = -19.93, home_lon = -43.94, home_radius_m = 20;
      update user_settings set home_radius_m = 500, require_home = false;
      update user_settings set home_lat = null, home_lon = null $$,
   'casa válida, limites do raio e remoção da casa passam');

@@ -1,0 +1,47 @@
+name: App Windows
+
+# Compila o app de Windows numa máquina Windows do GitHub (o Flutter não compila Windows a partir do Linux).
+# Rodar: o `tool/release.sh --windows` cria e envia a tag `windows-v<build>` (ou Actions > Run workflow).
+# A versão vem do `version: X.Y.Z+N` do app/pubspec.yaml; o zip leva o build no nome (Organize-windows-N.zip).
+on:
+  workflow_dispatch:
+  push:
+    tags: ['windows-v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+      - name: Configuração (URL e chave pública do Supabase)
+        shell: pwsh
+        env:
+          ENV_JSON: ${{ secrets.ENV_JSON }}
+        run: Set-Content -Path env.json -Value $env:ENV_JSON -NoNewline
+      - run: flutter pub get
+      - name: Versão (do pubspec)
+        id: ver
+        shell: pwsh
+        run: |
+          $m = Select-String -Path pubspec.yaml -Pattern '^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$' | Select-Object -First 1
+          if (-not $m) { throw 'version: X.Y.Z+N não encontrado no pubspec.yaml' }
+          "name=$($m.Matches[0].Groups[1].Value)" >> $env:GITHUB_OUTPUT
+          "build=$($m.Matches[0].Groups[2].Value)" >> $env:GITHUB_OUTPUT
+      - run: flutter build windows --release --dart-define-from-file=env.json --build-name=${{ steps.ver.outputs.name }} --build-number=${{ steps.ver.outputs.build }}
+      - name: Empacotar
+        shell: pwsh
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath Organize-windows-${{ steps.ver.outputs.build }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Organize-windows
+          path: app/Organize-windows-${{ steps.ver.outputs.build }}.zip
+          retention-days: 7

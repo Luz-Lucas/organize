@@ -7,6 +7,7 @@ import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/note.dart';
 import 'package:organizacional/domain/space.dart';
 import 'package:organizacional/features/notes/rich_note_editor.dart';
+import 'package:organizacional/ui/themes.dart';
 
 import '../helpers.dart';
 
@@ -76,6 +77,22 @@ void main() {
     GoRouter.of(context).go('/espacos');
     await tester.pumpAndSettle();
     expect(repo.upserts, 0);
+  });
+
+  testWidgets('caixa de tarefa do editor usa as cores do tema e marcar grava', (tester) async {
+    final repo = MemoryRepository();
+    await repo.upsertNote(const Note(id: 'n1', title: 'Cálculo', body: '- [ ] aberta\n- [x] feita'));
+    await pumpApp(tester, repo, location: '/nota/n1');
+    final violeta = orgThemeById('violeta');
+    final open = tester.widget<Icon>(find.byIcon(Icons.check_box_outline_blank));
+    final done = tester.widget<Icon>(find.byIcon(Icons.check_box));
+    expect(open.color, violeta.inkMuted);
+    expect(done.color, violeta.accentText);
+
+    await tester.tap(find.byIcon(Icons.check_box_outline_blank));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect((await repo.watchNotes().first).single.body, '- [x] aberta\n- [x] feita');
   });
 
   testWidgets('edição no editor rico grava o Markdown após o debounce', (tester) async {

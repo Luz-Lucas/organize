@@ -45,7 +45,7 @@ class HojeWidgetProvider : BaseOrgWidget() {
             views.setViewVisibility(rows[i], View.VISIBLE)
             views.setTextViewText(times[i], WidgetData.eventTimeLabel(e, nowMillis, zone))
             views.setTextColor(times[i], WidgetData.eventTimeColor(e, nowMillis, theme))
-            views.setTextViewText(titles[i], e.title)
+            views.setTextViewText(titles[i], taggedTitle(e))
             views.setTextColor(titles[i], WidgetData.eventTitleColor(e, nowMillis, theme))
         }
         val extra = today.size - shown.size

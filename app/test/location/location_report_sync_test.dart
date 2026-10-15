@@ -13,7 +13,7 @@ class FakeLocationService implements LocationService {
   FakeLocationService({this.level = LocationPermissionLevel.whileInUse});
 
   LocationPermissionLevel level;
-  GeoFix? fix = const GeoFix(lat: -19.9167, lon: -45.7, accuracyM: 12);
+  GeoFix? fix = const GeoFix(lat: -19.93, lon: -43.94, accuracyM: 12);
   int fixCalls = 0;
 
   @override
@@ -29,7 +29,7 @@ class FakeLocationService implements LocationService {
   }
 }
 
-const _homeSettings = UserSettings(homeLat: -19.9167, homeLon: -45.7, requireHome: true);
+const _homeSettings = UserSettings(homeLat: -19.93, homeLon: -43.94, requireHome: true);
 
 void main() {
   late DateTime now;
@@ -66,7 +66,7 @@ void main() {
     build();
     await settle(tester);
     expect(repo.reports, hasLength(1));
-    expect(repo.reports.single.fix.lat, -19.9167);
+    expect(repo.reports.single.fix.lat, -19.93);
     expect(repo.reports.single.reportedAt, now);
   });
 
@@ -85,7 +85,7 @@ void main() {
   });
 
   testWidgets('não reporta com a chave "só em casa" desligada', (tester) async {
-    build(initial: const UserSettings(homeLat: -19.9167, homeLon: -45.7, requireHome: false));
+    build(initial: const UserSettings(homeLat: -19.93, homeLon: -43.94, requireHome: false));
     await settle(tester);
     expect(repo.reports, isEmpty);
   });
@@ -164,7 +164,7 @@ void main() {
     await settle(tester);
     expect(repo.reports, isEmpty);
 
-    await settings.setHome(-19.9167, -45.7);
+    await settings.setHome(-19.93, -43.94);
     await settle(tester);
     expect(repo.reports, hasLength(1), reason: 'casa definida');
 

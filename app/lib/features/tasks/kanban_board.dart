@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 
 import '../../domain/space.dart';
 import '../../domain/task_item.dart';
+import '../../ui/common.dart' show showUndo;
+import '../../ui/date_labels.dart' as labels;
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 import 'task_card.dart';
 
 const _doneStep = 20;
 
-/// Rótulo do chip de prazo do campo rápido: "hoje", "amanhã" ou "dd/MM".
-String quickDueLabel(DateTime due, DateTime now) {
-  final today = DateTime(now.year, now.month, now.day);
-  final diff = DateTime(due.year, due.month, due.day).difference(today).inDays;
-  if (diff == 0) return 'hoje';
-  if (diff == 1) return 'amanhã';
-  return DateFormat('dd/MM').format(due);
+/// Rótulo do chip de prazo do campo rápido (mesmo padrão do resto do app).
+String quickDueLabel(DateTime due, DateTime now) => labels.dueLabel(due, now);
+
+/// Próxima segunda-feira depois de hoje (hoje, se for segunda, vira +7), 23:59.
+DateTime nextMondayDue(DateTime now) {
+  final add = (DateTime.monday - now.weekday) % 7;
+  return DateTime(now.year, now.month, now.day + (add == 0 ? 7 : add), 23, 59);
 }
 
 String statusLabel(TaskStatus s) => switch (s) {
@@ -124,6 +126,21 @@ class _KanbanBoardState extends State<KanbanBoard> with SingleTickerProviderStat
     }
   }
 
+  void _setDue(TaskStatus status, DateTime due) => setState(() => _dues[status] = due);
+
+  /// Conclui (ou reabre) com um toque, com vibração leve e "Desfazer".
+  void _toggleDone(TaskItem task) {
+    final from = task.status;
+    final to = task.isDone ? TaskStatus.todo : TaskStatus.done;
+    widget.onMove(task, to);
+    HapticFeedback.lightImpact();
+    showUndo(
+      ScaffoldMessenger.maybeOf(context),
+      to == TaskStatus.done ? 'Tarefa concluída' : 'Tarefa reaberta',
+      () => widget.onMove(task, from),
+    );
+  }
+
   List<TaskItem> _column(TaskStatus s) {
     final list = widget.tasks.where((t) => t.status == s).toList();
     if (s == TaskStatus.done) {
@@ -147,6 +164,7 @@ class _KanbanBoardState extends State<KanbanBoard> with SingleTickerProviderStat
   }
 
   Future<void> _moveSheet(TaskItem task) async {
+    HapticFeedback.mediumImpact();
     final to = await showModalBottomSheet<TaskStatus>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -188,11 +206,13 @@ class _KanbanBoardState extends State<KanbanBoard> with SingleTickerProviderStat
           dueLabel: _dues[s] == null ? null : quickDueLabel(_dues[s]!, widget.now),
           onPriority: (p) => setState(() => _priorities[s] = p),
           onPickDue: () => _pickDue(s),
+          onSetDue: (d) => _setDue(s, d),
           onClearDue: () => setState(() => _dues[s] = null),
           onMoreOptions: () => _addWithDialog(s),
           onMove: widget.onMove,
           onOpen: widget.onOpen,
           onLongPress: _moveSheet,
+          onToggleDone: _toggleDone,
         );
     if (desktop) {
       return Padding(
@@ -247,6 +267,8 @@ class _KanbanColumn extends StatelessWidget {
     required this.onMove,
     required this.onOpen,
     required this.onLongPress,
+    required this.onToggleDone,
+    required this.onSetDue,
   });
 
   final TaskStatus status;
@@ -269,6 +291,8 @@ class _KanbanColumn extends StatelessWidget {
   final void Function(TaskItem, TaskStatus) onMove;
   final void Function(TaskItem) onOpen;
   final void Function(TaskItem) onLongPress;
+  final void Function(TaskItem) onToggleDone;
+  final void Function(DateTime) onSetDue;
 
   Widget _card(TaskItem t) {
     final card = TaskCard(
@@ -278,6 +302,7 @@ class _KanbanColumn extends StatelessWidget {
       spaceName: spaces[t.spaceId],
       onTap: () => onOpen(t),
       onLongPress: desktop ? null : () => onLongPress(t),
+      onToggleDone: () => onToggleDone(t),
     );
     if (!desktop) return card;
     return Draggable<TaskItem>(
@@ -329,6 +354,7 @@ class _KanbanColumn extends StatelessWidget {
               TextField(
                 key: Key('quick-add-${status.name}'),
                 controller: controller,
+                textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => onSubmit(),
                 decoration: const InputDecoration(
@@ -344,6 +370,9 @@ class _KanbanColumn extends StatelessWidget {
                 dueLabel: dueLabel,
                 onPriority: onPriority,
                 onPickDue: onPickDue,
+                onSetDue: onSetDue,
+                now: now,
+                compact: desktop,
                 onClearDue: onClearDue,
                 onMoreOptions: onMoreOptions,
               ),
@@ -366,13 +395,17 @@ class _KanbanColumn extends StatelessWidget {
 }
 
 /// Linha compacta sob o campo rápido: prioridade, prazo e "mais opções".
+/// No celular os alvos de toque têm 48 dp; no computador ficam compactos.
 class _QuickOptions extends StatelessWidget {
   const _QuickOptions({
     required this.status,
     required this.priority,
     required this.dueLabel,
+    required this.now,
+    required this.compact,
     required this.onPriority,
     required this.onPickDue,
+    required this.onSetDue,
     required this.onClearDue,
     required this.onMoreOptions,
   });
@@ -380,8 +413,11 @@ class _QuickOptions extends StatelessWidget {
   final TaskStatus status;
   final TaskPriority priority;
   final String? dueLabel;
+  final DateTime now;
+  final bool compact;
   final void Function(TaskPriority) onPriority;
   final VoidCallback onPickDue;
+  final void Function(DateTime) onSetDue;
   final VoidCallback onClearDue;
   final VoidCallback onMoreOptions;
 
@@ -391,9 +427,12 @@ class _QuickOptions extends StatelessWidget {
     final name = status.name;
     final dueSet = dueLabel != null;
     final urgent = priority == TaskPriority.alta;
+    final density = compact ? VisualDensity.compact : null;
+    final tap = compact ? MaterialTapTargetSize.shrinkWrap : MaterialTapTargetSize.padded;
+    DateTime endOfDay(int plusDays) => DateTime(now.year, now.month, now.day + plusDays, 23, 59);
     return Wrap(
       spacing: 6,
-      runSpacing: 4,
+      runSpacing: compact ? 4 : 0,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         PopupMenuButton<TaskPriority>(
@@ -408,42 +447,74 @@ class _QuickOptions extends StatelessWidget {
                 child: Text(p.label),
               ),
           ],
-          child: Chip(
-            avatar: Icon(
-              Icons.flag_outlined,
-              size: 16,
-              color: urgent ? Theme.of(context).colorScheme.error : org.inkMuted,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: compact ? 0 : 48),
+            child: Center(
+              widthFactor: 1,
+              child: Chip(
+                avatar: Icon(
+                  Icons.flag_outlined,
+                  size: 16,
+                  color: urgent ? Theme.of(context).colorScheme.error : org.inkMuted,
+                ),
+                label: Text(priority.label),
+                visualDensity: density,
+                materialTapTargetSize: tap,
+              ),
             ),
-            label: Text(priority.label),
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
-        ActionChip(
+        PopupMenuButton<String>(
           key: Key('quick-due-$name'),
-          avatar: Icon(
-            Icons.event_outlined,
-            size: 16,
-            color: dueSet ? org.accentText : org.inkMuted,
+          tooltip: 'Prazo',
+          onSelected: (v) {
+            switch (v) {
+              case 'today':
+                onSetDue(endOfDay(0));
+              case 'tomorrow':
+                onSetDue(endOfDay(1));
+              case 'monday':
+                onSetDue(nextMondayDue(now));
+              default:
+                onPickDue();
+            }
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem(key: Key('quick-due-$name-today'), value: 'today', child: const Text('Hoje')),
+            PopupMenuItem(key: Key('quick-due-$name-tomorrow'), value: 'tomorrow', child: const Text('Amanhã')),
+            PopupMenuItem(key: Key('quick-due-$name-monday'), value: 'monday', child: const Text('Próxima segunda')),
+            PopupMenuItem(key: Key('quick-due-$name-pick'), value: 'pick', child: const Text('Escolher data…')),
+          ],
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: compact ? 0 : 48),
+            child: Center(
+              widthFactor: 1,
+              child: Chip(
+                avatar: Icon(
+                  Icons.event_outlined,
+                  size: 16,
+                  color: dueSet ? org.accentText : org.inkMuted,
+                ),
+                label: Text(dueLabel ?? 'Sem prazo'),
+                visualDensity: density,
+                materialTapTargetSize: tap,
+              ),
+            ),
           ),
-          label: Text(dueLabel ?? 'Sem prazo'),
-          onPressed: onPickDue,
-          visualDensity: VisualDensity.compact,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
         if (dueSet)
           IconButton(
             key: Key('quick-due-clear-$name'),
             tooltip: 'Remover prazo',
             icon: const Icon(Icons.close, size: 16),
-            visualDensity: VisualDensity.compact,
+            visualDensity: density,
             onPressed: onClearDue,
           ),
         IconButton(
           key: Key('quick-more-$name'),
           tooltip: 'Mais opções',
-          icon: const Icon(Icons.tune, size: 18),
-          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.tune, size: compact ? 18 : 20),
+          visualDensity: density,
           onPressed: onMoreOptions,
         ),
       ],

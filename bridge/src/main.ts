@@ -6,6 +6,7 @@ import { wakeTexts } from './briefing.js';
 import { CommandError, executeCommand, isExpired, type Command } from './commands.js';
 import { loadConfig } from './config.js';
 import { AlexaAuthError, type AlexaGateway } from './gateway.js';
+import { createOverridesLoader } from './overrides-loader.js';
 import { planWakeActions } from './scheduler.js';
 import { fetchWeather, reverseCity, weatherText } from './weather.js';
 import { buildSkill } from './skill.js';
@@ -27,6 +28,7 @@ process.on('unhandledRejection', (reason) => log(`rejeição não tratada: ${Str
 
 const db = createClient(cfg.supabaseUrl, cfg.serviceKey, { auth: { persistSession: false } });
 const store = new SupabaseStore(db, cfg.userId, log);
+const overridesFor = createOverridesLoader((from, to) => store.loadOverrides(from, to), log);
 const briefingInput = () => store.briefingInput(new Date(), cfg.timeZone);
 
 /** Texto falado do clima para um ponto; falhas viram null (o despertar segue sem clima). Não registra coordenadas; só coordenadas arredondadas (~1 km) saem da ponte. */
@@ -76,7 +78,7 @@ async function ensureGateway(): Promise<AlexaGateway | null> {
   try {
     gateway = await AlexaRemoteGateway.connect({
       cookieFile: cfg.cookieFile, amazonPage: cfg.amazonPage,
-      alexaServiceHost: cfg.alexaServiceHost, language: 'pt-BR',
+      alexaServiceHost: cfg.alexaServiceHost, language: 'pt-BR', log,
     });
     await store.setStatus('ok', null);
     await sync();
@@ -129,12 +131,28 @@ async function processCommand(cmd: Command): Promise<void> {
   }
 }
 
+let lastOverridePurge = 0;
+
+/** Limpa exceções com mais de 7 dias, no máximo uma vez por hora; falhas só entram no log. */
+async function purgeOverridesHourly(today: string): Promise<void> {
+  if (Date.now() - lastOverridePurge < 60 * 60_000) return;
+  lastOverridePurge = Date.now();
+  try {
+    await store.purgeOldOverrides(addDays(today, -7));
+  } catch (e) {
+    log(`limpeza de exceções de despertar: ${(e as Error).message}`);
+  }
+}
+
 async function wakeTick(): Promise<void> {
   try {
     const now = new Date();
+    const today = localParts(now, cfg.timeZone).date;
     const plans = await store.listWakePlans();
-    const runs = await store.listWakeRuns(addDays(localParts(now, cfg.timeZone).date, -2));
-    const actions = planWakeActions(plans, runs, now, cfg.timeZone);
+    const runs = await store.listWakeRuns(addDays(today, -2));
+    const overrides = await overridesFor(today);
+    void purgeOverridesHourly(today);
+    const actions = planWakeActions(plans, runs, now, cfg.timeZone, undefined, overrides);
     if (actions.length === 0) return;
     const gw = await ensureGateway();
     if (!gw) return; // sem login: o alarme reserva já armado toca sozinho

@@ -146,19 +146,53 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
 
     const ok = (res: { error: { message: string } | null }) => { if (res.error) throw new Error(res.error.message); };
     ok(await db.from('user_settings').insert([
-      { user_id: a, home_lat: -19.9167, home_lon: -45.7, home_radius_m: 80, require_home: false },
+      { user_id: a, home_lat: -19.93, home_lon: -43.94, home_radius_m: 80, require_home: false },
       { user_id: b, home_lat: 10, home_lon: 10, home_radius_m: 50, require_home: true },
     ]));
     ok(await db.from('user_locations').insert([
-      { user_id: a, lat: -22.2, lon: -45.6, accuracy_m: 12, reported_at: '2026-10-13T10:00:00Z' },
+      { user_id: a, lat: -19.9, lon: -43.9, accuracy_m: 12, reported_at: '2026-10-13T10:00:00Z' },
       { user_id: b, lat: 1, lon: 1, accuracy_m: null, reported_at: '2026-10-13T10:00:00Z' },
     ]));
     const got = await sa.loadPresenceInput();
     // O horário vem do servidor (gatilho da tabela), não do valor enviado.
     expect(Math.abs(Date.now() - got.location!.reportedAt.getTime())).toBeLessThan(60_000);
     expect(got).toEqual({
-      home: { lat: -19.9167, lon: -45.7, radiusM: 80 }, requireHome: false,
-      location: { lat: -22.2, lon: -45.6, accuracyM: 12, reportedAt: got.location!.reportedAt },
+      home: { lat: -19.93, lon: -43.94, radiusM: 80 }, requireHome: false,
+      location: { lat: -19.9, lon: -43.9, accuracyM: 12, reportedAt: got.location!.reportedAt },
     });
+  });
+
+  it('loadOverrides devolve só as do usuário na janela; purgeOldOverrides apaga as antigas', async () => {
+    const mk = async (tag: string) => {
+      const u = await db.auth.admin.createUser({
+        email: `ponte-ovr-${tag}-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true,
+      });
+      if (u.error) throw u.error;
+      return u.data.user.id;
+    };
+    const uid = await mk('a');
+    const other = await mk('b');
+    const plan = async (u: string) => (await db.from('wake_plans')
+      .insert({ user_id: u, label: 'T', days: [1], time: '07:00', echo_device_id: 'E' }).select().single()).data!.id as string;
+    const mine = await plan(uid);
+    const theirs = await plan(other);
+    const ins = await db.from('wake_overrides').insert([
+      { user_id: uid, plan_id: mine, run_date: '2026-10-01', skip: true, time: null },
+      { user_id: uid, plan_id: mine, run_date: '2026-10-13', skip: true, time: null },
+      { user_id: uid, plan_id: mine, run_date: '2026-10-14', skip: false, time: '06:30' },
+      { user_id: uid, plan_id: mine, run_date: '2026-10-20', skip: false, time: '06:30' },
+      { user_id: other, plan_id: theirs, run_date: '2026-10-13', skip: true, time: null },
+    ]);
+    if (ins.error) throw ins.error;
+    const s = new SupabaseStore(db, uid, () => {});
+    const list = await s.loadOverrides('2026-10-12', '2026-10-14');
+    expect(list).toEqual([
+      { planId: mine, runDate: '2026-10-13', skip: true, time: null },
+      { planId: mine, runDate: '2026-10-14', skip: false, time: '06:30:00' },
+    ]);
+    await s.purgeOldOverrides('2026-10-10');
+    const left = (await db.from('wake_overrides').select('run_date, user_id').in('plan_id', [mine, theirs])).data!;
+    expect(left.map((r) => `${r.user_id === uid ? 'a' : 'b'}:${r.run_date}`).sort())
+      .toEqual(['a:2026-10-13', 'a:2026-10-14', 'a:2026-10-20', 'b:2026-10-13']);
   });
 });

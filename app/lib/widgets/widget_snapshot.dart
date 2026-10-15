@@ -2,8 +2,11 @@ import 'dart:convert';
 import 'dart:ui' show Color;
 
 import '../domain/calendar_event.dart';
+import '../domain/event_tag.dart';
 import '../domain/task_item.dart';
+import '../features/notes/notebooks/notebooks_logic.dart' show folderColorHex, parseFolderColor;
 import '../ui/themes.dart';
+import 'widget_appearance.dart';
 
 const _danger = '#F2726B';
 final _provaRe = RegExp(r'^(prova|np\d)', caseSensitive: false);
@@ -45,13 +48,17 @@ DateTime widgetWindowEnd(DateTime now) => DateTime(now.year, now.month, now.day 
 /// Monta o resumo que os widgets Android leem (contrato em
 /// docs/superpowers/specs/2026-10-11-widgets-android-design.md).
 /// `state` aceita apenas `ok` ou `signed_out`; `error` é gravado pelo
-/// segundo plano sem tocar nas demais chaves.
+/// segundo plano sem tocar nas demais chaves. `bgTransparencyPct` (preferência do
+/// aparelho) vira `w_bg_alpha`; sem ele a chave não é gravada, preservando a escolha.
+/// Com [tags], cada evento etiquetado leva `tagColor` (`#RRGGBB`) para o widget desenhar o ponto colorido.
 Map<String, String> buildWidgetSnapshot({
   required DateTime now,
   required Iterable<CalendarEvent> events,
   required Iterable<TaskItem> tasks,
   required String themeId,
   String state = 'ok',
+  int? bgTransparencyPct,
+  Iterable<EventTag> tags = const [],
 }) {
   assert(state == 'ok' || state == 'signed_out', 'state inválido: $state');
   final signedOut = state == 'signed_out';
@@ -78,6 +85,10 @@ Map<String, String> buildWidgetSnapshot({
           return a.dueAt!.compareTo(b.dueAt!);
         }));
 
+  final tagColors = <String, String>{
+    for (final t in tags)
+      if (parseFolderColor(t.color) case final c?) t.id: folderColorHex(c),
+  };
   final eventsJson = evs
       .map((e) => {
             'id': e.id,
@@ -87,6 +98,7 @@ Map<String, String> buildWidgetSnapshot({
             'allDay': e.allDay,
             'location': (e.location == null || e.location!.trim().isEmpty) ? null : e.location,
             'kind': _kind(e.title),
+            'tagColor': e.tagId == null ? null : tagColors[e.tagId],
           })
       .toList();
   final tasksJson = open
@@ -103,6 +115,7 @@ Map<String, String> buildWidgetSnapshot({
     'w_state': state,
     'w_generated_at': now.millisecondsSinceEpoch.toString(),
     'w_theme': jsonEncode(_themeMap(themeId)),
+    if (bgTransparencyPct != null) widgetBgAlphaKey: widgetBgAlphaFor(bgTransparencyPct).toString(),
     'w_events': jsonEncode(eventsJson),
     'w_tasks': jsonEncode(tasksJson),
   };

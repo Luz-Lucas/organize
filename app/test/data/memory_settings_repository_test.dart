@@ -37,12 +37,12 @@ void main() {
 
   test('casa: setHome, setRequireHome e clearHome gravam só os seus campos', () async {
     final repo = MemorySettingsRepository(initial: const UserSettings(theme: 'coral'));
-    await repo.setHome(-19.9167, -45.7);
+    await repo.setHome(-19.93, -43.94);
     var s = await repo.watchSettings().first;
-    expect([s.homeLat, s.homeLon, s.theme, s.requireHome, s.homeRadiusM], [-19.9167, -45.7, 'coral', true, 50]);
+    expect([s.homeLat, s.homeLon, s.theme, s.requireHome, s.homeRadiusM], [-19.93, -43.94, 'coral', true, 50]);
     await repo.setRequireHome(false);
     s = await repo.watchSettings().first;
-    expect([s.requireHome, s.homeLat], [false, -19.9167]);
+    expect([s.requireHome, s.homeLat], [false, -19.93]);
     await repo.clearHome();
     s = await repo.watchSettings().first;
     expect([s.hasHome, s.requireHome, s.theme], [false, false, 'coral']);
@@ -55,5 +55,14 @@ void main() {
     await expectLater(repo.setRequireHome(false), throwsA(isA<RepositoryException>()));
     final s = await repo.watchSettings().first;
     expect([s.hasHome, s.requireHome], [false, true]);
+  });
+
+  test('setNotebookPrefs grava só os favoritos do caderno', () async {
+    final repo = MemorySettingsRepository(initial: const UserSettings(theme: 'coral'));
+    await repo.setNotebookPrefs({'v': 1, 'compact': false});
+    final s = await repo.watchSettings().first;
+    expect([s.notebookPrefs, s.theme], [{'v': 1, 'compact': false}, 'coral']);
+    repo.failWrites = true;
+    await expectLater(repo.setNotebookPrefs({'v': 1}), throwsA(isA<RepositoryException>()));
   });
 }

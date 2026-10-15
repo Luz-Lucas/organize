@@ -11,6 +11,17 @@ import '../../ui/org_widgets.dart';
 import 'kanban_board.dart';
 import 'task_dialog.dart';
 
+/// Filtro de espaço da tela Tarefas (`null` = todos). Fica fora do widget para
+/// sobreviver à troca de abas.
+class TasksSpaceFilter extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? spaceId) => state = spaceId;
+}
+
+final tasksSpaceFilterProvider = NotifierProvider<TasksSpaceFilter, String?>(TasksSpaceFilter.new);
+
 class TasksScreen extends ConsumerStatefulWidget {
   const TasksScreen({super.key});
 
@@ -19,7 +30,7 @@ class TasksScreen extends ConsumerStatefulWidget {
 }
 
 class _TasksScreenState extends ConsumerState<TasksScreen> {
-  String? _spaceFilter;
+  String? get _spaceFilter => ref.read(tasksSpaceFilterProvider);
 
   TaskItem _draft(String title, TaskStatus status, TaskPriority priority, DateTime? dueAt) {
     final now = ref.read(clockProvider)();
@@ -58,13 +69,11 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     DateTime? dueAt,
     List<Space> spaces,
   ) async {
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (_) => TaskDialog(
-        task: _draft(title, status, priority, dueAt),
-        spaces: spaces,
-        isNew: true,
-      ),
+    final saved = await showTaskEditor(
+      context,
+      task: _draft(title, status, priority, dueAt),
+      spaces: spaces,
+      isNew: true,
     );
     return saved == true && mounted;
   }
@@ -83,34 +92,48 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     final now = ref.watch(clockProvider)();
     final spaces = ref.watch(spacesProvider);
     final tasks = ref.watch(tasksProvider);
+    final mobile = MediaQuery.sizeOf(context).width < 720;
+    final gutter = mobile ? 16.0 : 24.0;
     return Scaffold(
       body: SafeArea(
         child: asyncView(spaces, (spaceList) => asyncView(tasks, (taskList) {
-              final visible = _spaceFilter == null
+              // Espaço apagado depois de escolhido: volta a mostrar tudo.
+              final selected = spaceList.any((s) => s.id == ref.watch(tasksSpaceFilterProvider))
+                  ? ref.watch(tasksSpaceFilterProvider)
+                  : null;
+              final visible = selected == null
                   ? taskList
-                  : taskList.where((t) => t.spaceId == _spaceFilter).toList();
+                  : taskList.where((t) => t.spaceId == selected).toList();
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const PageHeader(title: 'Tarefas', subtitle: 'Arraste os cartões entre as colunas'),
+                  PageHeader(
+                    title: 'Tarefas',
+                    subtitle: mobile
+                        ? 'Segure um cartão para mover'
+                        : 'Arraste os cartões entre as colunas',
+                  ),
                   if (spaceList.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                    SingleChildScrollView(
+                      key: const Key('space-filter'),
+                      scrollDirection: Axis.horizontal,
+                      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 12),
+                      child: Row(
                         children: [
                           ChoiceChip(
                             label: const Text('Todos'),
-                            selected: _spaceFilter == null,
-                            onSelected: (_) => setState(() => _spaceFilter = null),
+                            selected: selected == null,
+                            onSelected: (_) => ref.read(tasksSpaceFilterProvider.notifier).select(null),
                           ),
-                          for (final s in spaceList)
+                          for (final s in spaceList) ...[
+                            const SizedBox(width: 8),
                             ChoiceChip(
                               label: Text(s.name),
-                              selected: _spaceFilter == s.id,
-                              onSelected: (_) => setState(() => _spaceFilter = s.id),
+                              selected: selected == s.id,
+                              onSelected: (_) =>
+                                  ref.read(tasksSpaceFilterProvider.notifier).select(s.id),
                             ),
+                          ],
                         ],
                       ),
                     ),
@@ -123,10 +146,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                       onQuickAdd: _add,
                       onQuickAddWithDialog: (title, status, priority, dueAt) =>
                           _addWithDialog(title, status, priority, dueAt, spaceList),
-                      onOpen: (t) => showDialog<bool>(
-                        context: context,
-                        builder: (_) => TaskDialog(task: t, spaces: spaceList),
-                      ),
+                      onOpen: (t) => showTaskEditor(context, task: t, spaces: spaceList),
                     ),
                   ),
                 ],

@@ -60,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Organizacional', style: theme.textTheme.headlineMedium),
+                Text('Organize', style: theme.textTheme.headlineMedium),
                 const SizedBox(height: 24),
                 TextField(
                   controller: _email,

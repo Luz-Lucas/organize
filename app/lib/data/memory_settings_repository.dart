@@ -57,4 +57,8 @@ class MemorySettingsRepository implements SettingsRepository {
 
   @override
   Future<void> setRequireHome(bool value) => saveSettings(_current.copyWith(requireHome: value));
+
+  @override
+  Future<void> setNotebookPrefs(Map<String, dynamic> prefs) =>
+      saveSettings(_current.copyWith(notebookPrefs: prefs));
 }

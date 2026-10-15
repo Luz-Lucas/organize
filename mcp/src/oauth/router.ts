@@ -179,7 +179,7 @@ export function createOAuthRouter(
 
   const layout = (body: string) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
-<title>Organizacional — autorizar acesso</title><style>
+<title>Organize — autorizar acesso</title><style>
 body{font:16px system-ui,sans-serif;background:#f4f4f6;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}
 main{background:#fff;padding:2rem;border-radius:12px;max-width:380px;width:calc(100% - 2rem);box-shadow:0 2px 12px #0002}
 h1{font-size:1.2rem;margin-top:0}input[type=password]{width:100%;box-sizing:border-box;padding:.7rem;font-size:1rem;margin:.5rem 0 1rem}
@@ -222,7 +222,7 @@ h1{font-size:1.2rem;margin-top:0}input[type=password]{width:100%;box-sizing:bord
     const hidden = (n: string, v: string | undefined) => (v === undefined ? '' : `<input type="hidden" name="${n}" value="${esc(v)}">`);
     const dest = new URL(p.redirectUri); // já validado (igual ao registrado); IDN aparece em punycode
     const appName = TRUSTED_NAME_HOSTS.has(dest.hostname) && p.client.clientName ? esc(p.client.clientName) : 'App desconhecido';
-    res.status(status).send(layout(`<h1>Organizacional</h1>
+    res.status(status).send(layout(`<h1>Organize</h1>
 <p>Você está autorizando um app que enviará o acesso para:</p>
 <p class="dest"><b>${esc(dest.host)}</b></p>
 <p><b>${appName}</b> pede acesso à sua agenda, tarefas, notas e casa. Só continue se reconhecer esse endereço. Digite sua senha de acesso para autorizar.</p>

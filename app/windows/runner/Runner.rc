@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "dev.organizacional" "\0"
-            VALUE "FileDescription", "organizacional" "\0"
+            VALUE "FileDescription", "Organize" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "organizacional" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 dev.organizacional. All rights reserved." "\0"
             VALUE "OriginalFilename", "organizacional.exe" "\0"
-            VALUE "ProductName", "organizacional" "\0"
+            VALUE "ProductName", "Organize" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

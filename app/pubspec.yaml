@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.13.4
@@ -53,6 +53,16 @@ dependencies:
   workmanager: ^0.10.10
   geolocator: ^14.0.2
   permission_handler: ^12.0.1
+  http: ^1.6.0
+  file_picker: ^10.3.10
+  crypto: ^3.0.7
+  package_info_plus: ^9.0.1
+  archive: ^4.0.0
+  shared_preferences: ^2.5.5
+  perfect_freehand: ^2.5.2+1
+  google_mlkit_digital_ink_recognition: ^0.16.1
+  pdfrx: ^2.6.5
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:
@@ -78,6 +88,12 @@ flutter:
 
   assets:
     - assets/google_fonts/
+
+  # Fonte manuscrita das palavras trocadas pelo corretor do Caderno (OFL: assets/fonts/Caveat-OFL.txt).
+  fonts:
+    - family: Caveat
+      fonts:
+        - asset: assets/fonts/Caveat-Variable.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

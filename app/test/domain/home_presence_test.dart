@@ -6,7 +6,7 @@ import 'package:organizacional/domain/home_presence.dart';
 import 'package:organizacional/location/location_service.dart';
 
 final _now = DateTime.utc(2026, 10, 12, 9);
-const _home = GeoPoint(-19.9167, -43.9345); // Belo Horizonte�
+const _home = GeoPoint(-19.9320, -43.9380); // Belo Horizonte
 const _radius = 50;
 const _mPerDeg = 6371000 * math.pi / 180;
 
@@ -24,7 +24,7 @@ PresenceStatus _eval(LocationReport? last, {GeoPoint? home = _home, bool require
 void main() {
   group('distanceMeters', () {
     test('coordenadas idênticas dão 0 m', () {
-      expect(distanceMeters(_home, const GeoPoint(-19.9167, -43.9345)), 0);
+      expect(distanceMeters(_home, const GeoPoint(-19.9320, -43.9380)), 0);
     });
     test('um grau de latitude vale cerca de 111 km', () {
       final d = distanceMeters(const GeoPoint(0, 0), const GeoPoint(1, 0));
@@ -104,17 +104,17 @@ void main() {
       expect(far.distanceM, isNull);
       expect(_eval(_loc(5000, acc: 10, at: _now.add(const Duration(hours: 24)))).state, PresenceState.unknown);
     });
-    test('Belo Horizonte� vs. São Paulo: fora, a cerca de 173 km', () {
+    test('Belo Horizonte vs. São Paulo: fora, a cerca de 489 km', () {
       final r = _eval(LocationReport(
         fix: const GeoFix(lat: -23.5505, lon: -46.6333, accuracyM: 20),
         reportedAt: _minutesAgo(5),
       ));
       expect(r.state, PresenceState.away);
-      expect(r.distanceM, allOf(greaterThan(165000), lessThan(180000)));
+      expect(r.distanceM, allOf(greaterThan(480000), lessThan(500000)));
     });
     test('coordenadas idênticas: em casa a 0 m', () {
       final r = _eval(LocationReport(
-        fix: const GeoFix(lat: -19.9167, lon: -43.9345, accuracyM: 5),
+        fix: const GeoFix(lat: -19.9320, lon: -43.9380, accuracyM: 5),
         reportedAt: _minutesAgo(1),
       ));
       expect(r.state, PresenceState.home);

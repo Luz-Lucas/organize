@@ -27,12 +27,12 @@ const w = (over: Partial<Weather> = {}): Weather => ({ tempC: 22, code: 2, maxC:
 describe('fetchWeather', () => {
   it('lê a previsão do Open-Meteo e arredonda', async () => {
     const f = fakeFetch(() => json(forecast()));
-    const r = await fetchWeather(-19.9167, -43.9345, { fetch: f.fetch });
+    const r = await fetchWeather(-19.9320, -43.9380, { fetch: f.fetch });
     expect(r).toEqual({ tempC: 22, code: 2, maxC: 28, minC: 17, rainProb: 40 });
     const url = new URL(f.calls[0].url);
     expect(url.origin + url.pathname).toBe('https://api.open-meteo.com/v1/forecast');
-    expect(url.searchParams.get('latitude')).toBe('-19.9167');
-    expect(url.searchParams.get('longitude')).toBe('-43.9345');
+    expect(url.searchParams.get('latitude')).toBe('-19.93');
+    expect(url.searchParams.get('longitude')).toBe('-43.94');
     expect(url.searchParams.get('current')).toBe('temperature_2m,weather_code');
     expect(url.searchParams.get('daily')).toBe('temperature_2m_max,temperature_2m_min,precipitation_probability_max');
     expect(url.searchParams.get('timezone')).toBe('America/Sao_Paulo');
@@ -42,19 +42,19 @@ describe('fetchWeather', () => {
 
   it('só coordenadas arredondadas a 2 casas (~1 km) saem para o Open-Meteo', async () => {
     const f = fakeFetch(() => json(forecast()));
-    await fetchWeather(-19.9167, -43.9345, { fetch: f.fetch });
+    await fetchWeather(-19.93249, -43.93799, { fetch: f.fetch });
     await fetchWeather(10.005, 0, { fetch: f.fetch });
     const first = new URL(f.calls[0].url);
-    expect(first.searchParams.get('latitude')).toBe('-19.9167');
-    expect(first.searchParams.get('longitude')).toBe('-43.9345');
+    expect(first.searchParams.get('latitude')).toBe('-19.93');
+    expect(first.searchParams.get('longitude')).toBe('-43.94');
     expect(f.calls[0].url).not.toMatch(/\d\.\d{3}/);
     expect(new URL(f.calls[1].url).searchParams.get('longitude')).toBe('0.00');
   });
 
   it('usa o fuso informado; o padrão é America/Sao_Paulo', async () => {
     const f = fakeFetch(() => json(forecast()));
-    await fetchWeather(-19.9167, -45.7, { fetch: f.fetch }, 'America/Manaus');
-    await fetchWeather(-19.9167, -45.7, { fetch: f.fetch });
+    await fetchWeather(-19.93, -43.94, { fetch: f.fetch }, 'America/Manaus');
+    await fetchWeather(-19.93, -43.94, { fetch: f.fetch });
     expect(new URL(f.calls[0].url).searchParams.get('timezone')).toBe('America/Manaus');
     expect(new URL(f.calls[1].url).searchParams.get('timezone')).toBe('America/Sao_Paulo');
   });
@@ -63,13 +63,13 @@ describe('fetchWeather', () => {
     const f = fakeFetch(() => json(forecast({
       daily: { temperature_2m_max: [27.8], temperature_2m_min: [16.5], precipitation_probability_max: [null] },
     })));
-    const r = await fetchWeather(-19.9167, -45.7, { fetch: f.fetch });
+    const r = await fetchWeather(-19.93, -43.94, { fetch: f.fetch });
     expect(r).toEqual({ tempC: 22, code: 2, maxC: 28, minC: 17, rainProb: null });
   });
 
   it('HTTP 500 dá null', async () => {
     const f = fakeFetch(() => json({ error: true }, 500));
-    expect(await fetchWeather(-19.9167, -45.7, { fetch: f.fetch })).toBeNull();
+    expect(await fetchWeather(-19.93, -43.94, { fetch: f.fetch })).toBeNull();
   });
 
   it('JSON inválido ou campos faltando dão null', async () => {
@@ -105,12 +105,12 @@ describe('reverseCity', () => {
   beforeEach(() => clearCityCache());
 
   it('usa city, com User-Agent e coordenadas arredondadas', async () => {
-    const f = fakeFetch(() => json({ address: { city: 'Belo Horizonte�', state: 'Minas Gerais' } }));
-    expect(await reverseCity(-19.9167, -43.9345, { fetch: f.fetch })).toBe('Belo Horizonte�');
+    const f = fakeFetch(() => json({ address: { city: 'Belo Horizonte', state: 'Minas Gerais' } }));
+    expect(await reverseCity(-19.9320, -43.9380, { fetch: f.fetch })).toBe('Belo Horizonte');
     const url = new URL(f.calls[0].url);
     expect(url.origin + url.pathname).toBe('https://nominatim.openstreetmap.org/reverse');
-    expect(url.searchParams.get('lat')).toBe('-19.9167');
-    expect(url.searchParams.get('lon')).toBe('-43.9345');
+    expect(url.searchParams.get('lat')).toBe('-19.93');
+    expect(url.searchParams.get('lon')).toBe('-43.94');
     expect(url.searchParams.get('format')).toBe('jsonv2');
     expect(url.searchParams.get('zoom')).toBe('10');
     expect(url.searchParams.get('accept-language')).toBe('pt-BR');
@@ -119,18 +119,18 @@ describe('reverseCity', () => {
   });
 
   it.each([
-    ['town', { town: 'Pouso Alegre' }, 'Pouso Alegre'],
-    ['village', { village: 'Careaçu' }, 'Careaçu'],
-    ['municipality', { municipality: 'Itajubá' }, 'Itajubá'],
-    ['county', { county: 'Belo Horizonte�-Mirim' }, 'Belo Horizonte�-Mirim'],
+    ['town', { town: 'Nova Lima' }, 'Nova Lima'],
+    ['village', { village: 'Macacos' }, 'Macacos'],
+    ['municipality', { municipality: 'Betim' }, 'Betim'],
+    ['county', { county: 'Região Metropolitana' }, 'Região Metropolitana'],
   ])('cai para %s', async (_name, address, expected) => {
     const f = fakeFetch(() => json({ address }));
-    expect(await reverseCity(-22.1, -45.2, { fetch: f.fetch })).toBe(expected);
+    expect(await reverseCity(-19.8, -44.1, { fetch: f.fetch })).toBe(expected);
   });
 
   it('prefere city a town', async () => {
     const f = fakeFetch(() => json({ address: { town: 'A', city: 'B' } }));
-    expect(await reverseCity(-22.1, -45.2, { fetch: f.fetch })).toBe('B');
+    expect(await reverseCity(-19.8, -44.1, { fetch: f.fetch })).toBe('B');
   });
 
   it('sem nome utilizável, HTTP ruim, JSON ruim ou erro de rede dão null', async () => {
@@ -150,15 +150,15 @@ describe('reverseCity', () => {
   });
 
   it('cache: a 2ª chamada na mesma coordenada arredondada não usa a rede', async () => {
-    const f = fakeFetch(() => json({ address: { city: 'Belo Horizonte�' } }));
-    expect(await reverseCity(-19.9167, -43.9345, { fetch: f.fetch })).toBe('Belo Horizonte�');
-    expect(await reverseCity(-19.9167, -43.9345, { fetch: f.fetch })).toBe('Belo Horizonte�');
+    const f = fakeFetch(() => json({ address: { city: 'Belo Horizonte' } }));
+    expect(await reverseCity(-19.9320, -43.9380, { fetch: f.fetch })).toBe('Belo Horizonte');
+    expect(await reverseCity(-19.9349, -43.9401, { fetch: f.fetch })).toBe('Belo Horizonte');
     expect(f.calls).toHaveLength(1);
   });
 
   it('cache: coordenada arredondada diferente consulta de novo', async () => {
     const f = fakeFetch(() => json({ address: { city: 'X' } }));
-    await reverseCity(-19.9167, -43.9345, { fetch: f.fetch });
+    await reverseCity(-19.93, -43.94, { fetch: f.fetch });
     await reverseCity(-23.55, -46.63, { fetch: f.fetch });
     expect(f.calls).toHaveLength(2);
   });
@@ -166,8 +166,8 @@ describe('reverseCity', () => {
   it('cache: falhas não são guardadas', async () => {
     let n = 0;
     const f = fakeFetch(() => (n++ === 0 ? json({}, 500) : json({ address: { city: 'Y' } })));
-    expect(await reverseCity(-19.9167, -45.7, { fetch: f.fetch })).toBeNull();
-    expect(await reverseCity(-19.9167, -45.7, { fetch: f.fetch })).toBe('Y');
+    expect(await reverseCity(-19.93, -43.94, { fetch: f.fetch })).toBeNull();
+    expect(await reverseCity(-19.93, -43.94, { fetch: f.fetch })).toBe('Y');
     expect(f.calls).toHaveLength(2);
   });
 
@@ -175,12 +175,12 @@ describe('reverseCity', () => {
     let t = Date.parse('2026-10-12T09:00:00Z');
     const f = fakeFetch(() => json({ address: { city: 'Z' } }));
     const deps = { fetch: f.fetch, now: () => t };
-    await reverseCity(-19.9167, -45.7, deps);
+    await reverseCity(-19.93, -43.94, deps);
     t += 23 * 3600_000;
-    await reverseCity(-19.9167, -45.7, deps);
+    await reverseCity(-19.93, -43.94, deps);
     expect(f.calls).toHaveLength(1);
     t += 2 * 3600_000;
-    await reverseCity(-19.9167, -45.7, deps);
+    await reverseCity(-19.93, -43.94, deps);
     expect(f.calls).toHaveLength(2);
   });
 });
@@ -205,8 +205,8 @@ describe('wmoDescription', () => {
 
 describe('weatherText', () => {
   it('texto completo', () => {
-    expect(weatherText({ city: 'Belo Horizonte�', w: w() })).toBe(
-      'Em Belo Horizonte� agora faz 22 graus, parcialmente nublado. ' +
+    expect(weatherText({ city: 'Belo Horizonte', w: w() })).toBe(
+      'Em Belo Horizonte agora faz 22 graus, parcialmente nublado. ' +
       'Hoje a máxima é de 28 e a mínima de 17, com 40% de chance de chuva.',
     );
   });

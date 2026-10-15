@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/alexa.dart';
+import '../domain/wake_override.dart';
 import 'alexa_repository.dart';
 import 'repository.dart';
 
@@ -55,6 +56,21 @@ class SupabaseAlexaRepository implements AlexaRepository {
   @override
   Future<void> deleteWakePlan(String id) =>
       _guard(() async => await _db.from('wake_plans').delete().eq('id', id));
+
+  @override
+  Stream<List<WakeOverride>> watchOverrides() => _db
+      .from('wake_overrides')
+      .stream(primaryKey: ['plan_id', 'run_date'])
+      .order('run_date', ascending: true)
+      .map((rows) => rows.map(WakeOverride.fromMap).toList());
+
+  @override
+  Future<void> setOverride(WakeOverride override) => _guard(() async =>
+      await _db.from('wake_overrides').upsert(override.toMap(), onConflict: 'plan_id,run_date'));
+
+  @override
+  Future<void> clearOverride(String planId, DateTime date) => _guard(() async =>
+      await _db.from('wake_overrides').delete().eq('plan_id', planId).eq('run_date', dateKey(date)));
 
   @override
   Future<String> sendCommand(String kind, Map<String, Object?> payload) => _guard(() async {

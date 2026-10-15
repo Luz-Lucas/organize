@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { evaluatePresence, haversineM } from '../src/presence.js';
 
 const now = new Date('2026-10-12T09:00:00Z');
-const home = { lat: -19.9167, lon: -43.9345, radiusM: 50 }; // Belo Horizonte­
+const home = { lat: -19.9320, lon: -43.9380, radiusM: 50 }; // Belo Horizonte
 const M_PER_DEG = (6371000 * Math.PI) / 180;
 
 /** Ponto a `meters` metros ao norte de `p`. */
@@ -128,12 +128,12 @@ describe('evaluatePresence', () => {
     expect(far.state).toBe('unknown');
   });
 
-  it('Belo Horizonte­ vs. SÃ£o Paulo: fora, a cerca de 173 km', () => {
+  it('Belo Horizonte vs. SÃ£o Paulo: fora, a cerca de 489 km', () => {
     const sp = { lat: -23.5505, lon: -46.6333, accuracyM: 20, reportedAt: minutesAgo(5) };
     const r = evaluatePresence({ home, requireHome: true, location: sp, now });
     expect(r.state).toBe('away');
-    expect(r.distanceM!).toBeGreaterThan(165000);
-    expect(r.distanceM!).toBeLessThan(180000);
+    expect(r.distanceM!).toBeGreaterThan(480000);
+    expect(r.distanceM!).toBeLessThan(500000);
   });
 
   it('coordenadas idÃªnticas: em casa a 0 m', () => {

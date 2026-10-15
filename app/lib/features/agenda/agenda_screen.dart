@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -6,18 +8,34 @@ import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/agenda.dart';
 import '../../domain/calendar_event.dart';
+import '../../domain/event_tag.dart';
+import '../../domain/ids.dart';
+import '../../domain/recurrence.dart';
 import '../../domain/space.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
+import 'agenda_filter.dart';
 import 'calendar_common.dart';
 import 'calendar_layout.dart';
 import 'event_dialog.dart';
 import 'mobile_calendar.dart';
 import 'month_view.dart';
+import 'tag_editor.dart';
+import 'tag_filter_bar.dart';
+import 'tag_style.dart';
+import 'tags_manager.dart';
 import 'week_view.dart';
 
 enum _AgendaView { week, month }
+
+/// Garante que a semeadura das etiquetas iniciais seja tentada uma vez por execução do app: quem apagou
+/// todas as etiquetas de propósito não as vê voltar a cada visita à agenda.
+class _SeedGuard {
+  bool tried = false;
+}
+
+final _seedGuardProvider = Provider<_SeedGuard>((ref) => _SeedGuard());
 
 class AgendaScreen extends ConsumerStatefulWidget {
   const AgendaScreen({super.key});
@@ -32,6 +50,22 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
   DateTime get _weekStart => startOfWeek(_anchor);
 
+  /// Sem nenhuma etiqueta, pede a semeadura das iniciais (Aula, Academia, Sazonal, Reunião).
+  void _maybeSeed(AsyncValue<List<EventTag>> tags) {
+    final guard = ref.read(_seedGuardProvider);
+    if (guard.tried || !tags.hasValue || tags.requireValue.isNotEmpty) return;
+    guard.tried = true;
+    final repo = ref.read(repositoryProvider);
+    unawaited(() async {
+      try {
+        await repo.seedEventTags();
+      } catch (_) {
+        // Sem etiquetas a agenda funciona igual; tenta de novo na próxima execução.
+        guard.tried = false;
+      }
+    }());
+  }
+
   DateTime _monthOf(DateTime d, int delta) {
     final first = DateTime(d.year, d.month + delta, 1);
     final today = startOfDay(ref.read(clockProvider)());
@@ -40,6 +74,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
   Future<void> _edit(List<Space> spaces, {CalendarEvent? existing, DateTime? start, DateTime? end}) async {
     final repo = ref.read(repositoryProvider);
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final now = ref.read(clockProvider)();
     final inWeek = !now.isBefore(_weekStart) && now.isBefore(addDays(_weekStart, 7));
     final weekMode = MediaQuery.sizeOf(context).width >= 720 && _view == _AgendaView.week;
@@ -52,6 +87,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         initialStart: s,
         initialEnd: e,
         spaces: spaces,
+        tags: ref.read(eventTagsProvider).value ?? const <EventTag>[],
+        onCreateTag: () => showTagEditor(context, ref),
         existing: existing,
         onSave: (event) async {
           try {
@@ -66,6 +103,52 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             : () async {
                 try {
                   await repo.deleteEvent(existing.id);
+                  showUndo(messenger, 'Evento excluído', () => repo.upsertEvent(existing));
+                  return null;
+                } on RepositoryException {
+                  return 'Não foi possível excluir o evento.';
+                }
+              },
+        onCreateSeries: (template, rule) async {
+          try {
+            await repo.upsertEvents(SeriesOps.buildSeries(template, rule, newId));
+            return null;
+          } on RepositoryException {
+            return 'Não foi possível salvar os eventos.';
+          }
+        },
+        onSaveScoped: existing?.seriesId == null
+            ? null
+            : (event, scope) async {
+                try {
+                  final series = await _seriesOf(repo, existing!);
+                  await repo.upsertEvents(SeriesOps.applyEdit(series, existing, event, scope));
+                  return null;
+                } on RepositoryException {
+                  return 'Não foi possível salvar o evento.';
+                }
+              },
+        onDeleteScoped: existing?.seriesId == null
+            ? null
+            : (scope) async {
+                try {
+                  final series = await _seriesOf(repo, existing!);
+                  final ids = SeriesOps.deleteIds(series, existing, scope).toSet();
+                  final removed = [for (final e in series) if (ids.contains(e.id)) e];
+                  // Séries longas: apaga por series_id (e início), não por uma lista enorme de ids.
+                  switch (scope) {
+                    case SeriesScope.one:
+                      await repo.deleteEvent(existing.id);
+                    case SeriesScope.following:
+                      await repo.deleteSeries(existing.seriesId!, from: existing.startsAt);
+                    case SeriesScope.all:
+                      await repo.deleteSeries(existing.seriesId!);
+                  }
+                  showUndo(
+                    messenger,
+                    removed.length == 1 ? 'Evento excluído' : '${removed.length} eventos excluídos',
+                    () => repo.upsertEvents(removed),
+                  );
                   return null;
                 } on RepositoryException {
                   return 'Não foi possível excluir o evento.';
@@ -73,6 +156,12 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
               },
       ),
     );
+  }
+
+  /// Ocorrências da série de [event] (inclusive as que não estão na tela).
+  Future<List<CalendarEvent>> _seriesOf(Repository repo, CalendarEvent event) async {
+    final series = await repo.listSeries(event.seriesId!);
+    return series.any((e) => e.id == event.id) ? series : [...series, event];
   }
 
   String _title(bool desktop) {
@@ -95,6 +184,13 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     final spaceList = spaces.value ?? const <Space>[];
     final from = week ? _weekStart : monthGrid(_anchor).first;
     final events = ref.watch(eventsFromProvider(from));
+    final tagsAsync = ref.watch(eventTagsProvider);
+    ref.listen(eventTagsProvider, (_, next) => _maybeSeed(next));
+    _maybeSeed(tagsAsync);
+    final tagList = tagsAsync.value ?? const <EventTag>[];
+    final tags = tagMap(tagList);
+    // Antes de as etiquetas chegarem não dá para saber o que é "sem etiqueta": não filtra.
+    final hidden = tagsAsync.hasValue ? ref.watch(agendaHiddenTagsProvider) : const <String>{};
     final org = context.org;
 
     final actions = <Widget>[
@@ -133,6 +229,16 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         onPressed: () => setState(() =>
             _anchor = week ? addDays(_anchor, 7) : _monthOf(_anchor, 1)),
       ),
+      PopupMenuButton<String>(
+        key: const Key('agenda-menu'),
+        tooltip: 'Menu da agenda',
+        onSelected: (v) {
+          if (v == 'tags') showTagsManager(context);
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(key: Key('menu-manage-tags'), value: 'tags', child: Text('Gerenciar etiquetas')),
+        ],
+      ),
     ];
 
     return Scaffold(
@@ -148,14 +254,25 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         child: Column(
           children: [
             PageHeader(title: _title(desktop), actions: actions),
+            if (tagList.isNotEmpty)
+              TagFilterBar(
+                tags: tagList,
+                hidden: hidden,
+                onToggle: ref.read(agendaHiddenTagsProvider.notifier).toggle,
+                onNew: () => showTagEditor(context, ref),
+                onEdit: (t) => showTagEditor(context, ref, existing: t),
+                onDelete: (t) => deleteTagWithConfirm(context, ref, t),
+              ),
             Expanded(
-              child: asyncView(events, (eventList) {
+              child: asyncView(events, (allEvents) {
+                final eventList = filterByTag(allEvents, hidden, tags.keys.toSet());
                 if (!desktop) {
                   return MobileCalendar(
                     selected: _anchor,
                     events: eventList,
                     now: now,
                     spaceNames: {for (final s in spaceList) s.id: s.name},
+                    tags: tags,
                     onSelect: (d) => setState(() => _anchor = d),
                     onOpen: (e) => _edit(spaceList, existing: e),
                   );
@@ -167,6 +284,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                       month: _anchor,
                       events: eventList,
                       now: now,
+                      tags: tags,
                       onOpenDay: (d) => setState(() {
                         _anchor = d;
                         _view = _AgendaView.week;
@@ -181,6 +299,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                     weekStart: _weekStart,
                     events: eventList,
                     now: now,
+                    tags: tags,
                     onCreate: (s, e) => _edit(spaceList, start: s, end: e),
                     onOpen: (e) => _edit(spaceList, existing: e),
                   ),
