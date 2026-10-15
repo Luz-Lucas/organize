@@ -58,6 +58,8 @@ android {
 
     buildTypes {
         release {
+            // Mantém as classes do ML Kit (reconhecimento de escrita) no R8.
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName(if (organizeKeystore.isFile) "organize" else "debug")
         }
     }
