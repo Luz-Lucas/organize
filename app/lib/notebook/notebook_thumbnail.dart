@@ -24,8 +24,11 @@ class ThumbStroke {
 }
 
 class ThumbData {
-  const ThumbData(this.strokes);
+  const ThumbData(this.strokes, {this.background});
   final List<ThumbStroke> strokes;
+
+  /// A página de PDF de fundo (caminho no Storage e onde fica, em unidades de página).
+  final ({String path, Rect rect})? background;
 }
 
 /// Descompacta e reduz a página para a miniatura. Função de nível superior e
@@ -54,7 +57,8 @@ ThumbData? decodeThumb(String data) {
       ..add(pts.last.y);
     out.add(ThumbStroke(s.argb, s.width, Float32List.fromList(xy)));
   }
-  return ThumbData(out);
+  final bg = doc.images.where((i) => i.background).firstOrNull;
+  return ThumbData(out, background: bg == null ? null : (path: bg.path, rect: bg.bounds));
 }
 
 /// Páginas com texto codificado até este tamanho são decodificadas na hora (o
@@ -238,7 +242,72 @@ class _NotebookThumbnailState extends ConsumerState<NotebookThumbnail> {
         borderRadius: BorderRadius.circular(2),
       ),
       clipBehavior: Clip.antiAlias,
-      child: CustomPaint(painter: _ThumbPainter(thumb)),
+      child: thumb.background == null
+          ? CustomPaint(painter: _ThumbPainter(thumb))
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                _ThumbBackground(noteId: widget.noteId, bg: thumb.background!, scale: widget.width / pageWidth),
+                CustomPaint(painter: _ThumbPainter(thumb)),
+              ],
+            ),
+    );
+  }
+}
+
+/// A página de PDF de fundo na miniatura (carregada pelo store de imagens do caderno).
+class _ThumbBackground extends ConsumerStatefulWidget {
+  const _ThumbBackground({required this.noteId, required this.bg, required this.scale});
+
+  final String noteId;
+  final ({String path, Rect rect}) bg;
+  final double scale;
+
+  @override
+  ConsumerState<_ThumbBackground> createState() => _ThumbBackgroundState();
+}
+
+class _ThumbBackgroundState extends ConsumerState<_ThumbBackground> {
+  static final _cache = <String, Future<ImageProvider>>{};
+  Future<ImageProvider>? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      final store = ref.read(notebookImageStoreFactoryProvider)(widget.noteId);
+      final path = widget.bg.path;
+      _image = _cache.putIfAbsent(path, () {
+        final f = store.load(path);
+        f.then((_) {}, onError: (Object _) {
+          _cache.remove(path); // falhou: tenta de novo depois
+        });
+        return f;
+      });
+    } catch (_) {
+      _image = null; // sem store (testes): só os traços
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.bg.rect;
+    final s = widget.scale;
+    return Stack(
+      children: [
+        Positioned(
+          left: r.left * s,
+          top: r.top * s,
+          width: r.width * s,
+          height: r.height * s,
+          child: FutureBuilder<ImageProvider>(
+            future: _image,
+            builder: (context, snap) => snap.hasData
+                ? Image(image: snap.data!, fit: BoxFit.fill, filterQuality: FilterQuality.medium)
+                : const SizedBox.shrink(),
+          ),
+        ),
+      ],
     );
   }
 }

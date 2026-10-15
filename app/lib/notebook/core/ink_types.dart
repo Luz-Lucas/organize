@@ -9,6 +9,15 @@ const double pageWidth = 1000.0;
 /// Altura da página (proporção A4) em unidades de página.
 const double pageHeight = 1414.0;
 
+/// Distância entre as pautas (pautado), linhas (quadriculado) e pontos (pontilhado).
+const double kRuleSpacing = 40.0;
+
+/// y da primeira pauta do papel pautado (acima dela fica o cabeçalho, sem pauta).
+const double kLinedTop = 120.0;
+
+/// A última pauta fica pelo menos isto acima do pé da página.
+const double kLinedBottomMargin = 30.0;
+
 enum PenTool { fountain, pen, pencil, highlighter }
 
 enum PageBackground { blank, lined, grid, dots }
@@ -246,6 +255,7 @@ class ImageBox {
     required this.w,
     required this.h,
     required this.path,
+    this.background = false,
   });
 
   final String id;
@@ -254,6 +264,11 @@ class ImageBox {
   final double w;
   final double h;
   final String path;
+
+  /// Fundo da página (página de um PDF importado): fica sempre por baixo de tudo e
+  /// não é selecionado pelo laço nem apagado pela borracha. Versões antigas do app
+  /// ignoram o campo e o tratam como imagem comum.
+  final bool background;
 
   Rect get bounds => Rect.fromLTWH(x, y, w, h);
 
@@ -264,6 +279,7 @@ class ImageBox {
     double? w,
     double? h,
     String? path,
+    bool? background,
   }) => ImageBox(
     id: id ?? this.id,
     x: x ?? this.x,
@@ -271,6 +287,7 @@ class ImageBox {
     w: w ?? this.w,
     h: h ?? this.h,
     path: path ?? this.path,
+    background: background ?? this.background,
   );
 
   ImageBox quantized() => copyWith(
@@ -288,10 +305,11 @@ class ImageBox {
       other.y == y &&
       other.w == w &&
       other.h == h &&
-      other.path == path;
+      other.path == path &&
+      other.background == background;
 
   @override
-  int get hashCode => Object.hash(id, x, y, w, h, path);
+  int get hashCode => Object.hash(id, x, y, w, h, path, background);
 
   @override
   String toString() => 'ImageBox($id, $path)';

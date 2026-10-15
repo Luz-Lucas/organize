@@ -289,9 +289,12 @@ class PageInkCache {
   }
 
   void _syncImages(List<ImageBox> all, Set<String> hidden, int epoch, Map<String, ui.Image> images) {
+    // O fundo (página de PDF) por baixo das outras imagens.
     final visible = [
       for (final im in all)
-        if (!hidden.contains(im.id)) im,
+        if (im.background && !hidden.contains(im.id)) im,
+      for (final im in all)
+        if (!im.background && !hidden.contains(im.id)) im,
     ];
     if (_under.epoch == epoch && _sameItems(_under.src, visible)) return;
     _under.pic?.dispose();
@@ -384,9 +387,11 @@ void paintDoc(
   List<Stroke> extraStrokes = const [],
 }) {
   final outline = pathFor ?? (s) => strokeOutlinePath(s.points, s.tool, s.width);
-  for (final im in doc.images) {
-    if (hidden.contains(im.id)) continue;
-    paintImage(canvas, im, images[im.path]);
+  for (final bg in const [true, false]) {
+    for (final im in doc.images) {
+      if (im.background != bg || hidden.contains(im.id)) continue;
+      paintImage(canvas, im, images[im.path]);
+    }
   }
   final paint = Paint()
     ..style = PaintingStyle.fill
@@ -448,8 +453,8 @@ class PageBackgroundPainter extends CustomPainter {
   final Color paper;
   final Color line;
 
-  static const double spacing = 40;
-  static const double top = 120;
+  static const double spacing = kRuleSpacing;
+  static const double top = kLinedTop;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -462,7 +467,7 @@ class PageBackgroundPainter extends CustomPainter {
       case PageBackground.blank:
         break;
       case PageBackground.lined:
-        for (var y = top; y < size.height - 30; y += spacing) {
+        for (var y = top; y < size.height - kLinedBottomMargin; y += spacing) {
           canvas.drawLine(Offset(40, y), Offset(size.width - 40, y), p);
         }
       case PageBackground.grid:

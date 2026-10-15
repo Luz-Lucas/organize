@@ -650,6 +650,19 @@ mais novo, com tombstones para exclusões. É o mesmo princípio do merge do Cad
   `check_feeds.ts` para validar).
 - **Trocar o nome ou o ícone do app**: `android:label` no manifesto, `linux/`
   (`APPLICATION_ID`/título), `windows/runner/` e os ícones gerados.
+- **PDF no Caderno** (`lib/notebook/pdf/`): na importação, cada página do PDF é renderizada
+  (pdfrx/PDFium, `PdfrxRasterizer`) em JPEG de 2000 px, enviada ao bucket `notebook-images` e
+  vira uma página do caderno com um `ImageBox(background: true)` (no JSON, `"bg": true`). O fundo
+  fica sempre por baixo e o laço e a borracha não o pegam. Não há leitor de PDF na hora de abrir:
+  sincronização, cache e modo offline são os mesmos das imagens. Na web e nos testes o provider é
+  `NoopPdfRasterizer` e a opção some. Para trocar o leitor, implemente `PdfRasterizer` e faça o
+  override de `pdfRasterizerProvider` no `main.dart`. Para mudar a resolução ou o limite de
+  páginas, altere `kPdfRenderWidth` e `kMaxPdfPages`.
+- **"Melhorar escrita"** (`lib/notebook/intelligence/straighten.dart`): os ajustes de cada linha
+  ficam nas constantes do topo do arquivo: inclinação mínima e máxima corrigida, faixa de
+  altura-x na pauta e tolerância do alinhamento à esquerda. As pautas vêm de `ruleGuideFor`, que
+  usa `kLinedTop`/`kRuleSpacing` de `core/ink_types.dart`, as mesmas constantes que o fundo
+  desenha. Se mudar o desenho das pautas, mude essas constantes, e o encaixe acompanha.
 
 ---
 

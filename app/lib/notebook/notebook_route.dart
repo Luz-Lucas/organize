@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../app/providers.dart';
 import '../features/notes/note_screen.dart';
 import 'intelligence/model_manager.dart';
+import 'pdf/pdf_providers.dart';
 import 'state/handwriting_providers.dart';
 import 'state/notebook_controller.dart';
 import 'state/notebook_providers.dart';
@@ -15,9 +16,12 @@ import 'ui/notebook_screen.dart';
 /// Fica fora da casca (sem barra inferior/lateral) para a escrita ter a tela toda.
 /// Voltar fecha o caderno; se não há para onde voltar (link direto), vai para Notas.
 class NotebookRoute extends ConsumerWidget {
-  const NotebookRoute({super.key, required this.noteId});
+  const NotebookRoute({super.key, required this.noteId, this.initialPdf});
 
   final String noteId;
+
+  /// PDF a importar ao abrir ("Novo caderno a partir de PDF").
+  final PickedPdf? initialPdf;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,6 +46,7 @@ class NotebookRoute extends ConsumerWidget {
         noteId: noteId,
         title: note.title,
         session: ref.watch(notebookControllerProvider(noteId)),
+        initialPdf: initialPdf,
       );
     }
     return PopScope(
@@ -64,12 +69,14 @@ class NotebookScreenHost extends ConsumerWidget {
     required this.title,
     required this.session,
     this.pickImage,
+    this.initialPdf,
   });
 
   final String noteId;
   final String title;
   final NotebookSession session;
   final Future<PickedImage?> Function()? pickImage;
+  final PickedPdf? initialPdf;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -99,6 +106,9 @@ class NotebookScreenHost extends ConsumerWidget {
       prefs: prefs,
       onPrefsChanged: (m) => ref.read(settingsRepositoryProvider).setNotebookPrefs(m),
       intelligence: intelligence,
+      pdfRasterizer: ref.watch(pdfRasterizerProvider),
+      pickPdf: ref.watch(pdfPickerProvider),
+      initialPdf: initialPdf,
     );
   }
 }

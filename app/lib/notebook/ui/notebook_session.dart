@@ -27,7 +27,7 @@
 ///   Stream<SaveStatus> get statusChanges;        // mudanças de [status]
 ///   NotebookImageStore get images;
 ///   void updatePage(String id, PageDoc doc);     // edição concluída
-///   void addPage({PageBackground background});   // acrescenta no fim
+///   void addPage({PageBackground background, PageDoc? initial}); // acrescenta no fim
 ///   void deletePage(String id);
 ///   void duplicatePage(String id);               // cópia logo após a página
 ///   void setBackground(String id, PageBackground background);
@@ -186,8 +186,9 @@ abstract class NotebookSession {
   /// Um gesto terminou: [doc] é o novo conteúdo da página [id].
   void updatePage(String id, PageDoc doc);
 
-  /// Nova página no fim do caderno.
-  void addPage({PageBackground background = PageBackground.lined});
+  /// Nova página no fim do caderno. Com [initial], a página já nasce com esse
+  /// conteúdo (ex.: a página de um PDF como fundo) e é salva como uma edição.
+  void addPage({PageBackground background = PageBackground.lined, PageDoc? initial});
 
   void deletePage(String id);
 

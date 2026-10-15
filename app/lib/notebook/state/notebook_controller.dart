@@ -369,10 +369,13 @@ class NotebookController implements NotebookSession {
   }
 
   @override
-  void addPage({PageBackground background = PageBackground.lined}) {
+  void addPage({PageBackground background = PageBackground.lined, PageDoc? initial}) {
     if (_disposed) return;
     final id = newId();
-    _pages.add(_Local(id, background, PageDoc.empty, 0));
+    final doc = initial ?? PageDoc.empty;
+    // Com conteúdo inicial, a página nasce "suja" (como a cópia de duplicatePage):
+    // o conteúdo vai ao servidor no próximo envio, depois da criação.
+    _pages.add(_Local(id, background, doc, 0, dirty: !doc.isEmpty)..gen = doc.isEmpty ? 0 : 1);
     _ops.add(_AddOp(id, background));
     _afterStructureChange();
   }

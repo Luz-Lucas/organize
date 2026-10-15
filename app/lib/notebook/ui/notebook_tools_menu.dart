@@ -33,6 +33,7 @@ class NotebookToolsMenu extends StatefulWidget {
     required this.onZoomIn,
     required this.onZoomOut,
     required this.onPrefs,
+    this.onInsertPdf,
     this.onConvertPage,
     this.canConvert = false,
     this.onStraightenPage,
@@ -57,6 +58,10 @@ class NotebookToolsMenu extends StatefulWidget {
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
   final ValueChanged<NotebookPrefs> onPrefs;
+
+  /// "Inserir PDF": as páginas do PDF entram no fim do caderno, prontas para escrever
+  /// por cima (`null` esconde, ex.: sem leitor de PDF).
+  final VoidCallback? onInsertPdf;
 
   /// "Converter página em texto". Só aparece com [canConvert] (há reconhecedor);
   /// sem ele, o lugar mostra a dica "disponível no Android".
@@ -222,6 +227,15 @@ class _NotebookToolsMenuState extends State<NotebookToolsMenu> {
             selected: false,
             onTap: () => _closeThen(widget.onInsertImage),
           ),
+          if (widget.onInsertPdf != null)
+            toolIconButton(
+              context,
+              key: 'nb-insert-pdf',
+              icon: Icons.picture_as_pdf_outlined,
+              tip: 'Inserir PDF',
+              selected: false,
+              onTap: () => _closeThen(widget.onInsertPdf!),
+            ),
         ],
       ),
       Align(

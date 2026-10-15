@@ -130,13 +130,13 @@ class FakeSession implements NotebookSession {
   }
 
   @override
-  void addPage({PageBackground background = PageBackground.lined}) {
+  void addPage({PageBackground background = PageBackground.lined, PageDoc? initial}) {
     _pages.add(
       NotebookPageState(
         id: 'p${_seq++}',
         idx: _pages.length,
         background: background,
-        doc: PageDoc.empty,
+        doc: initial ?? PageDoc.empty,
       ),
     );
     _emit();

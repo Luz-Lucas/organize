@@ -81,7 +81,7 @@ List<String> hitItems(
     if (near(t.bounds)) hits.add(t.id);
   }
   for (final i in doc.images) {
-    if (near(i.bounds)) hits.add(i.id);
+    if (!i.background && near(i.bounds)) hits.add(i.id); // o fundo (PDF) não se apaga
   }
   return hits;
 }
@@ -272,7 +272,7 @@ Set<String> lassoSelect(PageDoc doc, List<Offset> polygon) {
     if (boxSelected(t.bounds)) picked.add(t.id);
   }
   for (final i in doc.images) {
-    if (boxSelected(i.bounds)) picked.add(i.id);
+    if (!i.background && boxSelected(i.bounds)) picked.add(i.id); // o fundo (PDF) não se seleciona
   }
   return picked;
 }

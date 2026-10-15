@@ -16,6 +16,8 @@ import '../intelligence/gestures.dart';
 import '../intelligence/ink_to_text.dart';
 import '../intelligence/straighten.dart';
 import '../intelligence/transcript.dart';
+import '../pdf/pdf_import.dart';
+import '../pdf/pick_pdf.dart';
 import 'ink_page_view.dart';
 import 'notebook_intelligence.dart';
 import 'notebook_prefs.dart';
@@ -24,6 +26,8 @@ import 'notebook_toolbar.dart';
 import 'notebook_tools_menu.dart';
 import 'tool_settings.dart';
 
+export '../pdf/pdf_import.dart' show PdfRasterizer, NoopPdfRasterizer;
+export '../pdf/pick_pdf.dart' show PickedPdf;
 export 'notebook_intelligence.dart';
 export 'notebook_session.dart';
 
@@ -86,6 +90,9 @@ class NotebookScreen extends StatefulWidget {
     this.prefs = const {},
     this.onPrefsChanged,
     this.intelligence = NotebookIntelligence.off,
+    this.pdfRasterizer = const NoopPdfRasterizer(),
+    this.pickPdf,
+    this.initialPdf,
   });
 
   final String noteId;
@@ -105,6 +112,16 @@ class NotebookScreen extends StatefulWidget {
 
   /// Conversão em texto, corretor e gestos (fase 2). Padrão: tudo desligado.
   final NotebookIntelligence intelligence;
+
+  /// Leitor de PDF para "Inserir PDF" (sem suporte, a opção some).
+  final PdfRasterizer pdfRasterizer;
+
+  /// Escolhe um PDF (padrão: seletor do sistema). Injetável nos testes.
+  final Future<PickedPdf?> Function()? pickPdf;
+
+  /// PDF a importar assim que o caderno abrir ("Novo caderno a partir de PDF"):
+  /// as páginas dele substituem a página em branco inicial.
+  final PickedPdf? initialPdf;
 
   @override
   State<NotebookScreen> createState() => _NotebookScreenState();
@@ -151,6 +168,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
 
   /// Uma conversão em texto em andamento.
   bool _busy = false;
+
+  /// O PDF inicial já foi (ou está sendo) importado.
+  bool _initialPdfStarted = false;
 
   @override
   void initState() {
@@ -258,6 +278,14 @@ class _NotebookScreenState extends State<NotebookScreen> {
     for (final id in fresh) {
       final t = _intel.transcriptOf?.call(id);
       if (t != null) unawaited(_refreshMarks(id, t));
+    }
+    final pdf = widget.initialPdf;
+    if (pdf != null && !_initialPdfStarted && _slots.isNotEmpty) {
+      _initialPdfStarted = true;
+      final blank = _slots.length == 1 && _slots.single.doc.isEmpty ? _slots.single.id : null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_insertPdf(given: pdf, replaceBlank: blank));
+      });
     }
   }
 
@@ -396,6 +424,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
           onZoomIn: () => _zoomBy(1.25),
           onZoomOut: () => _zoomBy(0.8),
           onPrefs: _updatePrefs,
+          onInsertPdf: widget.pdfRasterizer.supported ? () => unawaited(_insertPdf()) : null,
           canConvert: _intel.recognizer.supported && !_busy,
           onConvertPage: slot == null || slot.readOnly ? null : () => unawaited(_convert(slot.id, _allInk(slot.doc))),
           onStraightenPage: slot == null || slot.readOnly
@@ -637,7 +666,8 @@ class _NotebookScreenState extends State<NotebookScreen> {
     final page = _slotById(pageId);
     if (page == null || page.readOnly) return null;
     final before = page.doc;
-    final after = straighten(before, _inkIds(before, ids), newInkId);
+    // Com pautas (pautado, quadriculado, pontilhado), as linhas assentam nelas.
+    final after = straighten(before, _inkIds(before, ids), newInkId, guide: ruleGuideFor(page.background));
     if (identical(after, before)) {
       _snack('A escrita já está reta.');
       return null;
@@ -784,6 +814,95 @@ class _NotebookScreenState extends State<NotebookScreen> {
     final r = replaceWordWithText(before, m.line, m.word, choice);
     setState(() => _marks[pageId] = [for (final x in _marks[pageId] ?? const <SpellMark>[]) if (!identical(x, m)) x]);
     _commit(pageId, before, r.doc);
+  }
+
+  // ---- PDF ----------------------------------------------------------------
+
+  /// Importa um PDF (escolhido agora ou [given]): cada página vira uma página nova no
+  /// fim do caderno, com o PDF de fundo. [replaceBlank] é a página em branco do
+  /// caderno recém-criado, apagada quando a importação dá certo.
+  Future<void> _insertPdf({PickedPdf? given, String? replaceBlank}) async {
+    if (!widget.pdfRasterizer.supported || _busy) return;
+    final picked = given ?? await (widget.pickPdf ?? pickPdfFromSystem)();
+    if (picked == null || !mounted) return;
+    if (picked.bytes.length > kMaxPdfBytes) {
+      _snack('PDF maior que ${kMaxPdfBytes ~/ (1024 * 1024)} MB.');
+      return;
+    }
+    final progress = ValueNotifier<(int, int)>((0, 0));
+    var cancelled = false;
+    setState(() => _busy = true);
+    final dialog = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        key: const ValueKey('nb-pdf-progress'),
+        title: const Text('Importando PDF'),
+        content: ValueListenableBuilder<(int, int)>(
+          valueListenable: progress,
+          builder: (_, p, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LinearProgressIndicator(value: p.$2 == 0 ? null : p.$1 / p.$2),
+              const SizedBox(height: 12),
+              Text(p.$2 == 0 ? 'Abrindo o arquivo…' : 'Página ${p.$1} de ${p.$2}'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('nb-pdf-cancel'),
+            onPressed: () => cancelled = true,
+            child: const Text('Parar'),
+          ),
+        ],
+      ),
+    );
+    var closed = false;
+    void close() {
+      if (closed || !mounted) return;
+      closed = true;
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    unawaited(dialog.whenComplete(() {
+      closed = true;
+      progress.dispose(); // só depois que o diálogo saiu da tela
+    }));
+    try {
+      final r = await importPdfPages(
+        pdf: picked.bytes,
+        rasterizer: widget.pdfRasterizer,
+        upload: widget.session.images.upload,
+        addPage: (doc) => widget.session.addPage(background: PageBackground.blank, initial: doc),
+        onProgress: (done, total) {
+          if (!closed) progress.value = (done, total);
+        },
+        isCancelled: () => cancelled || !mounted,
+      );
+      close();
+      if (!mounted) return;
+      if (r.done > 0 && replaceBlank != null) {
+        final slot = _slotById(replaceBlank);
+        if (slot != null && slot.doc.isEmpty) {
+          setState(() => _slots.removeWhere((s) => s.id == replaceBlank));
+          widget.session.deletePage(replaceBlank);
+        }
+      }
+      final pages = r.done == 1 ? '1 página' : '${r.done} páginas';
+      _snack(r.pageCount > r.done && !cancelled
+          ? '$pages do PDF adicionadas (o limite é $kMaxPdfPages por vez).'
+          : '$pages do PDF adicionadas.');
+    } on PdfImportException catch (e) {
+      close();
+      _snack(e.message);
+    } catch (_) {
+      close();
+      _snack('Não foi possível importar o PDF.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   // ---- texto --------------------------------------------------------------

@@ -229,6 +229,7 @@ Map<String, Object?> _imageToJson(ImageBox i) => {
   'w': _coord(i.w),
   'h': _coord(i.h),
   'path': i.path,
+  if (i.background) 'bg': true,
 };
 
 // ---------------------------------------------------------------------------
@@ -368,5 +369,6 @@ ImageBox _imageFromJson(Map<String, dynamic> m) {
     w: quantizeCoord(_dbl(m, 'w', what)),
     h: quantizeCoord(_dbl(m, 'h', what)),
     path: _str(m, 'path', what),
+    background: m['bg'] == true,
   );
 }

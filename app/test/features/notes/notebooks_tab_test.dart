@@ -9,7 +9,13 @@ import 'package:organizacional/features/notes/notebooks/notebooks_prefs.dart';
 import 'package:organizacional/features/notes/notebooks/notebooks_view.dart';
 import 'package:organizacional/notebook/data/memory_notebook_repository.dart';
 
+import 'dart:typed_data';
+
+import 'package:organizacional/notebook/pdf/pdf_providers.dart';
+import 'package:organizacional/notebook/pdf/pick_pdf.dart';
+
 import '../../helpers.dart';
+import '../../notebook/pdf/pdf_import_test.dart' show FakePdfRasterizer;
 
 const _phone = Size(400, 800);
 const _small = Size(360, 740);
@@ -233,6 +239,34 @@ void main() {
       await tester.pumpAndSettle();
       final created = (await repo.watchNotes().first).firstWhere((n) => n.title == 'Caderno');
       expect(created.spaceId, 'm2');
+    });
+  });
+
+  group('novo caderno a partir de PDF', () {
+    testWidgets('sem leitor de PDF o botão não aparece', (tester) async {
+      await open(tester);
+      expect(_key('new-notebook-pdf'), findsNothing);
+    });
+
+    testWidgets('cria o caderno com o nome do arquivo e abre com as páginas do PDF', (tester) async {
+      await pumpApp(tester, repo, notebookRepo: nb, size: _phone, location: '/notas', overrides: [
+        notesTabPrefsProvider.overrideWithValue(prefs),
+        pdfRasterizerProvider.overrideWithValue(FakePdfRasterizer([(2000, 2828), (2000, 2828)])),
+        pdfPickerProvider.overrideWithValue(
+            () async => PickedPdf(bytes: Uint8List.fromList([1, 2, 3]), name: 'Lista_3 Cálculo.pdf')),
+      ]);
+      await tester.tap(_key('notes-tab-notebooks'));
+      await tester.pumpAndSettle();
+      await tester.tap(_key('new-notebook-pdf'));
+      await tester.pumpAndSettle();
+      final created = (await repo.watchNotes().first).firstWhere((n) => n.title == 'Lista 3 Cálculo');
+      expect(created.isNotebook, isTrue);
+      expect(_key('notebook-screen'), findsOneWidget);
+      // Espera o salvamento do caderno (debounce) e confere o que foi gravado.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      final pages = await nb.listPages(created.id);
+      expect(pages, hasLength(2), reason: 'a página em branco inicial dá lugar às do PDF');
     });
   });
 

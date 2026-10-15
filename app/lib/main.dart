@@ -36,6 +36,8 @@ import 'notebook/intelligence/mlkit_recognizer.dart';
 import 'notebook/intelligence/model_manager.dart';
 import 'notebook/intelligence/recognizer.dart';
 import 'notebook/intelligence/spell_checker.dart';
+import 'notebook/pdf/pdf_providers.dart';
+import 'notebook/pdf/pdfrx_rasterizer.dart';
 import 'notebook/state/handwriting_providers.dart';
 import 'notebook/state/notebook_pending_store.dart';
 import 'notebook/state/notebook_providers.dart';
@@ -107,6 +109,8 @@ Future<void> main() async {
       inkDownloadPolicyProvider.overrideWithValue(inkPolicy),
       if (isAndroid) inkRecognizerProvider.overrideWithValue(MlKitInkRecognizer(policy: inkPolicy)),
       if (isAndroid) spellCheckerProvider.overrideWithValue(PlatformSpellChecker()),
+      // PDF no Caderno (PDFium): Android, Linux e Windows.
+      if (!kIsWeb) pdfRasterizerProvider.overrideWithValue(const PdfrxRasterizer()),
       notesTabPrefsProvider.overrideWithValue(const SharedPreferencesNotesTabPrefs()),
       agendaFilterPrefsProvider.overrideWithValue(const SharedPreferencesAgendaFilterPrefs()),
       notebookImageStoreFactoryProvider

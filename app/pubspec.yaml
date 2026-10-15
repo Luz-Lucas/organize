@@ -61,6 +61,8 @@ dependencies:
   shared_preferences: ^2.5.5
   perfect_freehand: ^2.5.2+1
   google_mlkit_digital_ink_recognition: ^0.16.1
+  pdfrx: ^2.6.5
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:

@@ -9,6 +9,8 @@ import '../../../domain/space.dart';
 import '../../../notebook/core/ink_types.dart' show pageHeight, pageWidth;
 import '../../../notebook/create_notebook.dart';
 import '../../../notebook/notebook_thumbnail.dart';
+import '../../../notebook/pdf/pdf_import.dart' show notebookTitleForPdf;
+import '../../../notebook/pdf/pdf_providers.dart';
 import '../../../notebook/state/notebook_providers.dart';
 import '../../../ui/common.dart';
 import '../../../ui/org_theme.dart';
@@ -47,6 +49,23 @@ class _NotebooksViewState extends ConsumerState<NotebooksView> {
     try {
       final note = await createNotebook(ref, spaceId: folder == kFolderAll || folder == kFolderNone ? null : folder);
       if (mounted) context.push('/caderno/${note.id}');
+    } on RepositoryException {
+      if (mounted) showError(context, 'Não foi possível criar o caderno.');
+    }
+  }
+
+  /// "Novo caderno a partir de PDF": escolhe o PDF, cria o caderno com o nome do
+  /// arquivo e abre já importando as páginas (a tela do caderno mostra o progresso).
+  Future<void> _newNotebookFromPdf(String folder) async {
+    final picked = await ref.read(pdfPickerProvider)();
+    if (picked == null || !mounted) return;
+    try {
+      final note = await createNotebook(
+        ref,
+        spaceId: folder == kFolderAll || folder == kFolderNone ? null : folder,
+        title: notebookTitleForPdf(picked.name),
+      );
+      if (mounted) context.push('/caderno/${note.id}', extra: picked);
     } on RepositoryException {
       if (mounted) showError(context, 'Não foi possível criar o caderno.');
     }
@@ -92,6 +111,7 @@ class _NotebooksViewState extends ConsumerState<NotebooksView> {
           onQuery: (v) => setState(() => _query = v),
           onSort: (s) => setState(() => _sort = s),
           onNewNotebook: () => _newNotebook(folder),
+          onNewFromPdf: ref.watch(pdfRasterizerProvider).supported ? () => _newNotebookFromPdf(folder) : null,
         ),
         if (!wide)
           _FolderChips(
@@ -146,6 +166,7 @@ class _Toolbar extends StatelessWidget {
     required this.onQuery,
     required this.onSort,
     required this.onNewNotebook,
+    this.onNewFromPdf,
   });
 
   final TextEditingController controller;
@@ -153,6 +174,9 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<String> onQuery;
   final ValueChanged<NotebookSort> onSort;
   final VoidCallback onNewNotebook;
+
+  /// "Novo caderno a partir de PDF" (`null` esconde: sem leitor de PDF).
+  final VoidCallback? onNewFromPdf;
 
   @override
   Widget build(BuildContext context) {
@@ -190,6 +214,13 @@ class _Toolbar extends StatelessWidget {
             icon: const Icon(Icons.draw_outlined),
             onPressed: onNewNotebook,
           ),
+          if (onNewFromPdf != null)
+            IconButton(
+              key: const Key('new-notebook-pdf'),
+              tooltip: 'Novo caderno a partir de PDF',
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              onPressed: onNewFromPdf,
+            ),
         ],
       ),
     );

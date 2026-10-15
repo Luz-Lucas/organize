@@ -182,7 +182,8 @@ class SpySession implements NotebookSession {
   }
 
   @override
-  void addPage({PageBackground background = PageBackground.lined}) => inner.addPage(background: background);
+  void addPage({PageBackground background = PageBackground.lined, PageDoc? initial}) =>
+      inner.addPage(background: background, initial: initial);
   @override
   void deletePage(String id) => inner.deletePage(id);
   @override

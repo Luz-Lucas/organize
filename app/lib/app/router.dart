@@ -19,6 +19,7 @@ import '../features/spaces/spaces_screen.dart';
 import '../features/tasks/tasks_screen.dart';
 import '../features/today/today_screen.dart';
 import '../notebook/notebook_route.dart';
+import '../notebook/pdf/pick_pdf.dart';
 import 'shell.dart';
 
 /// Converte um Stream (ex.: mudanças de sessão) em Listenable para o go_router.
@@ -57,7 +58,8 @@ GoRouter buildRouter({
           path: '/caderno/:id',
           builder: (context, state) {
             final id = state.pathParameters['id']!;
-            return NotebookRoute(key: ValueKey('caderno-$id'), noteId: id);
+            final pdf = state.extra is PickedPdf ? state.extra! as PickedPdf : null;
+            return NotebookRoute(key: ValueKey('caderno-$id'), noteId: id, initialPdf: pdf);
           },
         ),
         ShellRoute(

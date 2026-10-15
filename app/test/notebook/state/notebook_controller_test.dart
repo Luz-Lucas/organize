@@ -335,6 +335,24 @@ void main() {
     expect(c.status, SaveStatus.saved);
   });
 
+  testWidgets('addPage com conteúdo inicial (página de PDF) cria a página e grava o conteúdo', (t) async {
+    final c = await started(t);
+    const bg = ImageBox(id: 'pdf1', x: 0, y: 0, w: 1000, h: 1414, path: 'u/n/p1.jpg', background: true);
+    c.addPage(background: PageBackground.blank, initial: PageDoc.empty.withImage(bg));
+    expect(c.currentPages, hasLength(2));
+    expect(c.currentPages[1].doc.images.single.background, isTrue);
+    await settle(t);
+    await t.pump(_debounce);
+    await settle(t);
+    final pages = await repo.listPages('n1');
+    expect(pages, hasLength(2));
+    expect(pages[1].background, PageBackground.blank);
+    final img = decodePage(pages[1].data).images.single;
+    expect(img.path, 'u/n/p1.jpg');
+    expect(img.background, isTrue);
+    expect(c.status, SaveStatus.saved);
+  });
+
   testWidgets('setBackground grava só o fundo (sem reenviar a tinta)', (t) async {
     final c = await started(t);
     c.setBackground(c.currentPages[0].id, PageBackground.dots);

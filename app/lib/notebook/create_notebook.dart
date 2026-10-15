@@ -7,14 +7,14 @@ import '../domain/note.dart';
 import '../domain/wikilinks.dart';
 import 'state/notebook_providers.dart';
 
-/// Cria um caderno novo ("Caderno", "Caderno 2"…) com uma página em branco pautada.
+/// Cria um caderno novo ("Caderno", "Caderno 2"…, ou [title] se dado) com uma página em branco pautada.
 /// Lança [RepositoryException] se a nota não puder ser criada; a página é criada
 /// "no melhor esforço" (se falhar, o controller cria a primeira ao abrir).
-Future<Note> createNotebook(WidgetRef ref, {String? spaceId}) async {
+Future<Note> createNotebook(WidgetRef ref, {String? spaceId, String title = 'Caderno'}) async {
   final all = ref.read(notesProvider).value ?? const <Note>[];
   final note = Note(
     id: newId(),
-    title: uniqueTitle('Caderno', all),
+    title: uniqueTitle(title, all),
     spaceId: spaceId,
     kind: NoteKind.notebook,
   );
