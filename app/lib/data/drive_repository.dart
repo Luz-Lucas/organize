@@ -24,7 +24,7 @@ abstract interface class DriveRepository {
   /// Revoga o acesso e apaga os dados guardados do Drive.
   Future<void> disconnect();
 
-  /// Conteúdo de uma pasta; [folderId] nulo = raiz "Organizacional"; `'root'` = Meu Drive.
+  /// Conteúdo de uma pasta; [folderId] nulo = raiz "Organize"; `'root'` = Meu Drive.
   Future<DriveListing> list({String? folderId});
 
   Future<DriveSearchResult> search(String query);
@@ -51,7 +51,7 @@ abstract interface class DriveRepository {
   /// [DriveException] com a mensagem do servidor quando o Drive recusa.
   Future<Uint8List> download(String id);
 
-  /// Acha ou cria cada pasta de [path] a partir do Meu Drive (ex.: `['Organizacional', 'Samsung Notes']`)
+  /// Acha ou cria cada pasta de [path] a partir do Meu Drive (ex.: `['Organize', 'Samsung Notes']`)
   /// e devolve o id da última.
   Future<String> ensurePath(List<String> path);
 

@@ -11,7 +11,7 @@ import '../../app/providers.dart';
 import '../../ui/org_theme.dart';
 import 'importer.dart';
 
-/// Abre a folha "Salvar no Organizacional" para o [content] recebido.
+/// Abre a folha "Salvar no Organize" para o [content] recebido.
 Future<void> showShareSheet(BuildContext context, SharedContent content, {required bool signedIn}) =>
     showModalBottomSheet<void>(
       context: context,
@@ -21,7 +21,7 @@ Future<void> showShareSheet(BuildContext context, SharedContent content, {requir
       builder: (_) => ShareSheet(content: content, signedIn: signedIn),
     );
 
-/// Texto -> nota; arquivos -> Drive (Organizacional/Importados) + nota com o link.
+/// Texto -> nota; arquivos -> Drive (Organize/Importados) + nota com o link.
 class ShareSheet extends ConsumerStatefulWidget {
   const ShareSheet({super.key, required this.content, required this.signedIn});
 
@@ -136,7 +136,7 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
               Text('Vira uma nota (título = primeira linha).', style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted)),
             if (needDrive && driveReady)
               Text(
-                'Os arquivos vão para o Drive em Organizacional/Importados e cada um ganha uma nota com o link.',
+                'Os arquivos vão para o Drive em Organize/Importados e cada um ganha uma nota com o link.',
                 style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
               ),
             if (!widget.signedIn)

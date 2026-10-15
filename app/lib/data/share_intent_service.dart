@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/local_file.dart';
 
-/// O que outro app compartilhou com o Organizacional (ACTION_SEND / SEND_MULTIPLE).
+/// O que outro app compartilhou com o Organize (ACTION_SEND / SEND_MULTIPLE).
 class SharedContent {
   const SharedContent({this.text, this.subject, this.files = const []});
 

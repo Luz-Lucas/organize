@@ -88,7 +88,7 @@ class _DriveCardState extends ConsumerState<DriveCard> {
           const SizedBox(height: 4),
           Text(
             'Mostra suas pastas em Mais > Documentos e guarda os arquivos que você compartilha com o app '
-            '(em "Organizacional/Importados"). O app pode ver e organizar o seu Drive inteiro; o acesso fica só no servidor.',
+            '(em "Organize/Importados"). O app pode ver e organizar o seu Drive inteiro; o acesso fica só no servidor.',
             style: theme.textTheme.bodySmall?.copyWith(color: org.inkMuted),
           ),
           const SizedBox(height: 12),

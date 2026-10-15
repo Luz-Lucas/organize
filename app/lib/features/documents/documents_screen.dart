@@ -31,7 +31,7 @@ IconData iconForDriveItem(DriveItem item) {
   return Icons.insert_drive_file_outlined;
 }
 
-/// `/documentos`: navegação pelas pastas do Google Drive (Organizacional ou Meu Drive).
+/// `/documentos`: navegação pelas pastas do Google Drive (Organize ou Meu Drive).
 class DocumentsScreen extends ConsumerStatefulWidget {
   const DocumentsScreen({super.key});
 
@@ -548,7 +548,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
           child: SegmentedButton<bool>(
             showSelectedIcon: false,
             segments: const [
-              ButtonSegment(value: false, label: Text('Organizacional', key: Key('docs-root-org'))),
+              ButtonSegment(value: false, label: Text('Organize', key: Key('docs-root-org'))),
               ButtonSegment(value: true, label: Text('Meu Drive', key: Key('docs-root-my'))),
             ],
             selected: {_myDrive},

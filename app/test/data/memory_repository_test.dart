@@ -3,7 +3,6 @@ import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/data/repository.dart';
 import 'package:organizacional/domain/calendar_event.dart';
 import 'package:organizacional/domain/note.dart';
-import 'package:organizacional/domain/notice.dart';
 import 'package:organizacional/domain/space.dart';
 import 'package:organizacional/domain/task_item.dart';
 
@@ -87,16 +86,6 @@ void main() {
     ));
     final events = await repo.watchEvents(from: DateTime(2026, 9, 28)).first;
     expect(events.map((e) => e.id), ['novo']);
-  });
-
-  test('avisos: upsert, ordem por criação desc, delete e falha de escrita', () async {
-    await repo.upsertNotice(Notice(id: 'a', title: 'A', createdAt: DateTime(2026, 10, 1)));
-    await repo.upsertNotice(Notice(id: 'b', title: 'B', createdAt: DateTime(2026, 10, 2)));
-    expect((await repo.watchNotices().first).map((n) => n.id), ['b', 'a']);
-    await repo.deleteNotice('b');
-    expect((await repo.watchNotices().first).map((n) => n.id), ['a']);
-    repo.failWrites = true;
-    await expectLater(repo.upsertNotice(const Notice(id: 'c', title: 'C')), throwsA(isA<RepositoryException>()));
   });
 
   CalendarEvent ev(String id, int day, {String? seriesId}) => CalendarEvent(

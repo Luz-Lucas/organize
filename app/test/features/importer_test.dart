@@ -64,7 +64,7 @@ void main() {
     expect(n.title, 'Ideia 2');
   });
 
-  test('importFiles: .txt e .md viram notas; pdf vai ao Drive em Organizacional/Importados com nota-link', () async {
+  test('importFiles: .txt e .md viram notas; pdf vai ao Drive em Organize/Importados com nota-link', () async {
     final repo = MemoryRepository();
     final drive = MemoryDriveRepository();
     final imp = _importer(repo, drive);

@@ -14,9 +14,7 @@ import '../../domain/event_tag.dart';
 import '../../domain/home_presence.dart';
 import '../../domain/ids.dart';
 import '../../domain/note.dart';
-import '../../domain/notice.dart';
 import '../../domain/space.dart';
-import '../../domain/system_notices.dart';
 import '../../domain/task_item.dart';
 import '../../domain/wake_override.dart';
 import '../../domain/agenda.dart';
@@ -30,8 +28,6 @@ import '../email/email_card.dart';
 import '../tasks/task_dialog.dart';
 import 'dashboard_cards.dart';
 import 'dashboard_data.dart';
-import 'notice_board.dart';
-import 'notice_dialog.dart';
 import 'wake_card.dart';
 
 /// Largura útil (já descontada a barra lateral) a partir da qual o painel usa
@@ -153,11 +149,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     }
     return '$base $i';
   }
-
-  Future<void> _newNotice() => showDialog<void>(
-        context: context,
-        builder: (_) => const NoticeDialog(),
-      );
 
   // --- Construção -----------------------------------------------------------
 
@@ -298,14 +289,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           semantics: 'Novo caderno',
           onTap: _newNotebook,
         ),
-        const SizedBox(width: 8),
-        _QuickAction(
-          key: const Key('quick-new-notice'),
-          icon: Icons.campaign_outlined,
-          label: 'Aviso',
-          semantics: 'Novo aviso',
-          onTap: _newNotice,
-        ),
       ],
     );
   }
@@ -320,10 +303,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final bridge = ref.watch(bridgeStatusProvider).value;
     final plansAsync = ref.watch(wakePlansProvider);
     final plans = plansAsync.value ?? const <WakePlan>[];
-    final userNotices = activeNotices(ref.watch(noticesProvider).value ?? const <Notice>[], now);
     final names = {for (final s in spaces.value ?? const <Space>[]) s.id: s.name};
-    final taskList = tasks.value ?? const <TaskItem>[];
-    final system = systemNotices(now: now, tasks: taskList, bridge: bridge, wakePlans: plans);
     final exam = events.value == null ? null : nextExam(now, events.value!);
     final strip = _statusStrip(
       now,
@@ -345,7 +325,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
     final examCard = exam == null ? null : ExamCard(now: now, info: exam);
     final tasksCard = TasksCard(now: now, tasks: tasks, spaceNames: names);
-    final board = NoticeBoard(system: system, notices: userNotices, now: now);
     const email = EmailCard();
     final news = NewsCard(now: now, feed: feed);
 
@@ -380,7 +359,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       ],
                       const SizedBox(height: 4),
                       if (!wide)
-                        ...spaced([nowNext, wakeCard, examCard, tasksCard, board, email, news])
+                        ...spaced([nowNext, wakeCard, examCard, tasksCard, email, news])
                       else
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,7 +376,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                               flex: 2,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: spaced([board, email, news]),
+                                children: spaced([email, news]),
                               ),
                             ),
                           ],

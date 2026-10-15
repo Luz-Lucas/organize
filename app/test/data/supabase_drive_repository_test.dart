@@ -33,7 +33,7 @@ void main() {
   test('list manda {action:list,folderId} e converte o resultado', () async {
     final calls = <_Call>[];
     final repo = _repo(calls, (_) => {
-          'folder': {'id': 'r', 'name': 'Organizacional', 'parents': ['m']},
+          'folder': {'id': 'r', 'name': 'Organize', 'parents': ['m']},
           'items': [
             {'id': 'a', 'name': 'Provas', 'mimeType': driveFolderMime, 'isFolder': true},
             {'id': 'b', 'name': 'x.pdf', 'mimeType': 'application/pdf', 'isFolder': false, 'size': 10},
@@ -42,7 +42,7 @@ void main() {
     final l = await repo.list();
     expect(calls.single.function, 'drive');
     expect(calls.single.body, {'action': 'list'});
-    expect(l.folder.name, 'Organizacional');
+    expect(l.folder.name, 'Organize');
     expect(l.folder.parents, ['m']);
     expect(l.items.map((i) => i.name), ['Provas', 'x.pdf']);
     await repo.list(folderId: 'root');
@@ -222,11 +222,11 @@ void main() {
   test('ensurePath manda {action:ensure_path,path} e devolve o folderId', () async {
     final calls = <_Call>[];
     final repo = _repo(calls, (_) => {'folderId': 'F9'});
-    expect(await repo.ensurePath(['Organizacional', 'Samsung Notes']), 'F9');
+    expect(await repo.ensurePath(['Organize', 'Samsung Notes']), 'F9');
     expect(calls.single.function, 'drive');
     expect(calls.single.body, {
       'action': 'ensure_path',
-      'path': ['Organizacional', 'Samsung Notes'],
+      'path': ['Organize', 'Samsung Notes'],
     });
   });
 

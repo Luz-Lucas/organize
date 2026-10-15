@@ -10,7 +10,6 @@ import 'package:organizacional/data/memory_settings_repository.dart';
 import 'package:organizacional/domain/alexa.dart';
 import 'package:organizacional/domain/calendar_event.dart';
 import 'package:organizacional/domain/news.dart';
-import 'package:organizacional/domain/notice.dart';
 import 'package:organizacional/domain/task_item.dart';
 import 'package:organizacional/domain/user_settings.dart';
 import 'package:organizacional/features/email/email_card.dart';
@@ -365,26 +364,14 @@ void main() {
       expect(find.byType(NoteScreen), findsOneWidget);
     });
 
-    testWidgets('Aviso abre o diálogo de aviso e salva', (tester) async {
-      final repo = MemoryRepository();
-      await pumpApp(tester, repo, now: _now, size: _phone);
-      await tester.tap(find.byKey(const Key('quick-new-notice')));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const Key('notice-title')), 'Entregar relatório');
-      await tester.tap(find.byKey(const Key('notice-save')));
-      await tester.pumpAndSettle();
-      expect((await repo.watchNotices().first).single.title, 'Entregar relatório');
-      expect(find.text('Entregar relatório'), findsOneWidget);
-    });
-
-    testWidgets('os 4 botões têm rótulo semântico e alvo de pelo menos 48 dp', (tester) async {
+    testWidgets('os botões têm rótulo semântico e alvo de pelo menos 48 dp', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpApp(tester, MemoryRepository(), now: _now, size: _phone);
       for (final (key, label) in [
         ('quick-new-task', 'Nova tarefa'),
         ('quick-new-event', 'Novo evento'),
         ('quick-new-note', 'Nova nota'),
-        ('quick-new-notice', 'Novo aviso'),
+        ('quick-new-notebook', 'Novo caderno'),
       ]) {
         expect(find.bySemanticsLabel(label), findsWidgets, reason: label);
         expect(tester.getSize(find.byKey(Key(key))).height, greaterThanOrEqualTo(48), reason: key);
@@ -403,7 +390,6 @@ void main() {
         'card-now-next',
         'card-exam',
         'card-tasks',
-        'notice-board',
         'email-card',
         'card-news',
       ];
@@ -412,10 +398,10 @@ void main() {
       }
     });
 
-    testWidgets('computador: duas colunas, avisos/e-mail/notícias à direita', (tester) async {
+    testWidgets('computador: duas colunas, e-mail/notícias à direita', (tester) async {
       await pumpApp(tester, MemoryRepository(), now: _now);
       final left = tester.getTopLeft(find.byKey(const Key('card-tasks'))).dx;
-      for (final k in ['notice-board', 'email-card', 'card-news']) {
+      for (final k in ['email-card', 'card-news']) {
         expect(tester.getTopLeft(find.byKey(Key(k))).dx, greaterThan(left), reason: k);
       }
       expect(tester.takeException(), isNull);
@@ -441,8 +427,6 @@ void main() {
           priority: i.isEven ? TaskPriority.alta : TaskPriority.media,
         ));
       }
-      await repo.upsertNotice(const Notice(
-          id: 'n', title: 'Aviso com um título bastante comprido para testar quebra', body: 'Corpo do aviso', pinned: true));
       return repo;
     }
 

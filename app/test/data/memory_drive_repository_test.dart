@@ -5,14 +5,14 @@ import 'package:organizacional/data/repository.dart';
 import 'package:organizacional/domain/drive.dart';
 
 void main() {
-  test('list sem pasta abre a raiz Organizacional; "root" abre o Meu Drive', () async {
+  test('list sem pasta abre a raiz Organize; "root" abre o Meu Drive', () async {
     final repo = MemoryDriveRepository();
     final org = await repo.list();
-    expect(org.folder.name, 'Organizacional');
+    expect(org.folder.name, 'Organize');
     expect(org.folder.id, repo.rootFolderId);
     final my = await repo.list(folderId: 'root');
     expect(my.folder.name, 'Meu Drive');
-    expect(my.items.map((i) => i.name), contains('Organizacional'));
+    expect(my.items.map((i) => i.name), contains('Organize'));
   });
 
   test('pastas primeiro, depois nome ascendente; lixeira não aparece', () async {
@@ -129,12 +129,12 @@ void main() {
 
   test('ensurePath cria cada nível a partir do Meu Drive e reaproveita o que existe', () async {
     final repo = MemoryDriveRepository();
-    final id = await repo.ensurePath(['Organizacional', 'Samsung Notes']);
-    final again = await repo.ensurePath(['Organizacional', 'Samsung Notes']);
+    final id = await repo.ensurePath(['Organize', 'Samsung Notes']);
+    final again = await repo.ensurePath(['Organize', 'Samsung Notes']);
     expect(again, id);
-    // "Organizacional" já existia (a raiz) e foi reaproveitada, não duplicada.
+    // "Organize" já existia (a raiz) e foi reaproveitada, não duplicada.
     final my = await repo.list(folderId: 'root');
-    expect(my.items.where((i) => i.name == 'Organizacional'), hasLength(1));
+    expect(my.items.where((i) => i.name == 'Organize'), hasLength(1));
     final org = await repo.list();
     expect(org.items.map((i) => i.name), contains('Samsung Notes'));
     final other = await repo.ensurePath(['Outra', 'Pasta']);

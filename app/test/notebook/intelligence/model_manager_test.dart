@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/notebook/intelligence/model_manager.dart';
@@ -105,6 +106,7 @@ void main() {
     expect(await done, InkDownloadOutcome.failed);
     expect(state().status, InkModelStatus.error);
     expect(state().error, contains('baixar'));
+    expect(state().error, contains('Detalhe: sem rede'), reason: 'o motivo aparece para dar para descobrir a causa');
     expect(policy.allowMobileData, isFalse);
 
     final again = manager().download();
@@ -142,5 +144,12 @@ void main() {
     rec.ready = true;
     await manager().refresh();
     expect(state().status, InkModelStatus.ready);
+  });
+
+  test('downloadErrorDetail: código e mensagem da exceção nativa, curto', () {
+    expect(downloadErrorDetail(PlatformException(code: 'error', message: 'MlKitException: falhou')), 'error: MlKitException: falhou');
+    expect(downloadErrorDetail(PlatformException(code: 'Model Identifier error')), 'Model Identifier error');
+    expect(downloadErrorDetail(StateError('O download do modelo não terminou.')), 'O download do modelo não terminou.');
+    expect(downloadErrorDetail(Exception('x' * 300)).length, 201);
   });
 }
