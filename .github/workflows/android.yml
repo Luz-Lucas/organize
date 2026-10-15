@@ -1,7 +1,8 @@
 name: App Android
 
 # Compila o APK numa máquina Linux do GitHub (já tem o Android SDK). Rodar: Actions > App Android > Run workflow
-# (depois que este arquivo estiver na main) ou enviando uma tag `android-v<qualquer coisa>`.
+# (depois que este arquivo estiver na main), enviando uma tag `android-v<qualquer coisa>` ou em todo pull request
+# que mexe no app (serve de checagem: o APK compila com as dependências nativas, ML Kit incluído).
 # O caminho normal de release continua sendo o `tool/release.sh` (publica para o botão "Atualizar" do app);
 # este workflow serve para gerar o APK sem o computador de casa.
 #
@@ -17,6 +18,8 @@ on:
         default: ''
   push:
     tags: ['android-v*']
+  pull_request:
+    paths: ['app/**', '.github/workflows/android.yml']
 
 jobs:
   build:
