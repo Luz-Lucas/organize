@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,7 +13,10 @@ import '../../../notebook/core/ink_types.dart' show pageHeight, pageWidth;
 import '../../../notebook/create_notebook.dart';
 import '../../../notebook/notebook_cover_view.dart';
 import '../../../notebook/notebook_thumbnail.dart';
-import '../../../notebook/pdf/pdf_import.dart' show notebookTitleForPdf;
+import '../../../notebook/pdf/pdf_book.dart';
+import '../../../notebook/pdf/pdf_import.dart' show PdfImportException, notebookTitleForPdf;
+import '../../../notebook/pdf/pdf_reader.dart' show pdfViewBuilderProvider;
+import '../../../notebook/pdf/pick_pdf.dart' show PickedPdf;
 import '../../../notebook/pdf/pdf_providers.dart';
 import '../../../notebook/state/notebook_providers.dart';
 import '../../../ui/common.dart';
@@ -56,20 +61,53 @@ class _NotebooksViewState extends ConsumerState<NotebooksView> {
     }
   }
 
-  /// "Novo caderno a partir de PDF": escolhe o PDF, cria o caderno com o nome do
-  /// arquivo e abre já importando as páginas (a tela do caderno mostra o progresso).
+  /// "Novo caderno a partir de PDF": escolhe o PDF e pergunta como usar. Para
+  /// escrever: cria o caderno e abre já importando as páginas (a tela do caderno
+  /// mostra o progresso). Só ler: cria um caderno-livro com o PDF original.
   Future<void> _newNotebookFromPdf(String folder) async {
     final picked = await ref.read(pdfPickerProvider)();
     if (picked == null || !mounted) return;
+    final mode = await askPdfMode(context, canRead: ref.read(pdfViewBuilderProvider) != null);
+    if (mode == null || !mounted) return;
+    final spaceId = folder == kFolderAll || folder == kFolderNone ? null : folder;
+    if (mode == PdfOpenMode.read) {
+      await _newPdfBook(picked, spaceId);
+      return;
+    }
     try {
-      final note = await createNotebook(
-        ref,
-        spaceId: folder == kFolderAll || folder == kFolderNone ? null : folder,
-        title: notebookTitleForPdf(picked.name),
-      );
+      final note = await createNotebook(ref, spaceId: spaceId, title: notebookTitleForPdf(picked.name));
       if (mounted) context.push('/caderno/${note.id}', extra: picked);
     } on RepositoryException {
       if (mounted) showError(context, 'Não foi possível criar o caderno.');
+    }
+  }
+
+  Future<void> _newPdfBook(PickedPdf picked, String? spaceId) async {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        key: Key('pdf-book-progress'),
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(child: Text('Guardando o PDF…')),
+          ],
+        ),
+      ),
+    ));
+    try {
+      final note = await createPdfBook(ref, picked, spaceId: spaceId);
+      navigator.pop();
+      if (mounted) context.push('/caderno/${note.id}');
+    } on PdfImportException catch (e) {
+      navigator.pop();
+      if (mounted) showError(context, e.message);
+    } catch (_) {
+      navigator.pop();
+      if (mounted) showError(context, 'Não foi possível guardar o PDF. Confira a internet.');
     }
   }
 

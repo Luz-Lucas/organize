@@ -19,6 +19,7 @@ import '../features/spaces/spaces_screen.dart';
 import '../features/tasks/tasks_screen.dart';
 import '../features/today/today_screen.dart';
 import '../notebook/notebook_route.dart';
+import '../notebook/pdf/pdf_reader_screen.dart';
 import '../notebook/pdf/pick_pdf.dart';
 import 'shell.dart';
 
@@ -61,6 +62,11 @@ GoRouter buildRouter({
             final pdf = state.extra is PickedPdf ? state.extra! as PickedPdf : null;
             return NotebookRoute(key: ValueKey('caderno-$id'), noteId: id, initialPdf: pdf);
           },
+        ),
+        // O PDF original de um caderno, para ler e selecionar texto (aberto de dentro do caderno).
+        GoRoute(
+          path: '/caderno-pdf/:id',
+          builder: (context, state) => PdfReaderScreen(noteId: state.pathParameters['id']!),
         ),
         ShellRoute(
           builder: (context, state, child) => AppShell(location: state.uri.path, child: child),

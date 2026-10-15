@@ -2,6 +2,31 @@ import 'dart:convert';
 
 import 'note.dart';
 
+/// O `body` de um caderno como mapa: os cadernos não guardam texto ali, e sim um
+/// JSON com os dados do caderno (`cover`, `pdf`…). Vazio se não for esse JSON.
+Map<String, dynamic> notebookBodyMap(String body) {
+  final b = body.trim();
+  if (!b.startsWith('{')) return {};
+  try {
+    final decoded = jsonDecode(b);
+    return decoded is Map<String, dynamic> ? decoded : {};
+  } on FormatException {
+    return {};
+  }
+}
+
+/// [body] com a chave [key] trocada por [value] (`null` tira a chave); as outras
+/// chaves ficam. Sem chave nenhuma, o `body` volta a ser vazio.
+String notebookBodyWith(String body, String key, Object? value) {
+  final map = notebookBodyMap(body);
+  if (value == null) {
+    map.remove(key);
+  } else {
+    map[key] = value;
+  }
+  return map.isEmpty ? '' : jsonEncode(map);
+}
+
 /// Tipo de capa de um caderno.
 enum CoverKind { text, emoji, image }
 
@@ -26,9 +51,9 @@ const List<int> kCoverColors = [
 
 /// A capa de um caderno: um texto, um emoji ou uma imagem (do Storage do caderno).
 ///
-/// Fica no `body` da nota do caderno (que não guarda mais nada), como
-/// `{"cover":{…}}`: viaja com a nota entre aparelhos e some quando o caderno é
-/// excluído, sem coluna nova no banco.
+/// Fica no `body` da nota do caderno (que não guarda texto), como
+/// `{"cover":{…}}` (ver [notebookBodyMap]): viaja com a nota entre aparelhos e some
+/// quando o caderno é excluído, sem coluna nova no banco.
 class NotebookCover {
   const NotebookCover({
     required this.kind,
@@ -99,20 +124,11 @@ class NotebookCover {
     return cover.isValid ? cover : null;
   }
 
-  /// O `body` do caderno com esta capa.
-  String toBody() => jsonEncode({'cover': toMap()});
+  /// O `body` de um caderno só com esta capa.
+  String toBody() => notebookBodyWith('', 'cover', toMap());
 
   /// A capa guardada em [body], ou `null` (sem capa, ou um `body` que não é capa).
-  static NotebookCover? fromBody(String body) {
-    final b = body.trim();
-    if (!b.startsWith('{')) return null;
-    try {
-      final decoded = jsonDecode(b);
-      return decoded is Map ? fromMap(decoded['cover']) : null;
-    } on FormatException {
-      return null;
-    }
-  }
+  static NotebookCover? fromBody(String body) => fromMap(notebookBodyMap(body)['cover']);
 
   @override
   bool operator ==(Object other) =>
@@ -132,8 +148,8 @@ extension NotebookCoverNote on Note {
   /// A capa do caderno, se houver.
   NotebookCover? get cover => isNotebook ? NotebookCover.fromBody(body) : null;
 
-  /// O caderno com a capa [cover] (`null` tira a capa).
-  Note withCover(NotebookCover? cover) => copyWith(body: cover == null ? '' : cover.toBody());
+  /// O caderno com a capa [cover] (`null` tira a capa). O resto do `body` (o PDF) fica.
+  Note withCover(NotebookCover? cover) => copyWith(body: notebookBodyWith(body, 'cover', cover?.toMap()));
 
   /// Texto da capa para a busca (o `body` do caderno é a capa em JSON).
   String get coverSearchText {
