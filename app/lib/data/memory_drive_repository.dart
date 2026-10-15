@@ -37,7 +37,7 @@ class MemoryDriveRepository implements DriveRepository {
   MemoryDriveRepository({DriveState? state}) : _state = state ?? const DriveState(status: DriveStatus.ok, rootFolderId: 'org-root') {
     _nodes['my-drive'] = _Node(const DriveItem(id: 'my-drive', name: 'Meu Drive', mimeType: driveFolderMime, isFolder: true), null);
     _nodes['org-root'] =
-        _Node(const DriveItem(id: 'org-root', name: 'Organizacional', mimeType: driveFolderMime, isFolder: true), 'my-drive');
+        _Node(const DriveItem(id: 'org-root', name: 'Organize', mimeType: driveFolderMime, isFolder: true), 'my-drive');
   }
 
   DriveState? _state;

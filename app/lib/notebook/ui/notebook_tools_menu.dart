@@ -253,6 +253,7 @@ class _NotebookToolsMenuState extends State<NotebookToolsMenu> {
           ),
         ),
       ),
+      Row(children: eraserSizeDots(_s, widget.onSettings)),
       _title('Visualização'),
       Row(
         children: [
@@ -639,6 +640,8 @@ class NotebookEraserQuick extends StatelessWidget {
                 icon: Icon(stroke ? Icons.linear_scale : Icons.content_cut, size: 18),
                 label: Text(stroke ? 'Apagar traço inteiro' : 'Apagar parte do traço'),
               ),
+              Text('Tamanho', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.org.inkMuted)),
+              Row(children: eraserSizeDots(settings, onSettings)),
             ],
           ),
         ),

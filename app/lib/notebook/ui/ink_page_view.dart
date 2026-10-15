@@ -349,10 +349,10 @@ class _InkPageViewState extends State<InkPageView> {
           _grid = StrokeGrid.build(widget.doc.strokes);
           _gridDoc = widget.doc;
         }
-        _erase = EraseSession(base: widget.doc, mode: s.eraserMode, index: _grid);
+        _erase = EraseSession(base: widget.doc, mode: s.eraserMode, index: _grid, radius: s.eraserRadius);
         _live
           ..eraserPos = e.localPosition
-          ..eraserRadius = kEraserRadius
+          ..eraserRadius = s.eraserRadius
           ..changed();
         _erase!.add(e.localPosition);
         _flushErase(); // o primeiro toque apaga na hora

@@ -175,6 +175,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
   @override
   void initState() {
     super.initState();
+    _settings = _settings.copyWith(eraserSize: _prefs.eraserSize);
     _tc.addListener(_onTransform);
     _transcriptSub = _intel.transcripts.listen((e) => _refreshMarks(e.pageId, e.transcript));
     _pagesSub = widget.session.pages.listen(_onPages);
@@ -187,7 +188,10 @@ class _NotebookScreenState extends State<NotebookScreen> {
   void didUpdateWidget(NotebookScreen old) {
     super.didUpdateWidget(old);
     if (jsonEncode(old.prefs) != jsonEncode(widget.prefs)) {
-      setState(() => _prefs = NotebookPrefs.fromMap(widget.prefs));
+      setState(() {
+        _prefs = NotebookPrefs.fromMap(widget.prefs);
+        _settings = _settings.copyWith(eraserSize: _prefs.eraserSize);
+      });
       // Estamos no meio de uma construção: o menu aberto só pode ser avisado depois.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _touch();
@@ -334,11 +338,14 @@ class _NotebookScreenState extends State<NotebookScreen> {
   int _penArgb(OrgThemeSpec org) => _settings.argb ?? org.ink.toARGB32();
 
   void _setSettings(ToolSettings s) {
+    final eraserChanged = s.eraserSize != _settings.eraserSize;
     setState(() {
       if (s.kind != _settings.kind && s.kind != ToolKind.lasso) _clearSelection();
       _settings = s;
     });
     _touch();
+    // O tamanho da borracha fica salvo: vale na próxima vez e nos outros aparelhos.
+    if (eraserChanged) _updatePrefs(_prefs.withEraserSize(s.eraserSize));
   }
 
   /// Aplica uma cor à caneta; com borracha/laço ativos volta para a caneta.

@@ -11,7 +11,7 @@ import '../../ui/common.dart' show plural;
 /// Espaço padrão das notas criadas por importação/compartilhamento.
 const importSpaceName = 'Importadas';
 
-/// Pasta do Drive (dentro de "Organizacional") que recebe os arquivos importados.
+/// Pasta do Drive (dentro de "Organize") que recebe os arquivos importados.
 const importFolderName = 'Importados';
 
 const _maxTitle = 80;

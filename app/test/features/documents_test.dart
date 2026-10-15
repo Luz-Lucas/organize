@@ -80,13 +80,13 @@ void main() {
   });
 
   group('navegação', () {
-    testWidgets('lista a raiz Organizacional: pastas primeiro, com tamanho', (tester) async {
+    testWidgets('lista a raiz Organize: pastas primeiro, com tamanho', (tester) async {
       final drive = MemoryDriveRepository();
       drive.addFile('Edital.pdf', drive.rootFolderId, size: 2048);
       drive.addFolder('Provas', drive.rootFolderId);
       await _pump(tester, drive);
       expect(find.byKey(const Key('docs-crumb-0')), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const Key('docs-crumb-0')), matching: find.text('Organizacional')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('docs-crumb-0')), matching: find.text('Organize')), findsOneWidget);
       final y1 = tester.getTopLeft(find.text('Provas')).dy;
       final y2 = tester.getTopLeft(find.text('Edital.pdf')).dy;
       expect(y1, lessThan(y2));
@@ -150,13 +150,13 @@ void main() {
       expect(find.byType(MoreScreen), findsOneWidget);
     });
 
-    testWidgets('alternar entre Organizacional e Meu Drive', (tester) async {
+    testWidgets('alternar entre Organize e Meu Drive', (tester) async {
       final drive = MemoryDriveRepository();
       drive.addFile('dentro.pdf', drive.rootFolderId);
       await _pump(tester, drive);
       await _tap(tester, 'docs-root-my');
       expect(find.descendant(of: find.byKey(const Key('docs-crumb-0')), matching: find.text('Meu Drive')), findsOneWidget);
-      expect(find.text('Organizacional'), findsWidgets);
+      expect(find.text('Organize'), findsWidgets);
       expect(find.text('dentro.pdf'), findsNothing);
       await _tap(tester, 'docs-root-org');
       expect(find.text('dentro.pdf'), findsOneWidget);

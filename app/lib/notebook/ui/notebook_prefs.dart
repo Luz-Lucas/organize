@@ -73,13 +73,13 @@ class FavoritePen {
 }
 
 /// Preferências do Caderno que viajam entre aparelhos (`user_settings.notebook_prefs`):
-/// canetas favoritas, cores favoritas e modo da barra.
+/// canetas favoritas, cores favoritas, modo da barra e tamanho da borracha.
 ///
-/// Formato: `{"v":1,"pens":[{"tool":"pen","argb":…,"width":…}],"colors":[argb…],"compact":true}`.
+/// Formato: `{"v":1,"pens":[{"tool":"pen","argb":…,"width":…}],"colors":[argb…],"compact":true,"eraser":1}`.
 /// Sem `pens`/`colors` valem os padrões (3 canetas; 5 cores do tema).
 @immutable
 class NotebookPrefs {
-  const NotebookPrefs({required this.pens, this.colors, this.compact = true});
+  const NotebookPrefs({required this.pens, this.colors, this.compact = true, this.eraserSize = kDefaultEraserSize});
 
   final List<FavoritePen> pens;
 
@@ -88,6 +88,9 @@ class NotebookPrefs {
 
   /// Barra compacta (só favoritos) ou a barra completa antiga.
   final bool compact;
+
+  /// Último tamanho de borracha escolhido (índice em [kEraserRadii]).
+  final int eraserSize;
 
   static const List<FavoritePen> defaultPens = [
     FavoritePen(tool: PenTool.pen, widthIndex: 1), // preta (tinta do tema)
@@ -101,12 +104,14 @@ class NotebookPrefs {
     final pensRaw = m?['pens'];
     final colorsRaw = m?['colors'];
     final compact = m?['compact'];
+    final eraser = m?['eraser'];
     return NotebookPrefs(
       pens: pensRaw is List
           ? pensRaw.map(FavoritePen.fromMap).nonNulls.take(kMaxFavoritePens).toList()
           : defaultPens,
       colors: colorsRaw is List ? colorsRaw.whereType<int>().take(kMaxFavoriteColors).toList() : null,
       compact: compact is bool ? compact : true,
+      eraserSize: eraser is int && eraser >= 0 && eraser < kEraserRadii.length ? eraser : kDefaultEraserSize,
     );
   }
 
@@ -115,6 +120,7 @@ class NotebookPrefs {
     'pens': [for (final p in pens) p.toMap()],
     if (colors != null) 'colors': colors,
     'compact': compact,
+    'eraser': eraserSize,
   };
 
   List<int> colorsFor(OrgThemeSpec org) =>
@@ -123,10 +129,16 @@ class NotebookPrefs {
   bool get canAddPen => pens.length < kMaxFavoritePens;
   bool canAddColor(OrgThemeSpec org) => colorsFor(org).length < kMaxFavoriteColors;
 
-  NotebookPrefs _with({List<FavoritePen>? pens, List<int>? colors, bool? compact}) =>
-      NotebookPrefs(pens: pens ?? this.pens, colors: colors ?? this.colors, compact: compact ?? this.compact);
+  NotebookPrefs _with({List<FavoritePen>? pens, List<int>? colors, bool? compact, int? eraserSize}) => NotebookPrefs(
+    pens: pens ?? this.pens,
+    colors: colors ?? this.colors,
+    compact: compact ?? this.compact,
+    eraserSize: eraserSize ?? this.eraserSize,
+  );
 
   NotebookPrefs withCompact(bool v) => _with(compact: v);
+
+  NotebookPrefs withEraserSize(int i) => _with(eraserSize: i.clamp(0, kEraserRadii.length - 1));
 
   /// Acrescenta [p] no fim (ignora se já existe igual ou se chegou ao limite).
   NotebookPrefs addPen(FavoritePen p) => !canAddPen || pens.contains(p) ? this : _with(pens: [...pens, p]);

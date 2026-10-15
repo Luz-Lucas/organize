@@ -5,7 +5,7 @@ import { classify, type FetchFn, GoogleError, HTTP_TIMEOUT_MS, readJson, request
 export const DRIVE_API = "https://www.googleapis.com/drive/v3";
 export const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
 export const FOLDER_MIME = "application/vnd.google-apps.folder";
-export const ROOT_FOLDER_NAME = "Organizacional";
+export const ROOT_FOLDER_NAME = "Organize";
 /** Tetos de itens por consulta: acima disso a resposta vem cortada, com `truncated: true`. */
 export const LIST_LIMIT = 1000;
 export const SEARCH_LIMIT = 200;

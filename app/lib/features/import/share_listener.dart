@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/share_intent_service.dart';
 import 'share_sheet.dart';
 
-/// Fica acima do app e abre a folha "Salvar no Organizacional" quando outro app
+/// Fica acima do app e abre a folha "Salvar no Organize" quando outro app
 /// compartilha algo (app fechado ou aberto).
 class ShareIntentListener extends ConsumerStatefulWidget {
   const ShareIntentListener({super.key, required this.router, required this.isSignedIn, required this.child});

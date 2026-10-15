@@ -12,8 +12,8 @@ function google(token: Record<string, unknown>, existingRoot?: string) {
   return fakeFetch([
     [TOKEN_URL, () => jsonRes({ access_token: "ACC", ...token })],
     [`${DRIVE}/about`, () => jsonRes({ user: { emailAddress: "sua-conta@gmail.com" } })],
-    [`${DRIVE}/files?q=`, () => jsonRes({ files: existingRoot ? [{ id: existingRoot, name: "Organizacional", mimeType: "application/vnd.google-apps.folder" }] : [] })],
-    [`${DRIVE}/files?fields=`, () => jsonRes({ id: "NOVA-RAIZ", name: "Organizacional", mimeType: "application/vnd.google-apps.folder" })],
+    [`${DRIVE}/files?q=`, () => jsonRes({ files: existingRoot ? [{ id: existingRoot, name: "Organize", mimeType: "application/vnd.google-apps.folder" }] : [] })],
+    [`${DRIVE}/files?fields=`, () => jsonRes({ id: "NOVA-RAIZ", name: "Organize", mimeType: "application/vnd.google-apps.folder" })],
   ]);
 }
 
@@ -32,7 +32,7 @@ async function run(token: Record<string, unknown>, opts: { existingRoot?: string
   return { res, store, driveStore, f, html: await res.text() };
 }
 
-Deno.test("callback do drive: guarda token cifrado, cria a pasta Organizacional e marca ok", async () => {
+Deno.test("callback do drive: guarda token cifrado, cria a pasta Organize e marca ok", async () => {
   const { res, store, driveStore, f, html } = await run({ refresh_token: "REFRESH-D", scope: DRIVE_SCOPE });
   assertEquals(res.status, 200);
   assertStringIncludes(html, "Google Drive conectado. Pode voltar ao app.");
@@ -49,7 +49,7 @@ Deno.test("callback do drive: guarda token cifrado, cria a pasta Organizacional 
 
   const create = f.calls.find((c) => c.method === "POST" && c.url.startsWith(`${DRIVE}/files`))!;
   const body = JSON.parse(create.body);
-  assertEquals(body.name, "Organizacional");
+  assertEquals(body.name, "Organize");
   assertEquals(body.parents, ["root"]);
   assertEquals(body.mimeType, "application/vnd.google-apps.folder");
   // nada do Gmail foi tocado
@@ -57,7 +57,7 @@ Deno.test("callback do drive: guarda token cifrado, cria a pasta Organizacional 
   assertEquals(store.states.size, 0);
 });
 
-Deno.test("callback do drive reaproveita a pasta Organizacional que já existe", async () => {
+Deno.test("callback do drive reaproveita a pasta Organize que já existe", async () => {
   const { driveStore, f } = await run({ refresh_token: "R", scope: DRIVE_SCOPE }, { existingRoot: "PASTA-ANTIGA" });
   assertEquals(driveStore.states.get(U)?.root_folder_id, "PASTA-ANTIGA");
   assertEquals(f.calls.filter((c) => c.method === "POST" && c.url.startsWith(`${DRIVE}/files`)).length, 0);

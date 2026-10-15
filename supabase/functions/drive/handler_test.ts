@@ -77,9 +77,9 @@ Deno.test("sem conta do drive => 409 not_connected e nenhuma chamada ao Google",
 
 // ---------------------------------------------------------------- list / search
 
-Deno.test("list usa a pasta raiz Organizacional, ordena pastas primeiro e mapeia os itens", async () => {
+Deno.test("list usa a pasta raiz Organize, ordena pastas primeiro e mapeia os itens", async () => {
   const s = await setup([
-    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organizacional", parents: ["MEUDRIVE"] })],
+    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organize", parents: ["MEUDRIVE"] })],
     [`${DRIVE}/files?`, () =>
       files(
         { id: "f1", name: "Provas", mimeType: FOLDER, modifiedTime: "2026-10-01T10:00:00Z", shared: false },
@@ -89,7 +89,7 @@ Deno.test("list usa a pasta raiz Organizacional, ordena pastas primeiro e mapeia
   const r = await s.run("list");
   assertEquals(r.status, 200);
   const body = await r.json();
-  assertEquals(body.folder, { id: "ROOT-U-u1", name: "Organizacional", parents: ["MEUDRIVE"] });
+  assertEquals(body.folder, { id: "ROOT-U-u1", name: "Organize", parents: ["MEUDRIVE"] });
   assertEquals(body.items.length, 2);
   assertEquals(body.items[0].isFolder, true);
   assertEquals(body.items[1], {
@@ -430,14 +430,14 @@ Deno.test("ensure_path cria o que falta, nível por nível a partir do Meu Drive
     }],
     [`${DRIVE}/files?`, () => files()], // nada existe
   ]);
-  const r = await s.run("ensure_path", { path: ["Organizacional", "Samsung Notes"] });
+  const r = await s.run("ensure_path", { path: ["Organize", "Samsung Notes"] });
   assertEquals(r.status, 200);
   assertEquals(await r.json(), { folderId: "ID-Samsung_Notes" });
-  assertEquals(created, ["root>Organizacional", "ID-Organizacional>Samsung Notes"]);
+  assertEquals(created, ["root>Organize", "ID-Organize>Samsung Notes"]);
   const lookups = api(s.f.calls, `${DRIVE}/files?`).filter((c) => c.method === "GET").map((c) => new URL(c.url).searchParams.get("q"));
   assertEquals(lookups, [
-    `'root' in parents and name = 'Organizacional' and mimeType = '${FOLDER}' and trashed = false`,
-    `'ID-Organizacional' in parents and name = 'Samsung Notes' and mimeType = '${FOLDER}' and trashed = false`,
+    `'root' in parents and name = 'Organize' and mimeType = '${FOLDER}' and trashed = false`,
+    `'ID-Organize' in parents and name = 'Samsung Notes' and mimeType = '${FOLDER}' and trashed = false`,
   ]);
 });
 
@@ -450,18 +450,18 @@ Deno.test("ensure_path reaproveita o que existe e só cria o nível que falta", 
       return jsonRes({ id: "ID-NOVA", name: b.name, mimeType: FOLDER });
     }],
     [`${DRIVE}/files?`, (c) =>
-      new URL(c.url).searchParams.get("q")!.includes("name = 'Organizacional'")
-        ? files({ id: "ORG-EXISTE", name: "Organizacional", mimeType: FOLDER })
+      new URL(c.url).searchParams.get("q")!.includes("name = 'Organize'")
+        ? files({ id: "ORG-EXISTE", name: "Organize", mimeType: FOLDER })
         : files()],
   ]);
-  const r = await s.run("ensure_path", { path: ["Organizacional", "Samsung Notes"] });
+  const r = await s.run("ensure_path", { path: ["Organize", "Samsung Notes"] });
   assertEquals(await r.json(), { folderId: "ID-NOVA" });
   assertEquals(created, ["ORG-EXISTE>Samsung Notes"]);
 
   // tudo existe: nenhuma criação
   const t = await setup([[`${DRIVE}/files?`, (c) =>
     files({ id: new URL(c.url).searchParams.get("q")!.includes("Samsung") ? "SN" : "ORG", name: "x", mimeType: FOLDER })]]);
-  const r2 = await t.run("ensure_path", { path: ["Organizacional", "Samsung Notes"] });
+  const r2 = await t.run("ensure_path", { path: ["Organize", "Samsung Notes"] });
   assertEquals(await r2.json(), { folderId: "SN" });
   assertEquals(api(t.f.calls, DRIVE).filter((c) => c.method === "POST").length, 0);
 });
@@ -479,8 +479,8 @@ Deno.test("ensure_path escapa aspas no nome da pasta", async () => {
 Deno.test("ensure_path recusa caminho ou nome inválido com 400 e não chama o Google", async () => {
   const s = await setup([[`${DRIVE}/files`, () => files()]]);
   for (const bad of [
-    undefined, null, "Organizacional/Samsung Notes", {}, [], 5,
-    [""], ["   "], ["a/b"], ["a\\b"], ["Organizacional", "Samsung/Notes"], [5], [null], ["a".repeat(256)],
+    undefined, null, "Organize/Samsung Notes", {}, [], 5,
+    [""], ["   "], ["a/b"], ["a\\b"], ["Organize", "Samsung/Notes"], [5], [null], ["a".repeat(256)],
     ["ok", "bad\u0000name"], ["."], [".."], ["a", "b", "c", "d", "e", "f", "g", "h", "i"],
   ]) {
     const r = await s.run("ensure_path", { path: bad });
@@ -492,7 +492,7 @@ Deno.test("ensure_path recusa caminho ou nome inválido com 400 e não chama o G
 
 Deno.test("ensure_path sem conta do drive => 409 not_connected", async () => {
   const s = await setup([], ["u1"]);
-  const r = await s.run("ensure_path", { path: ["Organizacional"] }, "jwt-u2");
+  const r = await s.run("ensure_path", { path: ["Organize"] }, "jwt-u2");
   assertEquals(r.status, 409);
   assertEquals((await r.json()).code, "not_connected");
 });
@@ -617,7 +617,7 @@ const file = (i: number) => ({ id: `f${i}`, name: `Arquivo ${i}`, mimeType: "tex
 
 Deno.test("list pagina com nextPageToken, corta em 1000 itens e avisa truncated", async () => {
   const s = await setup([
-    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organizacional" })],
+    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organize" })],
     [`${DRIVE}/files?`, paged(1500, "files", 400, file)],
   ]);
   const body = await (await s.run("list")).json();
@@ -633,7 +633,7 @@ Deno.test("list pagina com nextPageToken, corta em 1000 itens e avisa truncated"
 
 Deno.test("list sem excesso junta as páginas e não marca truncated", async () => {
   const s = await setup([
-    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organizacional" })],
+    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organize" })],
     [`${DRIVE}/files?`, paged(700, "files", 300, file)],
   ]);
   const body = await (await s.run("list")).json();
@@ -643,7 +643,7 @@ Deno.test("list sem excesso junta as páginas e não marca truncated", async () 
 
 Deno.test("list com exatamente 1000 itens não marca truncated", async () => {
   const s = await setup([
-    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organizacional" })],
+    [`${DRIVE}/files/ROOT-U-u1?`, () => jsonRes({ id: "ROOT-U-u1", name: "Organize" })],
     [`${DRIVE}/files?`, paged(1000, "files", 1000, file)],
   ]);
   const body = await (await s.run("list")).json();

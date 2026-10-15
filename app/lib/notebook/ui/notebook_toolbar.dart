@@ -308,6 +308,8 @@ class NotebookToolbar extends StatelessWidget {
             icon: Icon(settings.eraserMode == EraserMode.stroke ? Icons.linear_scale : Icons.content_cut, size: 18),
             label: Text(settings.eraserMode == EraserMode.stroke ? 'Apagar traço inteiro' : 'Apagar parte do traço'),
           ),
+          _divider(org),
+          ...eraserSizeDots(settings, onSettings),
         ];
       case ToolKind.lasso:
         return [

@@ -31,7 +31,7 @@ class DriveState {
   final String? accountEmail;
   final DriveStatus status;
 
-  /// Id da pasta "Organizacional" no Meu Drive.
+  /// Id da pasta "Organize" no Meu Drive.
   final String? rootFolderId;
   final String? message;
 

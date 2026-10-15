@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide TextBox;
 
 import '../../ui/org_theme.dart';
 import '../core/notebook_core.dart';
+import 'tool_settings.dart';
 
 /// Peças compartilhadas pela barra, pelo menu "Ferramentas" e pelo ajuste rápido.
 
@@ -104,6 +105,53 @@ class WidthDot extends StatelessWidget {
     );
   }
 }
+
+/// Tamanho da borracha: um anel que cresce com [index] (em [kEraserRadii]).
+class EraserSizeDot extends StatelessWidget {
+  const EraserSizeDot({super.key, required this.index, required this.selected, required this.onTap});
+
+  final int index;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = 8.0 + index * 6.0;
+    final org = context.org;
+    return Tooltip(
+      message: 'Borracha ${kEraserSizeLabels[index].toLowerCase()}',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 44,
+          alignment: Alignment.center,
+          child: Container(
+            width: d,
+            height: d,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: selected ? org.accentSoft : null,
+              border: Border.all(color: selected ? org.accentText : org.inkMuted, width: selected ? 2.5 : 1.5),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Os tamanhos da borracha, do menor ao maior.
+List<Widget> eraserSizeDots(ToolSettings settings, ValueChanged<ToolSettings> onSettings) => [
+  for (var i = 0; i < kEraserRadii.length; i++)
+    EraserSizeDot(
+      key: ValueKey('nb-eraser-size-$i'),
+      index: i,
+      selected: settings.eraserSize == i,
+      onTap: () => onSettings(settings.copyWith(eraserSize: i)),
+    ),
+];
 
 /// Botão de ícone da barra, com destaque quando selecionado.
 Widget toolIconButton(

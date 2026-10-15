@@ -133,7 +133,7 @@ export async function handle(req: Request, deps: CallbackDeps): Promise<Response
   }
 }
 
-/** Grava a conta (token cifrado), acha/cria a pasta raiz "Organizacional" e marca drive_state=ok. */
+/** Grava a conta (token cifrado), acha/cria a pasta raiz "Organize" e marca drive_state=ok. */
 async function connectDrive(
   driveStore: DriveStore,
   cfg: GmailConfig,
