@@ -54,20 +54,7 @@ class _PdfrxViewState extends State<_PdfrxView> {
     return _params = PdfViewerParams(
       backgroundColor: background,
       textSelectionParams: PdfTextSelectionParams(onTextSelectionChange: (s) => unawaited(_selectionChanged(s))),
-      customizeContextMenuItems: (params, items) {
-        if (!params.textSelectionDelegate.hasSelectedText) return;
-        items.insert(
-          0,
-          ContextMenuButtonItem(
-            label: 'Criar nota',
-            onPressed: () async {
-              final sel = await _selectionOf(params.textSelectionDelegate);
-              params.dismissContextMenu();
-              if (!sel.isEmpty && mounted) widget.request.onCreateNote(sel);
-            },
-          ),
-        );
-      },
+      buildContextMenu: _buildContextMenu,
       onPageChanged: (page) {
         if (page != null && _controller.isReady && mounted) widget.request.onPage?.call(page, _controller.pageCount);
       },
@@ -77,6 +64,43 @@ class _PdfrxViewState extends State<_PdfrxView> {
       loadingBannerBuilder: (context, bytesDownloaded, totalBytes) => const Center(child: CircularProgressIndicator()),
       errorBannerBuilder: (context, error, stackTrace, documentRef) =>
           const Center(child: Text('Não foi possível abrir o PDF.')),
+    );
+  }
+
+  /// O menu da seleção (Criar nota, Copiar, Selecionar tudo), montado aqui em vez
+  /// do padrão do pdfrx: o padrão embrulha o menu num `Localizations` só com o
+  /// inglês e, com o app em português, o menu quebrava ("No MaterialLocalizations
+  /// found") e no celular virava um bloco cinza sobre a página.
+  Widget? _buildContextMenu(BuildContext context, PdfViewerContextMenuBuilderParams params) {
+    final d = params.textSelectionDelegate;
+    if (!params.isTextSelectionEnabled) return null;
+    final items = <ContextMenuButtonItem>[
+      if (d.hasSelectedText)
+        ContextMenuButtonItem(
+          label: 'Criar nota',
+          onPressed: () async {
+            final sel = await _selectionOf(d);
+            params.dismissContextMenu();
+            if (!sel.isEmpty && mounted) widget.request.onCreateNote(sel);
+          },
+        ),
+      if (d.hasSelectedText && d.isCopyAllowed)
+        ContextMenuButtonItem(
+          label: 'Copiar',
+          onPressed: () async {
+            await d.copyTextSelection();
+            params.dismissContextMenu();
+          },
+        ),
+      if (!d.isSelectingAllText) ContextMenuButtonItem(label: 'Selecionar tudo', onPressed: () => d.selectAllText()),
+    ];
+    if (items.isEmpty) return null;
+    return Align(
+      alignment: Alignment.topLeft,
+      child: AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: TextSelectionToolbarAnchors(primaryAnchor: params.anchorA, secondaryAnchor: params.anchorB),
+        buttonItems: items,
+      ),
     );
   }
 
