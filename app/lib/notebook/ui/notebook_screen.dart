@@ -93,6 +93,8 @@ class NotebookScreen extends StatefulWidget {
     this.pdfRasterizer = const NoopPdfRasterizer(),
     this.pickPdf,
     this.initialPdf,
+    this.onPdfImported,
+    this.onOpenPdf,
   });
 
   final String noteId;
@@ -122,6 +124,12 @@ class NotebookScreen extends StatefulWidget {
   /// PDF a importar assim que o caderno abrir ("Novo caderno a partir de PDF"):
   /// as páginas dele substituem a página em branco inicial.
   final PickedPdf? initialPdf;
+
+  /// Um PDF foi importado ([pages] = páginas do PDF): guarda o original no caderno.
+  final Future<void> Function(PickedPdf pdf, int pages)? onPdfImported;
+
+  /// Abre o PDF original do caderno para ler e selecionar texto (`null` esconde).
+  final VoidCallback? onOpenPdf;
 
   @override
   State<NotebookScreen> createState() => _NotebookScreenState();
@@ -889,6 +897,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
         isCancelled: () => cancelled || !mounted,
       );
       close();
+      if (r.done > 0) unawaited(widget.onPdfImported?.call(picked, r.pageCount));
       if (!mounted) return;
       if (r.done > 0 && replaceBlank != null) {
         final slot = _slotById(replaceBlank);
@@ -1093,6 +1102,15 @@ class _NotebookScreenState extends State<NotebookScreen> {
             ),
           ],
         ),
+        actions: [
+          if (widget.onOpenPdf != null)
+            IconButton(
+              key: const ValueKey('nb-open-pdf'),
+              tooltip: 'Ler o PDF (selecionar texto)',
+              icon: const Icon(Icons.chrome_reader_mode_outlined),
+              onPressed: widget.onOpenPdf,
+            ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

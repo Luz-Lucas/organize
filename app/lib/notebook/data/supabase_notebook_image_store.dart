@@ -6,16 +6,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/repository.dart';
 import '../../domain/ids.dart';
+import '../pdf/notebook_pdf_store.dart';
 import '../ui/notebook_session.dart' show NotebookImageStore;
 import 'notebook_image_purger.dart';
 
-/// Imagens do caderno no bucket privado `notebook-images`.
+/// Imagens (e o PDF original) do caderno no bucket privado `notebook-images`.
 ///
 /// Caminho `<user_id>/<note_id>/<uuid>.<ext>` (as policies liberam só o prefixo do
-/// dono). O bucket aceita png, jpeg, webp, gif, heic e heif, até 10 MB; as duas
-/// regras são conferidas aqui antes de gastar a rede. Apagar imagem só funciona
+/// dono). Imagens: png, jpeg, webp, gif, heic e heif, até 10 MB; PDF até 50 MB.
+/// As regras são conferidas aqui antes de gastar a rede. Apagar imagem só funciona
 /// pela API do Storage (nunca por SQL), por isso [delete].
-class SupabaseNotebookImageStore implements NotebookImageStore, NotebookImagePurger {
+class SupabaseNotebookImageStore implements NotebookImageStore, NotebookPdfStore, NotebookImagePurger {
   SupabaseNotebookImageStore(
     this._db, {
     required this.noteId,
@@ -89,6 +90,25 @@ class SupabaseNotebookImageStore implements NotebookImageStore, NotebookImagePur
     _signed[path] = (url: url, expires: now.add(_signedFor));
     return NetworkImage(url);
   }
+
+  @override
+  Future<String> uploadPdf(Uint8List bytes) async {
+    if (bytes.length > kMaxStoredPdfBytes) {
+      throw RepositoryException('O PDF passa de ${kMaxStoredPdfBytes ~/ (1024 * 1024)} MB.');
+    }
+    final user = _userId();
+    if (user == null) throw const RepositoryException('Entre na conta para enviar arquivos.');
+    final path = '$user/$noteId/${newId()}.pdf';
+    return await _guard(() async {
+      await _db.storage
+          .from(bucket)
+          .uploadBinary(path, bytes, fileOptions: const FileOptions(contentType: 'application/pdf'));
+      return path;
+    });
+  }
+
+  @override
+  Future<Uint8List> downloadPdf(String path) => _guard(() => _db.storage.from(bucket).download(path));
 
   /// Remove o objeto do Storage (as policies só deixam o dono apagar).
   Future<void> delete(String path) {

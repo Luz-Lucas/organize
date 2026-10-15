@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../app/providers.dart';
+import '../domain/notebook_pdf.dart';
 import '../features/notes/note_screen.dart';
 import 'intelligence/model_manager.dart';
+import 'pdf/pdf_book.dart';
 import 'pdf/pdf_providers.dart';
+import 'pdf/pdf_reader_screen.dart';
 import 'state/handwriting_providers.dart';
 import 'state/notebook_controller.dart';
 import 'state/notebook_providers.dart';
@@ -41,12 +44,16 @@ class NotebookRoute extends ConsumerWidget {
       );
     } else if (!note.isNotebook) {
       body = NoteScreen(key: ValueKey(noteId), noteId: noteId);
+    } else if (note.isPdfBook && initialPdf == null) {
+      // Livro: abre direto no PDF, só para ler.
+      body = PdfReaderScreen(key: ValueKey('pdf-$noteId'), noteId: noteId, book: true);
     } else {
       body = NotebookScreenHost(
         noteId: noteId,
         title: note.title,
         session: ref.watch(notebookControllerProvider(noteId)),
         initialPdf: initialPdf,
+        hasPdf: note.pdfInfo != null,
       );
     }
     return PopScope(
@@ -70,6 +77,7 @@ class NotebookScreenHost extends ConsumerWidget {
     required this.session,
     this.pickImage,
     this.initialPdf,
+    this.hasPdf = false,
   });
 
   final String noteId;
@@ -77,6 +85,9 @@ class NotebookScreenHost extends ConsumerWidget {
   final NotebookSession session;
   final Future<PickedImage?> Function()? pickImage;
   final PickedPdf? initialPdf;
+
+  /// O caderno guarda o PDF original: aparece "Ler o PDF" (seleção de texto).
+  final bool hasPdf;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -109,6 +120,10 @@ class NotebookScreenHost extends ConsumerWidget {
       pdfRasterizer: ref.watch(pdfRasterizerProvider),
       pickPdf: ref.watch(pdfPickerProvider),
       initialPdf: initialPdf,
+      onPdfImported: (pdf, pages) => storeImportedPdf(ref, noteId, pdf, pages),
+      onOpenPdf: hasPdf
+          ? () => context.push('/caderno-pdf/$noteId')
+          : null,
     );
   }
 }

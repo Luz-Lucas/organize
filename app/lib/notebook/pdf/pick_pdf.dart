@@ -8,12 +8,16 @@ const int kMaxPdfBytes = 60 * 1024 * 1024;
 
 /// Um PDF escolhido pelo usuário.
 class PickedPdf {
-  const PickedPdf({required this.bytes, required this.name});
+  const PickedPdf({required this.bytes, required this.name, this.storedPath});
 
   final Uint8List bytes;
 
   /// Nome do arquivo (vira o título do caderno criado a partir dele).
   final String name;
+
+  /// Caminho no Storage, se este PDF já está guardado no caderno (um livro que
+  /// vira caderno de escrever): não precisa enviar de novo.
+  final String? storedPath;
 }
 
 /// Abre o seletor de arquivos do sistema só com PDFs (Android, Linux e Windows).

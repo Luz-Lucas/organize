@@ -1,8 +1,9 @@
-import 'dart:io' show Platform, exit;
+import 'dart:io' show Directory, Platform, exit;
 
 import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -36,7 +37,10 @@ import 'notebook/intelligence/mlkit_recognizer.dart';
 import 'notebook/intelligence/model_manager.dart';
 import 'notebook/intelligence/recognizer.dart';
 import 'notebook/intelligence/spell_checker.dart';
+import 'notebook/pdf/notebook_pdf_store.dart';
 import 'notebook/pdf/pdf_providers.dart';
+import 'notebook/pdf/pdf_reader.dart';
+import 'notebook/pdf/pdfrx_viewer.dart';
 import 'notebook/pdf/pdfrx_rasterizer.dart';
 import 'notebook/state/handwriting_providers.dart';
 import 'notebook/state/notebook_pending_store.dart';
@@ -115,6 +119,12 @@ Future<void> main() async {
       agendaFilterPrefsProvider.overrideWithValue(const SharedPreferencesAgendaFilterPrefs()),
       notebookImageStoreFactoryProvider
           .overrideWithValue((noteId) => SupabaseNotebookImageStore(client, noteId: noteId)),
+      notebookPdfStoreFactoryProvider.overrideWithValue((noteId) => CachedNotebookPdfStore(
+            SupabaseNotebookImageStore(client, noteId: noteId),
+            () async => Directory('${(await getApplicationCacheDirectory()).path}${Platform.pathSeparator}notebook-pdfs'),
+          )),
+      if (!kIsWeb) pdfViewBuilderProvider.overrideWithValue(buildPdfrxView),
+      pdfReadingPositionsProvider.overrideWithValue(const SharedPreferencesPdfReadingPositions()),
       filesPlatformProvider.overrideWithValue(
           isAndroid
               ? MethodChannelFilesPlatform()

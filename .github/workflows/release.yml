@@ -96,6 +96,16 @@ jobs:
             exit 1
           fi
 
+      # O caderno guarda PDFs no bucket das imagens (migração 20261028000000_notebook_pdfs):
+      # aplica a mesma configuração pela API do Storage, para valer sem precisar do db push.
+      - name: Bucket dos cadernos aceita PDF
+        env:
+          SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          . "$RUNNER_TEMP/api.sh"
+          api -X PUT "$SUPABASE_URL/storage/v1/bucket/notebook-images" -H "Content-Type: application/json" \
+            --data '{"public":false,"file_size_limit":52428800,"allowed_mime_types":["image/png","image/jpeg","image/webp","image/gif","image/heic","image/heif","application/pdf"]}' >/dev/null
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
