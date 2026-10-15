@@ -330,6 +330,7 @@ Builds e publicação:
 | O quê | Como |
 |---|---|
 | Versão para o botão "Atualizar" (APK + Linux, e Windows com `--windows`) | `tool/release.sh "novidades" [--windows] [--minor]` no computador que tem a chave de assinatura |
+| Versão do Android para o botão "Atualizar", sem o computador de casa | Suba o `+N` do `app/pubspec.yaml` e rode GitHub Actions → "Publicar atualização" (precisa dos segredos `ENV_JSON`, `ANDROID_KEYSTORE_B64` e `SUPABASE_SERVICE_ROLE_KEY`) |
 | Windows avulso | GitHub Actions → "App Windows" (tag `windows-v*` ou Run workflow) |
 | Android avulso / checagem de PR | GitHub Actions → "App Android" (PRs que mexem em `app/**`, tag `android-v*`). Com o segredo `ANDROID_KEYSTORE_B64`, o APK atualiza o app instalado |
 
