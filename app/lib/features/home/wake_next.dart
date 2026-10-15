@@ -42,6 +42,30 @@ DateTime? nextWake(WakePlan plan, Iterable<WakeOverride> overrides, DateTime now
   return null;
 }
 
+/// Data do próximo toque de [plan] que ainda não passou, contando também um toque
+/// pulado ou com horário trocado (é o dia que o "Só …" do cartão edita). Às 2 h de uma
+/// terça, um despertar de dias úteis às 9 h devolve a própria terça, e não a quarta.
+/// Ignora `plan.enabled`. `null` se o plano nunca toca.
+DateTime? nextOccurrenceDate(WakePlan plan, Iterable<WakeOverride> overrides, DateTime now) {
+  final own = {for (final o in overrides) if (o.planId == plan.id) o.dateKey: o};
+  final today = DateTime(now.year, now.month, now.day);
+  final dates = <DateTime>{
+    for (var add = 0; add <= 7; add++) DateTime(today.year, today.month, today.day + add),
+    for (final o in own.values)
+      if (!o.date.isBefore(today)) o.date,
+  }.toList()
+    ..sort();
+  for (final date in dates) {
+    final o = own[dateKey(date)];
+    if (o == null && !plan.days.contains(date.weekday)) continue;
+    // Pulado conta no horário normal (é quando teria tocado).
+    final hour = o != null && !o.skip ? o.hour! : plan.hour;
+    final minute = o != null && !o.skip ? o.minute! : plan.minute;
+    if (DateTime(date.year, date.month, date.day, hour, minute).isAfter(now)) return date;
+  }
+  return null;
+}
+
 /// "em 7 h 20 min", "em 20 min", "em 2 d 3 h" (minutos arredondados para cima).
 String wakeCountdown(DateTime at, DateTime now) {
   final diff = at.difference(now);
