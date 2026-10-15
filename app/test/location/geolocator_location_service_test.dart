@@ -155,7 +155,7 @@ void main() {
 
   group('currentFix()', () {
     test('devolve a posição e repassa o tempo limite', () async {
-      final p = FakePlatform(fix: const GeoFix(lat: -19.9167, lon: -45.7, accuracyM: 8));
+      final p = FakePlatform(fix: const GeoFix(lat: -19.93, lon: -43.94, accuracyM: 8));
       final f = await GeolocatorLocationService(platform: p).currentFix(timeout: const Duration(seconds: 30));
       expect(f?.accuracyM, 8);
       expect(p.lastTimeout, const Duration(seconds: 30));

@@ -105,6 +105,7 @@ Preencha o `.env` (fica só na VPS, nunca vai para o git):
 - `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`: Supabase, Project Settings → API.
 - `ORGANIZACIONAL_USER_ID`: Authentication → Users, o UUID do seu usuário.
 - `ALEXA_ALLOWED_USER_ID`: deixe vazio por enquanto (passo 5).
+- `CONTACT_EMAIL`: o e-mail de contato mostrado em `/privacidade` (a tela de consentimento do Google pede essa página).
 - Os demais (`TZ_NAME`, `ALEXA_COOKIE_FILE`, `AMAZON_PAGE`, `ALEXA_SERVICE_HOST`, `PORT`, `LOGIN_PROXY_PORT`) já vêm com valores certos para o Brasil.
 
 ### 3. Login da Alexa

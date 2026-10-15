@@ -3,11 +3,11 @@
 O mesmo projeto do Google Cloud e o **mesmo cliente OAuth** servem aos dois recursos:
 
 - **Gmail:** o app mostra a contagem de não lidos e as últimas mensagens (remetente, assunto, data) do
-  Gmail `seu-contato@exemplo.com` e permite marcá-las como lidas. Escopo `gmail.modify` (o app só
+  Gmail `seu-contato@gmail.com` e permite marcá-las como lidas. Escopo `gmail.modify` (o app só
   lê cabeçalhos e só remove o rótulo "não lida"; nunca guarda corpo nem anexos). Contas conectadas antes
   com `gmail.metadata` continuam sincronizando, mas precisam reconectar para marcar como lida.
 - **Google Drive (Documentos):** o app navega, renomeia, move, compartilha e envia arquivos na conta
-  `sua-conta@exemplo.com`. Escopo `https://www.googleapis.com/auth/drive` (o Drive inteiro: pastas
+  `sua-conta@gmail.com`. Escopo `https://www.googleapis.com/auth/drive` (o Drive inteiro: pastas
   existentes, mover, compartilhar). Cria a pasta **Organizacional** no Meu Drive; os arquivos importados
   do celular ficam em `Organizacional/Importados`.
 
@@ -23,7 +23,7 @@ https://dgarojxettnppcahedvk.supabase.co/functions/v1/gmail-callback
 
 ## 1. Google Cloud Console
 
-Acesse https://console.cloud.google.com/ com a conta `seu-contato@exemplo.com`.
+Acesse https://console.cloud.google.com/ com a conta `seu-contato@gmail.com`.
 
 ### 1.1 Criar o projeto
 1. No seletor de projetos (topo da página), clique em **Novo projeto**.
@@ -40,9 +40,9 @@ Acesse https://console.cloud.google.com/ com a conta `seu-contato@exemplo.com`.
 
 1. Menu **APIs e serviços → Tela de permissão OAuth** (ou **Google Auth Platform**) → **Vamos começar**.
 2. **Informações do app**: nome `Organizacional`; e-mail de suporte do usuário
-   `seu-contato@exemplo.com`. Avançar.
+   `seu-contato@gmail.com`. Avançar.
 3. **Público-alvo**: escolha **Externo**. Avançar.
-4. **Informações de contato**: `seu-contato@exemplo.com`. Avançar, aceite a política e **Criar**.
+4. **Informações de contato**: `seu-contato@gmail.com`. Avançar, aceite a política e **Criar**.
 5. **Acesso a dados** (Data Access) → **Adicionar ou remover escopos**. Em "Adicionar escopos
    manualmente", cole:
    ```
@@ -160,13 +160,13 @@ npx supabase functions deploy gmail-disconnect --project-ref dgarojxettnppcahedv
 ## 5. Conectar e testar
 
 **[Drive]** Em **Ajustes → Documentos → Conectar Google Drive**: o app chama `gmail-connect` com
-`{provider: 'drive'}` e abre a URL no navegador. Entre com `sua-conta@exemplo.com`, passe pelo aviso
+`{provider: 'drive'}` e abre a URL no navegador. Entre com `sua-conta@gmail.com`, passe pelo aviso
 "não verificado" (1.4) e aceite. Ao voltar ao app, **Mais → Documentos** mostra a pasta *Organizacional*.
 
 Gmail:
 
 1. No app, toque em conectar o Gmail: o app chama `gmail-connect` e abre a URL devolvida no navegador.
-2. Entre com `seu-contato@exemplo.com`, passe pelo aviso "não verificado" (item 1.4) e aceite.
+2. Entre com `seu-contato@gmail.com`, passe pelo aviso "não verificado" (item 1.4) e aceite.
 3. O navegador mostra "Gmail conectado. Pode voltar ao app." e a primeira sincronização já roda.
 4. Teste manual do cron (use o valor real de `CRON_SECRET`):
    ```bash

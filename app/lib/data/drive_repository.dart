@@ -77,5 +77,6 @@ final driveRepositoryProvider = Provider<DriveRepository>(
 
 final driveStateProvider = StreamProvider<DriveState?>((ref) => ref.watch(driveRepositoryProvider).watchState());
 
-/// Conta sugerida na tela de consentimento do Google.
-const defaultDriveAccount = 'sua-conta@exemplo.com';
+/// Conta sugerida na tela de consentimento do Google (`DRIVE_ACCOUNT` no
+/// env.json; vazio = o Google pergunta a conta).
+const defaultDriveAccount = String.fromEnvironment('DRIVE_ACCOUNT');

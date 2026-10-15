@@ -41,5 +41,6 @@ final emailStateProvider = StreamProvider<EmailState?>((ref) => ref.watch(emailR
 final emailItemsProvider =
     StreamProvider<List<EmailItem>>((ref) => ref.watch(emailRepositoryProvider).watchItems(limit: 5));
 
-/// Conta sugerida na tela de consentimento do Google.
-const defaultGmailAccount = 'seu-contato@exemplo.com';
+/// Conta sugerida na tela de consentimento do Google (`GMAIL_ACCOUNT` no
+/// env.json; vazio = o Google pergunta a conta).
+const defaultGmailAccount = String.fromEnvironment('GMAIL_ACCOUNT');

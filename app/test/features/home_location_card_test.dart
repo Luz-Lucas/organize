@@ -15,7 +15,7 @@ class FakeLocationService implements LocationService {
     this.level = LocationPermissionLevel.denied,
     this.onRequest = LocationPermissionLevel.whileInUse,
     this.onBackground = LocationPermissionLevel.always,
-    this.fix = const GeoFix(lat: -19.9167, lon: -43.9345, accuracyM: 8),
+    this.fix = const GeoFix(lat: -19.9320, lon: -43.9380, accuracyM: 8),
   });
 
   LocationPermissionLevel level;
@@ -50,13 +50,13 @@ class FakeLocationService implements LocationService {
 }
 
 const _size = Size(1000, 2200);
-const _home = UserSettings(homeLat: -19.9167, homeLon: -43.9345);
+const _home = UserSettings(homeLat: -19.9320, homeLon: -43.9380);
 
 MemoryLocationRepository _locationAt(double metersNorth, {double? acc, Duration age = Duration.zero}) {
   const mPerDeg = 111194.9;
   return MemoryLocationRepository(
     initial: LocationReport(
-      fix: GeoFix(lat: -19.9167 + metersNorth / mPerDeg, lon: -43.9345, accuracyM: acc),
+      fix: GeoFix(lat: -19.9320 + metersNorth / mPerDeg, lon: -43.9380, accuracyM: acc),
       reportedAt: defaultNow.subtract(age),
     ),
   );
@@ -98,7 +98,7 @@ void main() {
       await tester.tap(find.byKey(const Key('home-confirm')));
       await tester.pumpAndSettle();
       final s = await settings.watchSettings().first;
-      expect([s.homeLat, s.homeLon], [-19.9167, -43.9345]);
+      expect([s.homeLat, s.homeLon], [-19.9320, -43.9380]);
       expect(find.text('Casa definida · raio 50 m'), findsOneWidget);
       expect(svc.requests, isEmpty); // já tinha "o tempo todo": nada a pedir
       expect(find.byKey(const Key('home-bg-continue')), findsNothing);
@@ -268,7 +268,7 @@ void main() {
       final loc = MemoryLocationRepository();
       await _open(tester, settings: MemorySettingsRepository(initial: _home), location: loc);
       expect(find.text('Sem localização recente'), findsOneWidget);
-      await loc.report(const GeoFix(lat: -19.9167, lon: -43.9345, accuracyM: 5), defaultNow);
+      await loc.report(const GeoFix(lat: -19.9320, lon: -43.9380, accuracyM: 5), defaultNow);
       await tester.pumpAndSettle();
       expect(find.text('Em casa'), findsOneWidget);
     });

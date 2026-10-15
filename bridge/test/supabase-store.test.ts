@@ -146,19 +146,19 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
 
     const ok = (res: { error: { message: string } | null }) => { if (res.error) throw new Error(res.error.message); };
     ok(await db.from('user_settings').insert([
-      { user_id: a, home_lat: -19.9167, home_lon: -45.7, home_radius_m: 80, require_home: false },
+      { user_id: a, home_lat: -19.93, home_lon: -43.94, home_radius_m: 80, require_home: false },
       { user_id: b, home_lat: 10, home_lon: 10, home_radius_m: 50, require_home: true },
     ]));
     ok(await db.from('user_locations').insert([
-      { user_id: a, lat: -22.2, lon: -45.6, accuracy_m: 12, reported_at: '2026-10-13T10:00:00Z' },
+      { user_id: a, lat: -19.9, lon: -43.9, accuracy_m: 12, reported_at: '2026-10-13T10:00:00Z' },
       { user_id: b, lat: 1, lon: 1, accuracy_m: null, reported_at: '2026-10-13T10:00:00Z' },
     ]));
     const got = await sa.loadPresenceInput();
     // O horário vem do servidor (gatilho da tabela), não do valor enviado.
     expect(Math.abs(Date.now() - got.location!.reportedAt.getTime())).toBeLessThan(60_000);
     expect(got).toEqual({
-      home: { lat: -19.9167, lon: -45.7, radiusM: 80 }, requireHome: false,
-      location: { lat: -22.2, lon: -45.6, accuracyM: 12, reportedAt: got.location!.reportedAt },
+      home: { lat: -19.93, lon: -43.94, radiusM: 80 }, requireHome: false,
+      location: { lat: -19.9, lon: -43.9, accuracyM: 12, reportedAt: got.location!.reportedAt },
     });
   });
 

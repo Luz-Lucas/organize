@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:organizacional/data/drive_repository.dart' show defaultDriveAccount;
 import 'package:organizacional/data/memory_drive_repository.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/drive.dart';
@@ -29,7 +30,7 @@ void main() {
     await tester.tap(find.byKey(const Key('drive-connect')));
     await tester.pumpAndSettle();
     expect(opened, [repo.connectUri]);
-    expect(repo.lastConnectEmail, 'sua-conta@exemplo.com');
+    expect(repo.lastConnectEmail, defaultDriveAccount.isEmpty ? null : defaultDriveAccount);
     expect(find.byKey(const Key('drive-info')), findsOneWidget);
   });
 

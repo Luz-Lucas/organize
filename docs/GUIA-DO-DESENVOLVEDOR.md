@@ -310,7 +310,7 @@ cd app
 flutter pub get
 flutter analyze                                        # precisa sair "No issues found!"
 TZ=America/Sao_Paulo flutter test --exclude-tags integration
-flutter run -d linux --dart-define-from-file=env.json  # env.json: SUPABASE_URL e SUPABASE_ANON_KEY
+flutter run -d linux --dart-define-from-file=env.json  # env.json: SUPABASE_URL e SUPABASE_ANON_KEY (opcionais: DRIVE_ACCOUNT e GMAIL_ACCOUNT, a conta sugerida no login do Google)
 
 # Banco local (precisa do Docker)
 npx supabase start

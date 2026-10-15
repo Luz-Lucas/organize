@@ -86,7 +86,7 @@ Repo sempre validado contra a lista permitida; erros do GitHub → `{error}` em 
 
 ## Task D — Google Drive (Documentos) + importar/compartilhar para notas (Samsung Notes e qualquer app)
 
-**Conta e escopo.** Conta Google `sua-conta@exemplo.com` (a do login do Supabase), escopo `https://www.googleapis.com/auth/drive` (gerenciar o Drive inteiro: pastas existentes, mover, compartilhar). Mesmo cliente OAuth do Gmail (um projeto no Google Cloud; o usuário só adiciona a Drive API e o escopo). Mesmo padrão de segurança do Gmail: refresh token cifrado (AES-256-GCM, `GMAIL_TOKEN_KEY`) em `google_accounts` (provider `drive`), nunca vai ao app.
+**Conta e escopo.** Conta Google `sua-conta@gmail.com` (a do login do Supabase), escopo `https://www.googleapis.com/auth/drive` (gerenciar o Drive inteiro: pastas existentes, mover, compartilhar). Mesmo cliente OAuth do Gmail (um projeto no Google Cloud; o usuário só adiciona a Drive API e o escopo). Mesmo padrão de segurança do Gmail: refresh token cifrado (AES-256-GCM, `GMAIL_TOKEN_KEY`) em `google_accounts` (provider `drive`), nunca vai ao app.
 
 **Banco `20261019000000_google_drive.sql`:** `google_accounts.provider` check passa a aceitar `('gmail','drive')`; tabela `drive_state(user_id pk, account_email, status text check in ('not_connected','ok','auth_required','error'), root_folder_id text, message text, connected_at timestamptz)` com RLS só-leitura do dono (como `email_state`). pgTAP.
 

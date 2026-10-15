@@ -49,11 +49,11 @@ Future<void> _tap(WidgetTester tester, Finder f) async {
   await tester.pumpAndSettle();
 }
 
-const _home = UserSettings(homeLat: -19.9167, homeLon: -43.9345);
+const _home = UserSettings(homeLat: -19.9320, homeLon: -43.9380);
 
 MemoryLocationRepository _locationAt(double metersNorth) => MemoryLocationRepository(
       initial: LocationReport(
-        fix: GeoFix(lat: -19.9167 + metersNorth / 111194.9, lon: -43.9345, accuracyM: 5),
+        fix: GeoFix(lat: -19.9320 + metersNorth / 111194.9, lon: -43.9380, accuracyM: 5),
         reportedAt: _now,
       ),
     );

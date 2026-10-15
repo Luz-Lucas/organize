@@ -38,7 +38,7 @@ class _GmailCardState extends ConsumerState<GmailCard> {
 
   Future<void> _connect() => _run(() async {
         final repo = ref.read(emailRepositoryProvider);
-        final url = await repo.connectUrl(email: defaultGmailAccount);
+        final url = await repo.connectUrl(email: defaultGmailAccount.isEmpty ? null : defaultGmailAccount);
         final opened = await ref.read(linkOpenerProvider)(url);
         if (!mounted) return;
         setState(() {

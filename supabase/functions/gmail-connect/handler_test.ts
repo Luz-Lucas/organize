@@ -13,12 +13,12 @@ const post = (headers: Record<string, string>, body?: unknown) =>
   });
 
 Deno.test("connect devolve a URL do Google com state assinado do usuário e login_hint", async () => {
-  const res = await handle(post({ Authorization: "Bearer jwt-bom" }, { email: "seu-contato@exemplo.com" }), { cfg: CFG, getUserId });
+  const res = await handle(post({ Authorization: "Bearer jwt-bom" }, { email: "seu-contato@gmail.com" }), { cfg: CFG, getUserId });
   assertEquals(res.status, 200);
   const { url } = await res.json();
   const u = new URL(url);
   assertEquals(u.origin + u.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
-  assertEquals(u.searchParams.get("login_hint"), "seu-contato@exemplo.com");
+  assertEquals(u.searchParams.get("login_hint"), "seu-contato@gmail.com");
   assertEquals(u.searchParams.get("scope"), "https://www.googleapis.com/auth/gmail.modify");
   assertEquals(u.searchParams.get("access_type"), "offline");
   assertEquals(u.searchParams.get("prompt"), "consent");

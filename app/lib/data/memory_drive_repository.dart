@@ -28,7 +28,7 @@ class _Node {
   Map<String, String>? appProperties;
   Uint8List bytes = Uint8List(0);
   final List<DrivePermission> permissions = [
-    const DrivePermission(id: 'owner', email: 'sua-conta@exemplo.com', role: 'owner', type: 'user'),
+    const DrivePermission(id: 'owner', email: 'sua-conta@gmail.com', role: 'owner', type: 'user'),
   ];
 }
 

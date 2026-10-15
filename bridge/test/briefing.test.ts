@@ -52,7 +52,7 @@ describe('buildBriefing', () => {
 });
 
 describe('buildBriefing com clima', () => {
-  const w = 'Em Belo Horizonte� agora faz 22 graus, céu limpo. Hoje a máxima é de 28 e a mínima de 17.';
+  const w = 'Em Belo Horizonte agora faz 22 graus, céu limpo. Hoje a máxima é de 28 e a mínima de 17.';
 
   it('o clima entra logo depois da data', () => {
     expect(buildBriefing(input(), w)).toBe(

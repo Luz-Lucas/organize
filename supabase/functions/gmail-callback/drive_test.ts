@@ -11,7 +11,7 @@ const cb = (q: Record<string, string>) => new Request(`https://x/functions/v1/gm
 function google(token: Record<string, unknown>, existingRoot?: string) {
   return fakeFetch([
     [TOKEN_URL, () => jsonRes({ access_token: "ACC", ...token })],
-    [`${DRIVE}/about`, () => jsonRes({ user: { emailAddress: "sua-conta@exemplo.com" } })],
+    [`${DRIVE}/about`, () => jsonRes({ user: { emailAddress: "sua-conta@gmail.com" } })],
     [`${DRIVE}/files?q=`, () => jsonRes({ files: existingRoot ? [{ id: existingRoot, name: "Organizacional", mimeType: "application/vnd.google-apps.folder" }] : [] })],
     [`${DRIVE}/files?fields=`, () => jsonRes({ id: "NOVA-RAIZ", name: "Organizacional", mimeType: "application/vnd.google-apps.folder" })],
   ]);
@@ -38,14 +38,14 @@ Deno.test("callback do drive: guarda token cifrado, cria a pasta Organizacional 
   assertStringIncludes(html, "Google Drive conectado. Pode voltar ao app.");
 
   const acct = driveStore.accounts.get(U)!;
-  assertEquals(acct.account_email, "sua-conta@exemplo.com");
+  assertEquals(acct.account_email, "sua-conta@gmail.com");
   assertEquals(acct.scopes, DRIVE_SCOPE);
   assert(!acct.refresh_token_enc.includes("REFRESH-D"));
   assertEquals(await decryptToken(acct.refresh_token_enc, KEY), "REFRESH-D");
 
   assertEquals(driveStore.states.get(U)?.status, "ok");
   assertEquals(driveStore.states.get(U)?.root_folder_id, "NOVA-RAIZ");
-  assertEquals(driveStore.states.get(U)?.account_email, "sua-conta@exemplo.com");
+  assertEquals(driveStore.states.get(U)?.account_email, "sua-conta@gmail.com");
 
   const create = f.calls.find((c) => c.method === "POST" && c.url.startsWith(`${DRIVE}/files`))!;
   const body = JSON.parse(create.body);

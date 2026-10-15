@@ -140,9 +140,9 @@ void main() {
   });
 
   group('presenceChip', () {
-    const home = UserSettings(homeLat: -19.9167, homeLon: -43.9345);
+    const home = UserSettings(homeLat: -19.9320, homeLon: -43.9380);
     LocationReport at(double metersNorth, {Duration age = Duration.zero}) => LocationReport(
-          fix: GeoFix(lat: -19.9167 + metersNorth / 111194.9, lon: -43.9345),
+          fix: GeoFix(lat: -19.9320 + metersNorth / 111194.9, lon: -43.9380),
           reportedAt: _now.subtract(age),
         );
 

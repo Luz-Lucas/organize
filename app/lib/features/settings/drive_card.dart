@@ -37,7 +37,7 @@ class _DriveCardState extends ConsumerState<DriveCard> {
   }
 
   Future<void> _connect() => _run(() async {
-        final url = await ref.read(driveRepositoryProvider).connectUrl(email: defaultDriveAccount);
+        final url = await ref.read(driveRepositoryProvider).connectUrl(email: defaultDriveAccount.isEmpty ? null : defaultDriveAccount);
         final opened = await ref.read(linkOpenerProvider)(url);
         if (!mounted) return;
         setState(() {

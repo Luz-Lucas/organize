@@ -336,7 +336,7 @@ void main() {
       await tester.tap(find.byKey(const Key('gmail-connect')));
       await tester.pumpAndSettle();
       expect(opened, [repo.connectUri]);
-      expect(repo.lastConnectEmail, 'seu-contato@exemplo.com');
+      expect(repo.lastConnectEmail, defaultGmailAccount.isEmpty ? null : defaultGmailAccount);
       expect(find.byKey(const Key('gmail-info')), findsOneWidget);
     });
 

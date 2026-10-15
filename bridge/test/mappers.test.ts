@@ -78,12 +78,12 @@ describe('toPresenceSource', () => {
 
   it('com casa e localização', () => {
     const r = toPresenceSource(
-      { home_lat: -19.9167, home_lon: -45.7, home_radius_m: 80, require_home: false },
-      { lat: -22.2, lon: -45.6, accuracy_m: 12, reported_at: '2026-10-13T10:00:00Z' },
+      { home_lat: -19.93, home_lon: -43.94, home_radius_m: 80, require_home: false },
+      { lat: -19.9, lon: -43.9, accuracy_m: 12, reported_at: '2026-10-13T10:00:00Z' },
     );
     expect(r).toEqual({
-      home: { lat: -19.9167, lon: -45.7, radiusM: 80 }, requireHome: false,
-      location: { lat: -22.2, lon: -45.6, accuracyM: 12, reportedAt: new Date('2026-10-13T10:00:00Z') },
+      home: { lat: -19.93, lon: -43.94, radiusM: 80 }, requireHome: false,
+      location: { lat: -19.9, lon: -43.9, accuracyM: 12, reportedAt: new Date('2026-10-13T10:00:00Z') },
     });
   });
 

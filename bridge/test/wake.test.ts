@@ -492,8 +492,8 @@ describe('applyWakeActions', () => {
 
 describe('fireWake: presença e clima', () => {
   const NOW = new Date('2026-09-28T10:00:20Z');
-  const HOME = { lat: -19.9167, lon: -43.9345, radiusM: 50 };
-  const atHome = { lat: -19.9167, lon: -43.9345, accuracyM: 10, reportedAt: new Date('2026-09-28T09:50:00Z') };
+  const HOME = { lat: -19.9314, lon: -43.9372, radiusM: 50 };
+  const atHome = { lat: -19.9314, lon: -43.9372, accuracyM: 10, reportedAt: new Date('2026-09-28T09:50:00Z') };
   const sp = { lat: -23.55, lon: -46.63, accuracyM: 10, reportedAt: new Date('2026-09-28T09:50:00Z') };
   const armed: WakeRun = { id: 'r1', planId: 'p1', runDate: '2026-09-28', plannedFor: new Date('2026-09-28T10:00:00Z'), status: 'armed', fallbackHandle: 'reserva-1' };
   const fire = (p: WakePlan, run: WakeRun | null = armed) =>

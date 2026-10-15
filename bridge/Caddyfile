@@ -6,6 +6,8 @@
 		root * /srv/site
 		rewrite /privacidade /privacidade.html
 		rewrite /conectado /conectado.html
+		# o e-mail de contato da página de privacidade vem do .env (CONTACT_EMAIL)
+		templates
 		file_server
 	}
 	handle @mcp {
