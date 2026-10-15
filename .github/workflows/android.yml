@@ -1,6 +1,7 @@
 name: App Android
 
-# Compila o APK numa máquina Linux do GitHub (já tem o Android SDK). Rodar: Actions > App Android > Run workflow.
+# Compila o APK numa máquina Linux do GitHub (já tem o Android SDK). Rodar: Actions > App Android > Run workflow
+# (depois que este arquivo estiver na main) ou enviando uma tag `android-v<qualquer coisa>`.
 # O caminho normal de release continua sendo o `tool/release.sh` (publica para o botão "Atualizar" do app);
 # este workflow serve para gerar o APK sem o computador de casa.
 #
@@ -14,6 +15,8 @@ on:
         description: 'Número do build (precisa ser maior que o do app instalado); vazio = o do pubspec'
         required: false
         default: ''
+  push:
+    tags: ['android-v*']
 
 jobs:
   build:
