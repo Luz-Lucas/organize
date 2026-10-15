@@ -328,8 +328,8 @@ void main() {
       now: _now,
       alexa: _alexa(state: BridgeState.authRequired),
     );
-    expect(find.byKey(const ValueKey('system-notice-bridge')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('system-notice-bridge')));
+    expect(find.byKey(const Key('status-bridge')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('status-bridge')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(PageHeader, 'Casa'), findsOneWidget);
   });
@@ -341,7 +341,7 @@ void main() {
       now: _now,
       alexa: _alexa(state: BridgeState.authRequired, plans: const []),
     );
-    expect(find.byKey(const ValueKey('system-notice-bridge')), findsNothing);
+    expect(find.byKey(const Key('status-bridge')), findsNothing);
   });
 
   testWidgets('excluir despertar confirma no diálogo e apaga o plano', (tester) async {

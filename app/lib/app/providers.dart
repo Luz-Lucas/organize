@@ -10,7 +10,6 @@ import '../domain/calendar_event.dart';
 import '../domain/event_tag.dart';
 import '../domain/news.dart';
 import '../domain/note.dart';
-import '../domain/notice.dart';
 import '../domain/space.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
@@ -108,5 +107,3 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
 final settingsProvider = StreamProvider<UserSettings>(
     (ref) => ref.watch(settingsRepositoryProvider).watchSettings());
 
-final noticesProvider =
-    StreamProvider<List<Notice>>((ref) => ref.watch(repositoryProvider).watchNotices());

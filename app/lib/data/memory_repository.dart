@@ -4,7 +4,6 @@ import '../domain/calendar_event.dart';
 import '../domain/event_tag.dart';
 import '../domain/ids.dart';
 import '../domain/note.dart';
-import '../domain/notice.dart';
 import '../domain/space.dart';
 import '../domain/task_item.dart';
 import '../domain/wikilinks.dart';
@@ -18,7 +17,6 @@ class MemoryRepository implements Repository {
   final _tasks = <String, TaskItem>{};
   final _events = <String, CalendarEvent>{};
   final _tags = <String, EventTag>{};
-  final _notices = <String, Notice>{};
   final _changes = StreamController<void>.broadcast(sync: true);
 
   /// Quando true, toda escrita falha, simulando uma queda de conexão.
@@ -189,17 +187,4 @@ class MemoryRepository implements Repository {
     });
     return missing.length;
   }
-
-  @override
-  Stream<List<Notice>> watchNotices() => _watch(() {
-        final epoch = DateTime(0);
-        return _notices.values.toList()
-          ..sort((a, b) => (b.createdAt ?? epoch).compareTo(a.createdAt ?? epoch));
-      });
-
-  @override
-  Future<void> upsertNotice(Notice notice) => _write(() => _notices[notice.id] = notice);
-
-  @override
-  Future<void> deleteNotice(String id) => _write(() => _notices.remove(id));
 }

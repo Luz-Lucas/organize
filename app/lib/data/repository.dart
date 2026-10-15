@@ -1,7 +1,6 @@
 import '../domain/calendar_event.dart';
 import '../domain/event_tag.dart';
 import '../domain/note.dart';
-import '../domain/notice.dart';
 import '../domain/space.dart';
 import '../domain/task_item.dart';
 
@@ -57,8 +56,4 @@ abstract interface class Repository {
   /// Cria as etiquetas iniciais (Aula, Academia, Sazonal, Reunião) que faltam e classifica os eventos
   /// ainda sem etiqueta. Devolve quantas etiquetas criou; chamar de novo não cria nada.
   Future<int> seedEventTags();
-
-  Stream<List<Notice>> watchNotices();
-  Future<void> upsertNotice(Notice notice);
-  Future<void> deleteNotice(String id);
 }
