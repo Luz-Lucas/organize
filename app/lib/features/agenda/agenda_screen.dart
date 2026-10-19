@@ -16,10 +16,12 @@ import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 import 'agenda_filter.dart';
+import 'agenda_view_prefs.dart';
 import 'calendar_common.dart';
 import 'calendar_layout.dart';
 import 'event_dialog.dart';
 import 'mobile_calendar.dart';
+import 'mobile_week_view.dart';
 import 'month_view.dart';
 import 'tag_editor.dart';
 import 'tag_filter_bar.dart';
@@ -47,6 +49,10 @@ class AgendaScreen extends ConsumerStatefulWidget {
 class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   _AgendaView _view = _AgendaView.week;
   late DateTime _anchor = startOfDay(ref.read(clockProvider)());
+
+  /// Últimos eventos da semana do celular: ao deslizar para outra semana a consulta muda e, sem isto,
+  /// a grade piscaria com o indicador de carregamento até os novos dados chegarem.
+  List<CalendarEvent>? _lastWeekEvents;
 
   DateTime get _weekStart => startOfWeek(_anchor);
 
@@ -77,7 +83,10 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final now = ref.read(clockProvider)();
     final inWeek = !now.isBefore(_weekStart) && now.isBefore(addDays(_weekStart, 7));
-    final weekMode = MediaQuery.sizeOf(context).width >= 720 && _view == _AgendaView.week;
+    final desktop = MediaQuery.sizeOf(context).width >= 720;
+    final weekMode = desktop
+        ? _view == _AgendaView.week
+        : ref.read(agendaMobileViewProvider) == MobileAgendaView.week;
     final day = weekMode ? (inWeek ? startOfDay(now) : _weekStart) : _anchor;
     final s = existing?.startsAt ?? start ?? DateTime(day.year, day.month, day.day, 8);
     final e = existing?.endsAt ?? end ?? DateTime(day.year, day.month, day.day, 9, 40);
@@ -164,8 +173,17 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     return series.any((e) => e.id == event.id) ? series : [...series, event];
   }
 
-  String _title(bool desktop) {
-    if (desktop && _view == _AgendaView.week) {
+  /// O usuário deslizou a semana do celular: a âncora vai para hoje, se a semana o contém, senão para o
+  /// meio dela (assim o mês que a "Mês" mostrar depois é o da maior parte da semana).
+  void _onMobileWeekChanged(DateTime weekStart) {
+    if (weekStart == _weekStart) return;
+    final today = startOfDay(ref.read(clockProvider)());
+    final hasToday = !today.isBefore(weekStart) && today.isBefore(addDays(weekStart, 7));
+    setState(() => _anchor = hasToday ? today : addDays(weekStart, 3));
+  }
+
+  String _title(bool week) {
+    if (week) {
       final a = _weekStart, b = addDays(_weekStart, 6);
       String mon(DateTime d) => DateFormat('MMM', 'pt_BR').format(d).replaceAll('.', '');
       if (a.month == b.month) return '${a.day} – ${b.day} ${mon(b)} ${b.year}';
@@ -178,12 +196,22 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   @override
   Widget build(BuildContext context) {
     final desktop = MediaQuery.sizeOf(context).width >= 720;
-    final week = desktop && _view == _AgendaView.week;
+    final mobileView = ref.watch(agendaMobileViewProvider);
+    final mobileWeek = !desktop && mobileView == MobileAgendaView.week;
+    final week = mobileWeek || (desktop && _view == _AgendaView.week);
     final now = ref.watch(clockProvider)();
     final spaces = ref.watch(spacesProvider);
     final spaceList = spaces.value ?? const <Space>[];
-    final from = week ? _weekStart : monthGrid(_anchor).first;
-    final events = ref.watch(eventsFromProvider(from));
+    // Na semana do celular carrega também as duas semanas anteriores, para o deslize para trás já ter dados.
+    final from = mobileWeek ? addDays(_weekStart, -14) : (week ? _weekStart : monthGrid(_anchor).first);
+    var events = ref.watch(eventsFromProvider(from));
+    if (!mobileWeek) {
+      _lastWeekEvents = null;
+    } else if (events.hasValue) {
+      _lastWeekEvents = events.requireValue;
+    } else if (_lastWeekEvents != null && !events.hasError) {
+      events = AsyncData(_lastWeekEvents!);
+    }
     final tagsAsync = ref.watch(eventTagsProvider);
     ref.listen(eventTagsProvider, (_, next) => _maybeSeed(next));
     _maybeSeed(tagsAsync);
@@ -253,7 +281,21 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            PageHeader(title: _title(desktop), actions: actions),
+            PageHeader(title: _title(week), actions: actions),
+            if (!desktop)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: SegmentedButton<MobileAgendaView>(
+                  showSelectedIcon: false,
+                  expandedInsets: EdgeInsets.zero,
+                  segments: const [
+                    ButtonSegment(value: MobileAgendaView.month, label: Text('Mês', key: Key('agenda-view-month'))),
+                    ButtonSegment(value: MobileAgendaView.week, label: Text('Semana', key: Key('agenda-view-week'))),
+                  ],
+                  selected: {mobileView},
+                  onSelectionChanged: (v) => ref.read(agendaMobileViewProvider.notifier).select(v.first),
+                ),
+              ),
             if (tagList.isNotEmpty)
               TagFilterBar(
                 tags: tagList,
@@ -266,6 +308,20 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             Expanded(
               child: asyncView(events, (allEvents) {
                 final eventList = filterByTag(allEvents, hidden, tags.keys.toSet());
+                if (mobileWeek) {
+                  return MobileWeekView(
+                    weekStart: _weekStart,
+                    events: eventList,
+                    now: now,
+                    tags: tags,
+                    hourHeight: ref.watch(agendaHourHeightProvider),
+                    onHourHeightChanged: ref.read(agendaHourHeightProvider.notifier).preview,
+                    onHourHeightCommit: ref.read(agendaHourHeightProvider.notifier).commit,
+                    onWeekChanged: _onMobileWeekChanged,
+                    onCreate: (s, e) => _edit(spaceList, start: s, end: e),
+                    onOpen: (e) => _edit(spaceList, existing: e),
+                  );
+                }
                 if (!desktop) {
                   return MobileCalendar(
                     selected: _anchor,

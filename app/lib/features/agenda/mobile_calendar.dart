@@ -10,8 +10,6 @@ import 'calendar_common.dart';
 import 'calendar_layout.dart';
 import 'tag_style.dart';
 
-const _initials = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-
 /// Celular: mês compacto (pontos nos dias com evento) + lista do dia escolhido.
 class MobileCalendar extends StatelessWidget {
   const MobileCalendar({
@@ -57,7 +55,7 @@ class MobileCalendar extends StatelessWidget {
       children: [
         Row(
           children: [
-            for (final i in _initials)
+            for (final i in weekdayInitials)
               Expanded(
                 child: Center(
                   child: Text(i, style: theme.textTheme.labelSmall?.copyWith(color: org.inkMuted)),

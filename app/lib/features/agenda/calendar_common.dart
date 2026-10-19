@@ -39,3 +39,22 @@ String eventTimeLabel(CalendarEvent e, DateTime day) {
 DateTime addDays(DateTime d, int n) => DateTime(d.year, d.month, d.day + n);
 
 String dayKey(DateTime d) => DateFormat('yyyy-MM-dd').format(startOfDay(d));
+
+const weekdayInitials = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+
+const _weekdayNames = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+/// Dia da semana por extenso e sem "-feira" ("terça"), como se fala.
+String weekdayName(DateTime d) => _weekdayNames[d.weekday % DateTime.daysPerWeek];
+
+/// Rótulo falado do bloco do evento na grade de horas, por exemplo "Aula M02, terça 10:00 a 11:40".
+/// Evento que vira a meia-noite cita os dois dias.
+String eventSemanticLabel(CalendarEvent e, DateTime day) {
+  if (e.allDay) return '${e.title}, ${weekdayName(day)}, dia inteiro';
+  final hm = DateFormat.Hm('pt_BR');
+  final endsAtNextMidnight = e.endsAt == DateTime(e.startsAt.year, e.startsAt.month, e.startsAt.day + 1);
+  if (_sameDay(e.startsAt, e.endsAt) || endsAtNextMidnight) {
+    return '${e.title}, ${weekdayName(e.startsAt)} ${hm.format(e.startsAt)} a ${hm.format(e.endsAt)}';
+  }
+  return '${e.title}, ${weekdayName(e.startsAt)} ${hm.format(e.startsAt)} a ${weekdayName(e.endsAt)} ${hm.format(e.endsAt)}';
+}

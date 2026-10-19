@@ -68,6 +68,19 @@ List<PlacedEvent> layoutDay(Iterable<CalendarEvent> events, DateTime day) {
   return placed;
 }
 
+/// Minuto (desde 00:00) que a semana de [weekStart] deve mostrar ao abrir: a hora atual de [now] ou,
+/// se algum evento com horário da semana começa antes dela, o começo do primeiro.
+int weekFocusMinute(Iterable<CalendarEvent> events, DateTime weekStart, DateTime now) {
+  var focus = now.hour * 60 + now.minute;
+  for (var i = 0; i < 7; i++) {
+    final day = DateTime(weekStart.year, weekStart.month, weekStart.day + i);
+    for (final p in layoutDay(events, day)) {
+      if (p.top < focus) focus = p.top;
+    }
+  }
+  return focus;
+}
+
 /// Grade 6×7 do mês de [month], começando na segunda-feira.
 List<DateTime> monthGrid(DateTime month) {
   final first = startOfWeek(DateTime(month.year, month.month, 1));
