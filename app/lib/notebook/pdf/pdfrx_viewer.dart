@@ -42,7 +42,7 @@ class _PdfrxViewState extends State<_PdfrxView> {
   /// Os parâmetros do leitor, criados uma vez só. O pdfrx compara os parâmetros a
   /// cada reconstrução e **recarrega o documento** se mudaram (callbacks novos
   /// contam como mudança): a tela piscava em cinza e a seleção se perdia no meio
-  /// do arraste, porque a seleção reconstrói a tela (o botão "Criar nota").
+  /// do arraste, porque a seleção reconstrói a tela (o botão "Adicionar às notas do caderno").
   /// Por isso os callbacks leem `widget.request` na hora, em vez de capturá-lo.
   PdfViewerParams? _params;
   Color? _paramsBackground;
@@ -67,7 +67,7 @@ class _PdfrxViewState extends State<_PdfrxView> {
     );
   }
 
-  /// O menu da seleção (Criar nota, Copiar, Selecionar tudo), montado aqui em vez
+  /// O menu da seleção (Adicionar às notas do caderno, Copiar, Selecionar tudo), montado aqui em vez
   /// do padrão do pdfrx: o padrão embrulha o menu num `Localizations` só com o
   /// inglês e, com o app em português, o menu quebrava ("No MaterialLocalizations
   /// found") e no celular virava um bloco cinza sobre a página.
@@ -77,11 +77,11 @@ class _PdfrxViewState extends State<_PdfrxView> {
     final items = <ContextMenuButtonItem>[
       if (d.hasSelectedText)
         ContextMenuButtonItem(
-          label: 'Criar nota',
+          label: 'Adicionar às notas do caderno',
           onPressed: () async {
             final sel = await _selectionOf(d);
             params.dismissContextMenu();
-            if (!sel.isEmpty && mounted) widget.request.onCreateNote(sel);
+            if (!sel.isEmpty && mounted) widget.request.onAddToNotes(sel);
           },
         ),
       if (d.hasSelectedText && d.isCopyAllowed)

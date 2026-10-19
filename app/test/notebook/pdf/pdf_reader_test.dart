@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/note.dart';
+import 'package:organizacional/domain/notebook_linked_note.dart';
 import 'package:organizacional/domain/notebook_pdf.dart';
 import 'package:organizacional/features/notes/notebooks/notebooks_prefs.dart';
 import 'package:organizacional/notebook/data/memory_notebook_repository.dart';
@@ -22,7 +23,7 @@ import 'pdf_import_test.dart' show FakePdfRasterizer;
 Finder _key(String k) => find.byKey(Key(k));
 
 /// Leitor falso: mostra o tamanho do PDF e a página inicial; botões simulam a
-/// seleção, o "Criar nota" do menu do leitor e a troca de página.
+/// seleção, o "Adicionar às notas" do menu do leitor e a troca de página.
 Widget fakePdfView(BuildContext context, PdfViewRequest r) => Column(
   children: [
     Text('PDF ${r.data.length} bytes, abriu na p. ${r.initialPage}', key: const Key('fake-pdf')),
@@ -39,7 +40,7 @@ Widget fakePdfView(BuildContext context, PdfViewRequest r) => Column(
     TextButton(key: const Key('fake-unselect'), onPressed: () => r.onSelection(null), child: const Text('limpar')),
     TextButton(
       key: const Key('fake-menu-note'),
-      onPressed: () => r.onCreateNote(const PdfSelection('Teorema do valor médio', page: 7)),
+      onPressed: () => r.onAddToNotes(const PdfSelection('Teorema do valor médio', page: 7)),
       child: const Text('menu'),
     ),
     TextButton(key: const Key('fake-page'), onPressed: () => r.onPage?.call(5, 10), child: const Text('página')),
@@ -104,26 +105,30 @@ void main() {
     expect(find.text('PDF 42 bytes, abriu na p. 5'), findsOneWidget);
   });
 
-  testWidgets('selecionar texto mostra "Criar nota", que cria a nota com a fonte', (tester) async {
+  Future<Note> linkedNote() async =>
+      (await notes()).firstWhere((n) => !n.isNotebook && n.title == 'Notas — Cálculo');
+
+  testWidgets('selecionar texto mostra "Adicionar às notas do caderno", que acrescenta o trecho sem diálogo', (tester) async {
     await open(tester);
-    expect(_key('pdf-create-note'), findsNothing);
+    expect(_key('pdf-add-note'), findsNothing);
     await tester.tap(_key('fake-select'));
     await tester.pumpAndSettle();
-    await tester.tap(_key('pdf-create-note'));
-    await tester.pumpAndSettle();
-    // Título sugerido e texto já com as linhas juntas.
-    expect(find.descendant(of: _key('pdf-note-title'), matching: find.text('Cálculo — p. 3')), findsOneWidget);
-    expect(find.descendant(of: _key('pdf-note-body'), matching: find.text('O limite de f(x)')), findsOneWidget);
-    await tester.enterText(_key('pdf-note-title'), 'Limites');
-    await tester.tap(_key('pdf-note-ok'));
+    expect(find.text('Adicionar às notas do caderno'), findsOneWidget);
+    expect(find.text('Criar nota'), findsNothing);
+    await tester.tap(_key('pdf-add-note'));
     await tester.pumpAndSettle();
 
-    final created = (await notes()).firstWhere((n) => n.title == 'Limites');
-    expect(created.isNotebook, isFalse);
-    expect(created.body, 'O limite de f(x)\n\n_Fonte: Cálculo, p. 3_');
-    expect(created.spaceId, 's1', reason: 'na mesma pasta do caderno');
-    expect(find.text('Nota “Limites” criada.'), findsOneWidget);
-    expect(_key('pdf-create-note'), findsNothing, reason: 'a seleção já virou nota');
+    expect(find.byType(AlertDialog), findsNothing, reason: 'entra direto, sem caixa de edição');
+    final note = await linkedNote();
+    expect(note.isNotebook, isFalse);
+    expect(note.spaceId, 's1', reason: 'na mesma pasta do caderno');
+    // Linhas juntas, citação e a fonte "p. N · dd/MM" (a data do relógio do teste).
+    expect(note.body, '> O limite de f(x)\n\n_p. 3 · 28/09_');
+    expect(find.text('Adicionado às notas de Cálculo'), findsOneWidget);
+    expect(_key('linked-note-open'), findsOneWidget);
+    expect(find.text('Desfazer'), findsOneWidget);
+    expect(_key('pdf-add-note'), findsNothing, reason: 'a seleção já foi enviada');
+    expect((await notes()).firstWhere((n) => n.id == 'c1').linkedNoteId, note.id);
   });
 
   testWidgets('arrastar a seleção: o botão fica e a nota leva o trecho final', (tester) async {
@@ -132,37 +137,126 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(_key('fake-select-more'));
     await tester.pumpAndSettle();
-    expect(_key('pdf-create-note'), findsOneWidget);
-    await tester.tap(_key('pdf-create-note'));
+    expect(_key('pdf-add-note'), findsOneWidget);
+    await tester.tap(_key('pdf-add-note'));
     await tester.pumpAndSettle();
-    expect(
-      find.descendant(of: _key('pdf-note-body'), matching: find.text('O limite de f(x) quando x tende a zero')),
-      findsOneWidget,
-    );
+    expect((await linkedNote()).body, startsWith('> O limite de f(x) quando x tende a zero'));
   });
 
-  testWidgets('"Criar nota" do menu do leitor também cria', (tester) async {
+  testWidgets('"Adicionar às notas do caderno" do menu do leitor também acrescenta, sempre na mesma nota', (tester) async {
     await open(tester);
     await tester.tap(_key('fake-menu-note'));
     await tester.pumpAndSettle();
-    await tester.tap(_key('pdf-note-ok'));
+    await tester.tap(_key('fake-select'));
     await tester.pumpAndSettle();
-    final created = (await notes()).firstWhere((n) => n.title == 'Cálculo — p. 7');
-    expect(created.body, startsWith('Teorema do valor médio'));
+    await tester.tap(_key('pdf-add-note'));
+    await tester.pumpAndSettle();
+    final all = (await notes()).where((n) => !n.isNotebook).toList();
+    expect(all, hasLength(1), reason: 'toda vez na mesma nota');
+    expect(all.single.body, '> Teorema do valor médio\n\n_p. 7 · 28/09_\n\n> O limite de f(x)\n\n_p. 3 · 28/09_');
   });
 
-  testWidgets('desfazer a seleção esconde o botão; cancelar não cria nada', (tester) async {
+  testWidgets('Desfazer tira o bloco; a nota criada agora some e o vínculo é limpo', (tester) async {
+    await open(tester);
+    await tester.tap(_key('fake-menu-note'));
+    await tester.pumpAndSettle();
+    expect((await linkedNote()).body, isNotEmpty);
+    await tester.tap(find.text('Desfazer'));
+    await tester.pumpAndSettle();
+    expect((await notes()).where((n) => !n.isNotebook), isEmpty);
+    final book = (await notes()).single;
+    expect(book.linkedNoteId, isNull);
+    expect(book.pdfInfo!.files, [file], reason: 'o PDF continua no caderno');
+  });
+
+  testWidgets('Desfazer o segundo trecho deixa o primeiro', (tester) async {
+    await open(tester);
+    await tester.tap(_key('fake-menu-note'));
+    await tester.pumpAndSettle();
+    await tester.tap(_key('fake-select'));
+    await tester.pumpAndSettle();
+    await tester.tap(_key('pdf-add-note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Desfazer'));
+    await tester.pumpAndSettle();
+    expect((await linkedNote()).body, '> Teorema do valor médio\n\n_p. 7 · 28/09_');
+  });
+
+  testWidgets('Abrir leva à nota vinculada, com o link de volta ao caderno', (tester) async {
+    await open(tester);
+    await tester.tap(_key('fake-menu-note'));
+    await tester.pumpAndSettle();
+    await tester.tap(_key('linked-note-open'));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: _key('note-title'), matching: find.text('Notas — Cálculo')), findsOneWidget);
+    expect(_key('linked-notebook-link'), findsOneWidget);
+    expect(find.text('📒 Abrir o caderno Cálculo'), findsOneWidget);
+  });
+
+  testWidgets('sem conexão: avisa e não cria nada', (tester) async {
+    await open(tester);
+    repo.failWrites = true;
+    await tester.tap(_key('fake-menu-note'));
+    await tester.pumpAndSettle();
+    expect(find.text('Não foi possível adicionar às notas do caderno.'), findsOneWidget);
+    repo.failWrites = false;
+    expect((await notes()).where((n) => !n.isNotebook), isEmpty);
+  });
+
+  testWidgets('botão "Notas": cria a nota vazia na primeira vez e abre; depois abre a mesma', (tester) async {
+    await open(tester);
+    expect(find.byTooltip('Notas'), findsOneWidget);
+    await tester.tap(_key('pdf-open-notes'));
+    await tester.pumpAndSettle();
+    final first = await linkedNote();
+    expect(first.body, '');
+    expect(find.descendant(of: _key('note-title'), matching: find.text('Notas — Cálculo')), findsOneWidget);
+    // Volta ao leitor (o caderno é o livro) pelo link do topo da nota.
+    await tester.tap(_key('linked-notebook-link'));
+    await tester.pumpAndSettle();
+    expect(_key('fake-pdf'), findsOneWidget);
+    await tester.tap(_key('pdf-open-notes'));
+    await tester.pumpAndSettle();
+    expect((await notes()).where((n) => !n.isNotebook), hasLength(1));
+    expect(_key('note-title'), findsOneWidget);
+  });
+
+  testWidgets('em 360 dp a barra e o botão cabem sem estourar', (tester) async {
+    const second = NotebookPdfFile(path: 'u/c1/1.pdf', name: 'Lista.pdf');
+    pdfs[second.path] = Uint8List(7);
+    await repo.upsertNote((await notes()).single.withPdfFile(second));
+    await pumpApp(
+      tester,
+      repo,
+      notebookRepo: nb,
+      size: const Size(360, 640),
+      location: '/caderno/c1',
+      overrides: [
+        notesTabPrefsProvider.overrideWithValue(MemoryNotesTabPrefs()),
+        notebookPdfStoreFactoryProvider.overrideWithValue((id) => MemoryNotebookPdfStore(id, pdfs)),
+        pdfReadingPositionsProvider.overrideWithValue(positions),
+        pdfViewBuilderProvider.overrideWithValue(fakePdfView),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(_key('fake-select'));
+    await tester.pumpAndSettle();
+    expect(_key('pdf-add-note'), findsOneWidget);
+    expect(_key('pdf-open-notes'), findsOneWidget);
+    await tester.tap(_key('pdf-add-note'));
+    await tester.pumpAndSettle();
+    expect(find.text('Adicionado às notas de Cálculo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desfazer a seleção esconde o botão e nada é criado', (tester) async {
     await open(tester);
     await tester.tap(_key('fake-select'));
     await tester.pumpAndSettle();
-    expect(_key('pdf-create-note'), findsOneWidget);
+    expect(_key('pdf-add-note'), findsOneWidget);
     await tester.tap(_key('fake-unselect'));
     await tester.pumpAndSettle();
-    expect(_key('pdf-create-note'), findsNothing);
-    await tester.tap(_key('fake-menu-note'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancelar'));
-    await tester.pumpAndSettle();
+    expect(_key('pdf-add-note'), findsNothing);
     expect(await notes(), hasLength(1));
   });
 

@@ -95,6 +95,8 @@ class NotebookScreen extends StatefulWidget {
     this.initialPdf,
     this.onPdfImported,
     this.onOpenPdf,
+    this.onOpenNotes,
+    this.onSendToNotes,
   });
 
   final String noteId;
@@ -130,6 +132,13 @@ class NotebookScreen extends StatefulWidget {
 
   /// Abre o PDF original do caderno para ler e selecionar texto (`null` esconde).
   final VoidCallback? onOpenPdf;
+
+  /// Abre a nota vinculada ao caderno ("Notas"); `null` esconde o botão.
+  final VoidCallback? onOpenNotes;
+
+  /// Manda [text] (a escrita da seleção, já em texto) da página [page] (1…) para as
+  /// notas do caderno; `null` esconde a ação. Quem chama avisa o resultado.
+  final Future<void> Function(String text, int page)? onSendToNotes;
 
   @override
   State<NotebookScreen> createState() => _NotebookScreenState();
@@ -623,6 +632,18 @@ class _NotebookScreenState extends State<NotebookScreen> {
       );
   }
 
+  /// O modelo de escrita está baixado? Senão avisa onde baixar.
+  Future<bool> _modelReady() async {
+    bool ready;
+    try {
+      ready = await _intel.recognizer.isModelReady();
+    } catch (_) {
+      ready = false;
+    }
+    if (!ready) _snack('Baixe o modelo de escrita em Ajustes → Escrita à mão.');
+    return ready;
+  }
+
   /// Converte a escrita de [ids] da página [pageId] em texto. Avisa quando falta o
   /// modelo ou nada foi reconhecido.
   Future<InkToTextResult?> _convert(String pageId, Set<String> ids) async {
@@ -630,16 +651,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
     if (!rec.supported || _busy || ids.isEmpty) return null;
     setState(() => _busy = true);
     try {
-      bool ready;
-      try {
-        ready = await rec.isModelReady();
-      } catch (_) {
-        ready = false;
-      }
-      if (!ready) {
-        _snack('Baixe o modelo de escrita em Ajustes → Escrita à mão.');
-        return null;
-      }
+      if (!await _modelReady()) return null;
       final page = _slotById(pageId);
       if (page == null || page.readOnly) return null;
       final before = page.doc;
@@ -674,6 +686,51 @@ class _NotebookScreenState extends State<NotebookScreen> {
       _selPageId = page.id;
       _selIds = {...keep, ...r.textIds};
     });
+  }
+
+  /// Seleção com algo para mandar às notas: escrita à mão ou texto já convertido.
+  bool _hasTextToSend(PageDoc doc) =>
+      _inkIds(doc, _selIds).isNotEmpty || doc.texts.any((t) => _selIds.contains(t.id));
+
+  /// "Enviar para as notas do caderno": reconhece a escrita da seleção (a página não
+  /// muda), junta com os textos já convertidos que estão selecionados e manda tudo
+  /// para a nota vinculada, com a página.
+  Future<void> _sendSelectionToNotes() async {
+    final send = widget.onSendToNotes;
+    final rec = _intel.recognizer;
+    final page = _slotById(_selPageId);
+    if (send == null || page == null || _busy || !rec.supported || _selIds.isEmpty) return;
+    final ids = _selIds;
+    final number = _slots.indexOf(page) + 1;
+    setState(() => _busy = true);
+    var text = '';
+    try {
+      if (!await _modelReady()) return;
+      final ink = PageDoc(strokes: [
+        for (final s in page.doc.strokes)
+          if (ids.contains(s.id) && s.tool != PenTool.highlighter) s,
+      ]);
+      final lines = <String>[];
+      if (ink.strokes.isNotEmpty) {
+        final t = await transcribe(ink, rec);
+        if (t.text.trim().isNotEmpty) lines.add(t.text);
+      }
+      final boxes = [for (final t in page.doc.texts) if (ids.contains(t.id) && t.text.trim().isNotEmpty) t]
+        ..sort((a, b) => a.y.compareTo(b.y));
+      lines.addAll(boxes.map((t) => t.text));
+      text = lines.join('\n');
+    } catch (_) {
+      _snack('Não foi possível converter a escrita.');
+      return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    if (text.trim().isEmpty) {
+      _snack('Não deu para reconhecer a escrita.');
+      return;
+    }
+    await send(text, number);
   }
 
   /// Endireita a escrita de [ids]; devolve os ids que a seleção deve ter depois.
@@ -1103,6 +1160,13 @@ class _NotebookScreenState extends State<NotebookScreen> {
           ],
         ),
         actions: [
+          if (widget.onOpenNotes != null)
+            IconButton(
+              key: const ValueKey('nb-open-notes'),
+              tooltip: 'Notas',
+              icon: const Icon(Icons.sticky_note_2_outlined),
+              onPressed: widget.onOpenNotes,
+            ),
           if (widget.onOpenPdf != null)
             IconButton(
               key: const ValueKey('nb-open-pdf'),
@@ -1186,6 +1250,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
     final has = _selIds.isNotEmpty;
     final selPage = _slotById(_selPageId);
     final hasInk = selPage != null && !selPage.readOnly && _inkIds(selPage.doc, _selIds).isNotEmpty;
+    final canSend = selPage != null && _hasTextToSend(selPage.doc);
     Widget b(String key, IconData i, String label, VoidCallback? f) => TextButton.icon(
       key: ValueKey(key),
       onPressed: f,
@@ -1216,6 +1281,13 @@ class _NotebookScreenState extends State<NotebookScreen> {
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(color: org.inkMuted),
                   ),
                 ),
+              ),
+            if (_intel.recognizer.supported && widget.onSendToNotes != null)
+              b(
+                'nb-sel-send',
+                Icons.note_add_outlined,
+                'Enviar para as notas do caderno',
+                canSend && !_busy ? _sendSelectionToNotes : null,
               ),
           ],
         ),

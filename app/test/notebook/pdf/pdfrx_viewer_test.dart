@@ -49,7 +49,7 @@ void main() {
   final skip = pdfium == null || !File(pdfium).existsSync() ? 'sem PDFIUM_PATH (PDFium nativo)' : null;
 
   testWidgets(
-    'em português, o menu da seleção aparece (sem o bloco cinza) e "Criar nota" leva o trecho',
+    'em português, o menu da seleção aparece (sem o bloco cinza) e "Adicionar às notas do caderno" leva o trecho',
     skip: skip != null,
     (tester) async {
       tester.view.physicalSize = const Size(392 * 2.75, 842 * 2.75);
@@ -86,7 +86,7 @@ void main() {
                 // Pedido novo (callbacks novos) a cada reconstrução, como na tela de leitura.
                 return buildPdfrxView(
                   context,
-                  PdfViewRequest(data: data, sourceName: 'teste', onSelection: selections.add, onCreateNote: notes.add),
+                  PdfViewRequest(data: data, sourceName: 'teste', onSelection: selections.add, onAddToNotes: notes.add),
                 );
               },
             ),
@@ -104,7 +104,7 @@ void main() {
       expect(selections.last?.text, 'leituras');
       expect(selections.last?.page, 1);
 
-      // Reconstruir a tela (o botão "Criar nota" aparecendo) não pode recarregar o PDF
+      // Reconstruir a tela (o botão "Adicionar às notas do caderno" aparecendo) não pode recarregar o PDF
       // nem perder a seleção.
       rebuild(() {});
       await settle();
@@ -114,10 +114,10 @@ void main() {
       viewer.showContextMenu(const Offset(200, 100), forPart: PdfViewerPart.selectedText);
       await settle();
       expect(find.byType(ErrorWidget), findsNothing);
-      expect(find.text('Criar nota'), findsOneWidget);
+      expect(find.text('Adicionar às notas do caderno'), findsOneWidget);
       expect(find.text('Copiar'), findsOneWidget);
 
-      await tester.tap(find.text('Criar nota'));
+      await tester.tap(find.text('Adicionar às notas do caderno'));
       await settle();
       expect(notes.single.text, 'leituras');
     },

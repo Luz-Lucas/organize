@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../app/providers.dart';
+import '../domain/notebook_linked_note.dart';
 import '../domain/notebook_pdf.dart';
 import '../features/notes/note_screen.dart';
 import 'intelligence/model_manager.dart';
+import 'linked_notes_ui.dart';
 import 'pdf/pdf_book.dart';
 import 'pdf/pdf_providers.dart';
 import 'pdf/pdf_reader_screen.dart';
@@ -124,6 +128,16 @@ class NotebookScreenHost extends ConsumerWidget {
       onOpenPdf: hasPdf
           ? () => context.push('/caderno-pdf/$noteId')
           : null,
+      onOpenNotes: () => unawaited(openNotebookNotes(context, ref, noteId)),
+      onSendToNotes: (text, page) async {
+        await addToNotebookNotes(
+          context,
+          ref,
+          notebookId: noteId,
+          notebookTitle: title,
+          block: writingBlock(text, page, ref.read(clockProvider)()),
+        );
+      },
     );
   }
 }

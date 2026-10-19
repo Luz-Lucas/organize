@@ -22,7 +22,7 @@ class PdfViewRequest {
     required this.data,
     required this.sourceName,
     required this.onSelection,
-    required this.onCreateNote,
+    required this.onAddToNotes,
     this.initialPage = 1,
     this.onPage,
   });
@@ -36,8 +36,8 @@ class PdfViewRequest {
   /// A seleção mudou (`null` = nada selecionado).
   final ValueChanged<PdfSelection?> onSelection;
 
-  /// "Criar nota" no menu da seleção do próprio leitor.
-  final ValueChanged<PdfSelection> onCreateNote;
+  /// "Adicionar às notas do caderno" no menu da seleção do próprio leitor.
+  final ValueChanged<PdfSelection> onAddToNotes;
 
   /// A página visível mudou: (página, total).
   final void Function(int page, int count)? onPage;

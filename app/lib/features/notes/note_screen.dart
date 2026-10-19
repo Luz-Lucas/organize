@@ -9,6 +9,7 @@ import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/ids.dart';
 import '../../domain/note.dart';
+import '../../domain/notebook_linked_note.dart';
 import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
 import '../../ui/org_theme.dart';
@@ -311,6 +312,8 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
   Widget _buildBody(
       BuildContext context, ThemeData theme, List<Note> all, List<Note> backlinks) {
     final driveLink = _note == null ? null : driveLinkInBody(_note!.body);
+    // Nota vinculada a um caderno: o link de volta fica acima do texto (e fora dele).
+    final book = notebookLinkedTo(widget.noteId, all);
     final header = <Widget>[
       TextField(
         key: const Key('note-title'),
@@ -321,6 +324,20 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
         style: theme.textTheme.headlineMedium,
         decoration: const InputDecoration.collapsed(hintText: 'Título'),
       ),
+      if (book != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: TextButton(
+              key: const Key('linked-notebook-link'),
+              style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), alignment: Alignment.centerLeft),
+              // go, não push: o caderno pode já estar na pilha (veio de lá pelo botão Notas).
+              onPressed: () => context.go('/caderno/${book.id}'),
+              child: Text('📒 Abrir o caderno ${book.title}', maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ),
       if (driveLink != null) _driveLinkActions(driveLink, _note!.body),
       if (_saveError != null)
         Padding(

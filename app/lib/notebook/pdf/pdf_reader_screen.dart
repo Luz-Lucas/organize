@@ -8,17 +8,17 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../data/repository.dart';
-import '../../domain/ids.dart';
 import '../../domain/note.dart';
+import '../../domain/notebook_linked_note.dart';
 import '../../domain/notebook_pdf.dart';
-import '../../domain/wikilinks.dart';
 import '../../ui/common.dart';
+import '../linked_notes_ui.dart';
 import 'notebook_pdf_store.dart';
 import 'pdf_reader.dart';
 import 'pick_pdf.dart';
 
 /// Lê o PDF original de um caderno, como um livro: abre na página onde parou e
-/// deixa selecionar texto para virar uma nota.
+/// deixa selecionar texto para mandar às notas do caderno.
 ///
 /// [book]: o caderno é um livro (só leitura) e esta é a tela dele; aparece
 /// "Escrever neste PDF", que o transforma em caderno de escrever.
@@ -89,38 +89,18 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
     _update(() => _selection = next);
   }
 
-  Future<void> _createNote(PdfSelection sel, String bookTitle) async {
-    final page = sel.page;
-    final draft = await showDialog<({String title, String body})>(
-      context: context,
-      builder: (_) =>
-          _NoteFromPdfDialog(text: cleanPdfText(sel.text), title: page == null ? bookTitle : '$bookTitle — p. $page'),
+  /// Acrescenta o trecho (com as linhas juntas) às notas do caderno, como citação
+  /// com a fonte "p. N · dd/MM". Entra direto, sem caixa de edição.
+  Future<void> _addToNotes(PdfSelection sel, String bookTitle) async {
+    final block = pdfQuoteBlock(cleanPdfText(sel.text), sel.page, ref.read(clockProvider)());
+    final ok = await addToNotebookNotes(
+      context,
+      ref,
+      notebookId: widget.noteId,
+      notebookTitle: bookTitle,
+      block: block,
     );
-    if (draft == null || !mounted) return;
-    final notes = ref.read(notesProvider).value ?? const <Note>[];
-    final source = page == null ? bookTitle : '$bookTitle, p. $page';
-    final note = Note(
-      id: newId(),
-      title: uniqueTitle(draft.title.isEmpty ? bookTitle : draft.title, notes),
-      body: '${draft.body.trim()}\n\n_Fonte: ${source}_',
-      spaceId: _note?.spaceId,
-    );
-    try {
-      await ref.read(repositoryProvider).upsertNote(note);
-    } on RepositoryException {
-      if (mounted) showError(context, 'Não foi possível criar a nota.');
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _selection = null);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Nota “${note.title}” criada.'),
-          action: SnackBarAction(label: 'Abrir', onPressed: () => context.push('/nota/${note.id}')),
-        ),
-      );
+    if (ok && mounted) setState(() => _selection = null);
   }
 
   /// Livro → caderno de escrever: as páginas do PDF entram no caderno (com o PDF
@@ -193,6 +173,12 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            key: const Key('pdf-open-notes'),
+            tooltip: 'Notas',
+            icon: const Icon(Icons.sticky_note_2_outlined),
+            onPressed: () => unawaited(openNotebookNotes(context, ref, widget.noteId)),
+          ),
           if (files.length > 1)
             PopupMenuButton<int>(
               key: const Key('pdf-files'),
@@ -223,10 +209,10 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
       floatingActionButton: _selection == null
           ? null
           : FloatingActionButton.extended(
-              key: const Key('pdf-create-note'),
-              onPressed: () => unawaited(_createNote(_selection!, note.title)),
+              key: const Key('pdf-add-note'),
+              onPressed: () => unawaited(_addToNotes(_selection!, note.title)),
               icon: const Icon(Icons.note_add_outlined),
-              label: const Text('Criar nota'),
+              label: const Text('Adicionar às notas do caderno'),
             ),
       body: viewBuilder == null
           ? const Center(child: Text('Não há leitor de PDF neste aparelho.'))
@@ -264,7 +250,7 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
                       sourceName: 'caderno-pdf:${file.path}',
                       initialPage: data.page,
                       onSelection: _onSelection,
-                      onCreateNote: (s) => unawaited(_createNote(s, note.title)),
+                      onAddToNotes: (s) => unawaited(_addToNotes(s, note.title)),
                       onPage: (page, count) => _onPage(file.path, page, count),
                     ),
                   ),
@@ -290,62 +276,4 @@ String cleanPdfText(String raw) {
       )
       .where((p) => p.isNotEmpty)
       .join('\n\n');
-}
-
-class _NoteFromPdfDialog extends StatefulWidget {
-  const _NoteFromPdfDialog({required this.text, required this.title});
-
-  final String text;
-  final String title;
-
-  @override
-  State<_NoteFromPdfDialog> createState() => _NoteFromPdfDialogState();
-}
-
-class _NoteFromPdfDialogState extends State<_NoteFromPdfDialog> {
-  late final _title = TextEditingController(text: widget.title);
-  late final _body = TextEditingController(text: widget.text);
-
-  @override
-  void dispose() {
-    _title.dispose();
-    _body.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Nova nota com o trecho'),
-    content: SizedBox(
-      width: 480,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              key: const Key('pdf-note-title'),
-              controller: _title,
-              decoration: const InputDecoration(labelText: 'Título'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              key: const Key('pdf-note-body'),
-              controller: _body,
-              minLines: 4,
-              maxLines: 12,
-              decoration: const InputDecoration(labelText: 'Texto', alignLabelWithHint: true),
-            ),
-          ],
-        ),
-      ),
-    ),
-    actions: [
-      TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-      FilledButton(
-        key: const Key('pdf-note-ok'),
-        onPressed: () => Navigator.of(context).pop((title: _title.text.trim(), body: _body.text)),
-        child: const Text('Criar nota'),
-      ),
-    ],
-  );
 }

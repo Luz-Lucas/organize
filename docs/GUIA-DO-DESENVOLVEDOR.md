@@ -659,6 +659,14 @@ mais novo, com tombstones para exclusões. É o mesmo princípio do merge do Cad
   `NoopPdfRasterizer` e a opção some. Para trocar o leitor, implemente `PdfRasterizer` e faça o
   override de `pdfRasterizerProvider` no `main.dart`. Para mudar a resolução ou o limite de
   páginas, altere `kPdfRenderWidth` e `kMaxPdfPages`.
+- **Notas do caderno** (`lib/notebook/linked_notes.dart`, `linked_notes_ui.dart`,
+  `domain/notebook_linked_note.dart`): cada caderno tem no máximo uma nota de texto vinculada,
+  "Notas — <caderno>", na mesma pasta. O vínculo é `linkedNoteId` no JSON do `body` do caderno
+  (convive com `cover` e `pdf`). O trecho do PDF (citação + "p. N · dd/MM") e a escrita convertida
+  ("Enviar para as notas do caderno" no laço) são **acrescentados ao fim** da nota. As notas não
+  têm merge, então `LinkedNotes` relê a nota mais recente do repositório antes de cada gravação
+  (sem resposta em 4 s, usa o cache de `notesProvider`). A nota mostra o link "Abrir o caderno"
+  procurando o caderno cujo `body` aponta para ela (`notebookLinkedTo`).
 - **"Melhorar escrita"** (`lib/notebook/intelligence/straighten.dart`): os ajustes de cada linha
   ficam nas constantes do topo do arquivo: inclinação mínima e máxima corrigida, faixa de
   altura-x na pauta e tolerância do alinhamento à esquerda. As pautas vêm de `ruleGuideFor`, que
