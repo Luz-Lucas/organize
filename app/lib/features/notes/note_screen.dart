@@ -189,18 +189,26 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
     }
   }
 
+  /// Rota de outra nota na mesma "família" desta: aberta em tela cheia (nota de caderno,
+  /// `/caderno-nota/`) segue em tela cheia; dentro da casca, `/nota/`. Misturar as duas
+  /// duplicaria a página da casca no navegador.
+  String _noteRoute(String id) {
+    final path = GoRouterState.of(context).uri.path;
+    return path.startsWith('/caderno-nota/') ? '/caderno-nota/$id' : '/nota/$id';
+  }
+
   Future<void> _openLink(String? href, List<Note> notes) async {
     if (href == null || !href.startsWith('wiki:')) return;
     final target = Uri.decodeComponent(href.substring('wiki:'.length));
     final existing = resolveWikiLink(target, notes);
     if (existing != null) {
-      context.push('/nota/${existing.id}');
+      context.push(_noteRoute(existing.id));
       return;
     }
     final created = Note(id: newId(), title: target, spaceId: _note?.spaceId);
     try {
       await _repo.upsertNote(created);
-      if (mounted) context.push('/nota/${created.id}');
+      if (mounted) context.push(_noteRoute(created.id));
     } on RepositoryException {
       if (mounted) setState(() => _saveError = 'Não foi possível criar a nota “$target”.');
     }
@@ -375,7 +383,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
           ListTile(
             leading: const Icon(Icons.link),
             title: Text(n.title),
-            onTap: () => context.push('/nota/${n.id}'),
+            onTap: () => context.push(_noteRoute(n.id)),
           ),
       ],
     ];

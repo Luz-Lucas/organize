@@ -46,7 +46,7 @@ Future<bool> addToNotebookNotes(
               style: TextButton.styleFrom(foregroundColor: actionColor),
               onPressed: () {
                 messenger.hideCurrentSnackBar();
-                unawaited(router.push('/nota/${added.note.id}'));
+                unawaited(router.push('/caderno-nota/${added.note.id}'));
               },
               child: const Text('Abrir'),
             ),
@@ -74,7 +74,7 @@ Future<void> openNotebookNotes(BuildContext context, WidgetRef ref, String noteb
   final router = GoRouter.of(context);
   try {
     final note = (await linked.ensure(notebookId)).note;
-    unawaited(router.push('/nota/${note.id}'));
+    unawaited(router.push('/caderno-nota/${note.id}'));
   } on RepositoryException {
     messenger
       ..hideCurrentSnackBar()

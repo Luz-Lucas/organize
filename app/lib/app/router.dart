@@ -13,6 +13,7 @@ import '../features/more/more_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/news/news_screen.dart';
 import '../features/news/news_settings_screen.dart';
+import '../features/notes/note_screen.dart';
 import '../features/notes/notes_screen.dart';
 import '../features/spaces/space_screen.dart';
 import '../features/spaces/spaces_screen.dart';
@@ -67,6 +68,16 @@ GoRouter buildRouter({
         GoRoute(
           path: '/caderno-pdf/:id',
           builder: (context, state) => PdfReaderScreen(noteId: state.pathParameters['id']!),
+        ),
+        // A nota vinculada a um caderno, aberta de dentro dele (caderno ou leitor de PDF): também em
+        // tela cheia. Empurrar /nota/:id (dentro da casca) por cima de uma rota de tela cheia que já
+        // está sobre a casca duplicaria a página da casca no navegador (tela vazia no release).
+        GoRoute(
+          path: '/caderno-nota/:id',
+          builder: (context, state) {
+            final id = state.pathParameters['id']!;
+            return NoteScreen(key: ValueKey('caderno-nota-$id'), noteId: id);
+          },
         ),
         ShellRoute(
           builder: (context, state, child) => AppShell(location: state.uri.path, child: child),
