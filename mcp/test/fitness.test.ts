@@ -26,12 +26,13 @@ describe('academia (banco falso)', () => {
   it('upsert_workout cria a ficha com exercícios na ordem e valores padrão', async () => {
     const r = await call(c.client, 'upsert_workout', {
       name: 'Treino A',
-      exercises: [{ name: 'Supino', sets: 4, reps: '8-12', loadKg: 40, restSeconds: 120, notes: 'banco inclinado' }, { name: 'Remada' }],
+      exercises: [{ name: 'Supino', sets: 4, reps: '8-12', notes: 'banco inclinado' }, { name: 'Remada' }],
     });
     expect(r.isError).toBe(false);
     expect(r.data.workout.name).toBe('Treino A');
-    expect(r.data.workout.exercises.map((e: any) => [e.name, e.sets, e.reps, e.loadKg, e.restSeconds, e.position]))
-      .toEqual([['Supino', 4, '8-12', 40, 120, 0], ['Remada', 3, '10', null, 90, 1]]);
+    expect(r.data.workout.exercises.map((e: any) => [e.name, e.sets, e.reps, e.notes, e.position]))
+      .toEqual([['Supino', 4, '8-12', 'banco inclinado', 0], ['Remada', 3, '10', '', 1]]);
+    for (const e of r.data.workout.exercises) expect(Object.keys(e).sort()).toEqual(['id', 'name', 'notes', 'position', 'reps', 'sets']);
     const l = await call(c.client, 'list_workouts');
     expect(l.data.workouts).toHaveLength(1);
     expect(l.data.workouts[0].exercises).toHaveLength(2);
@@ -80,9 +81,16 @@ describe('academia (banco falso)', () => {
     expect((await call(c.client, 'upsert_workout', { name: '', exercises: [{ name: 'a' }] })).isError).toBe(true);
     expect((await call(c.client, 'upsert_workout', { name: 'x'.repeat(61), exercises: [{ name: 'a' }] })).isError).toBe(true);
     expect((await call(c.client, 'upsert_workout', { name: 'A', exercises: [{ name: 'a', sets: 21 }] })).isError).toBe(true);
-    expect((await call(c.client, 'upsert_workout', { name: 'A', exercises: [{ name: 'a', restSeconds: 901 }] })).isError).toBe(true);
-    expect((await call(c.client, 'upsert_workout', { name: 'A', exercises: [{ name: 'a', loadKg: -1 }] })).isError).toBe(true);
     expect(db.rows('workouts')).toEqual([]);
+  });
+
+  it('upsert_workout não aceita mais carga nem descanso: o que vier é ignorado e não é gravado', async () => {
+    const r = await call(c.client, 'upsert_workout', { name: 'A', exercises: [{ name: 'a', loadKg: 40, restSeconds: 120 }] });
+    expect(r.isError).toBe(false);
+    expect(r.data.workout.exercises[0]).not.toHaveProperty('loadKg');
+    expect(r.data.workout.exercises[0]).not.toHaveProperty('restSeconds');
+    expect(db.rows('workout_exercises')[0].load_kg ?? null).toBeNull();
+    expect(db.rows('workout_exercises')[0].rest_seconds).toBe(90); // padrão do banco
   });
 
   it('list_workout_history traz sessões dos últimos N dias com séries, mais recentes primeiro', async () => {
@@ -102,7 +110,8 @@ describe('academia (banco falso)', () => {
     expect(r.isError).toBe(false);
     expect(r.data.sessions.map((s: any) => s.workoutName)).toEqual(['Treino B', 'Treino A']);
     expect(r.data.sessions[0]).toMatchObject({ day: '2026-10-19', finishedAt: null });
-    expect(r.data.sessions[1].sets.map((x: any) => [x.exerciseName, x.setIndex, x.reps, x.loadKg])).toEqual([['Supino', 1, 12, 40], ['Supino', 2, 10, 40]]);
+    expect(r.data.sessions[1].sets.map((x: any) => [x.exerciseName, x.setIndex, x.reps])).toEqual([['Supino', 1, 12], ['Supino', 2, 10]]);
+    expect(r.data.sessions[1].sets[0]).not.toHaveProperty('loadKg');
     const wide = await call(c.client, 'list_workout_history', { days: 90 });
     expect(wide.data.sessions).toHaveLength(3);
     expect((await call(c.client, 'list_workout_history', { days: 0 })).isError).toBe(true);

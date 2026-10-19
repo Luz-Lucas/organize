@@ -40,16 +40,18 @@ describe.skipIf(!hasDb)('compras e academia (Supabase local)', () => {
   });
 
   it('ficha: cria, edita mantendo o id e aparece no histórico', async () => {
-    const w = await call(a.client, 'upsert_workout', { name: 'Treino A', exercises: [{ name: 'Supino', loadKg: 40.5 }, { name: 'Remada' }] });
+    const w = await call(a.client, 'upsert_workout', { name: 'Treino A', exercises: [{ name: 'Supino' }, { name: 'Remada' }] });
     expect(w.isError).toBe(false);
     const [supino] = w.data.workout.exercises;
-    expect(supino.loadKg).toBe(40.5);
+    expect(supino).not.toHaveProperty('loadKg');
+    expect(supino).not.toHaveProperty('restSeconds');
     const e = await call(a.client, 'upsert_workout', { id: w.data.workout.id, name: 'Treino A', exercises: [{ name: 'supino', sets: 5 }] });
     expect(e.data.workout.exercises).toHaveLength(1);
     expect(e.data.workout.exercises[0]).toMatchObject({ id: supino.id, sets: 5 });
     const { data: s } = await db.from('workout_sessions').insert({ user_id: userA, workout_id: w.data.workout.id, workout_name: 'Treino A', day: '2026-10-18' }).select('id').single();
     await db.from('set_logs').insert({ user_id: userA, session_id: s!.id, exercise_id: supino.id, exercise_name: 'Supino', set_index: 1, reps: 10, load_kg: 40 });
     const h = await call(a.client, 'list_workout_history');
-    expect(h.data.sessions[0].sets[0]).toMatchObject({ exerciseName: 'Supino', reps: 10, loadKg: 40 });
+    expect(h.data.sessions[0].sets[0]).toMatchObject({ exerciseName: 'Supino', reps: 10 });
+    expect(h.data.sessions[0].sets[0]).not.toHaveProperty('loadKg');
   });
 });

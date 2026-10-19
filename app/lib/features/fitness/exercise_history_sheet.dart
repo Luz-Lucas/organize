@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../../domain/workout.dart';
 import '../../ui/common.dart';
 
-/// Evolução de um exercício: por sessão, a maior carga (e as repetições dela). [exerciseId] pode ser
+/// Histórico de um exercício: por sessão, as repetições de cada série. [exerciseId] pode ser
 /// nulo para um exercício que já saiu da ficha; aí vale o nome.
 Future<void> showExerciseHistorySheet(
   BuildContext context, {
@@ -40,7 +40,7 @@ class ExerciseHistorySheet extends StatelessWidget {
           children: [
             Text(exerciseName, style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
-            Text('Evolução da carga', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Text('Histórico', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 12),
             if (points.isEmpty) const EmptyHint('Ainda sem registros deste exercício.'),
             for (final p in points)
@@ -65,8 +65,7 @@ class ExerciseHistorySheet extends StatelessWidget {
   }
 
   static String _line(ExerciseProgressPoint p) {
-    final load = p.maxLoadKg == null ? 'sem carga' : '${formatKg(p.maxLoadKg)} kg';
-    final reps = p.reps == null ? '' : ' × ${p.reps}';
-    return '$load$reps · ${plural(p.sets, 'série', 'séries')}';
+    final series = plural(p.sets, 'série', 'séries');
+    return p.reps.isEmpty ? series : '${p.reps.join(', ')} reps · $series';
   }
 }

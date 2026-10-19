@@ -5,12 +5,9 @@ import { READ, UserError, WRITE, addDaysYmd, assertOwned, check, fold, localYmd,
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
-
 export function exerciseOut(r: Row) {
   return {
-    id: r.id, name: r.name, sets: r.sets, reps: r.reps, loadKg: num(r.load_kg),
-    restSeconds: r.rest_seconds, notes: r.notes, position: r.position,
+    id: r.id, name: r.name, sets: r.sets, reps: r.reps, notes: r.notes, position: r.position,
   };
 }
 
@@ -19,8 +16,6 @@ const exerciseIn = z.object({
   name: z.string().trim().min(1).max(80),
   sets: z.number().int().min(1).max(20).optional().describe('Séries (padrão 3)'),
   reps: z.string().trim().min(1).max(20).optional().describe('Repetições como texto, ex.: "8-12" (padrão "10")'),
-  loadKg: z.number().min(0).max(9999).nullable().optional().describe('Carga planejada em kg'),
-  restSeconds: z.number().int().min(0).max(900).optional().describe('Descanso em segundos (padrão 90)'),
   notes: z.string().max(500).optional(),
 });
 
@@ -55,7 +50,7 @@ export function registerFitness(server: McpServer, ctx: ToolContext): void {
     description:
       'Cria uma ficha (sem `id`) ou edita a existente (com `id`). `exercises` SUBSTITUI a lista inteira, na ordem dada: ' +
       'exercícios que saem são apagados; quem continua (mesmo `id` ou mesmo nome) mantém o id e o histórico. ' +
-      'Campos omitidos voltam ao padrão (3 séries, "10" repetições, 90 s, sem carga).',
+      'Campos omitidos voltam ao padrão (3 séries, "10" repetições).',
     inputSchema: {
       id: z.string().uuid().optional(), name: z.string().trim().min(1).max(60),
       exercises: z.array(exerciseIn).max(60),
@@ -92,8 +87,7 @@ export function registerFitness(server: McpServer, ctx: ToolContext): void {
     });
 
     const fields = (e: z.infer<typeof exerciseIn>, position: number) => ({
-      name: e.name, sets: e.sets ?? 3, reps: e.reps ?? '10', load_kg: e.loadKg ?? null,
-      rest_seconds: e.restSeconds ?? 90, notes: e.notes ?? '', position,
+      name: e.name, sets: e.sets ?? 3, reps: e.reps ?? '10', notes: e.notes ?? '', position,
     });
     const created: Row[] = [];
     for (let i = 0; i < a.exercises.length; i++) {
@@ -115,7 +109,7 @@ export function registerFitness(server: McpServer, ctx: ToolContext): void {
     title: 'Histórico de treinos',
     description:
       'Sessões de treino dos últimos `days` dias (padrão 30), da mais recente para a mais antiga, cada uma com as séries ' +
-      'feitas (exercício, número da série, repetições, carga em kg). `finishedAt` nulo = treino ainda em andamento.',
+      'feitas (exercício, número da série, repetições). `finishedAt` nulo = treino ainda em andamento.',
     inputSchema: { days: z.number().int().min(1).max(365).optional() },
     annotations: READ,
   }, safe(async (a) => {
@@ -130,7 +124,7 @@ export function registerFitness(server: McpServer, ctx: ToolContext): void {
         id: s.id, workoutId: s.workout_id, workoutName: s.workout_name, day: s.day,
         startedAt: toIso(s.started_at, tz), finishedAt: toIso(s.finished_at, tz),
         sets: logs.filter((l) => l.session_id === s.id).sort((x, y) => String(x.exercise_name).localeCompare(String(y.exercise_name)) || x.set_index - y.set_index)
-          .map((l) => ({ exerciseName: l.exercise_name, setIndex: l.set_index, reps: l.reps, loadKg: num(l.load_kg), doneAt: toIso(l.done_at, tz) })),
+          .map((l) => ({ exerciseName: l.exercise_name, setIndex: l.set_index, reps: l.reps, doneAt: toIso(l.done_at, tz) })),
       })),
     });
   }));

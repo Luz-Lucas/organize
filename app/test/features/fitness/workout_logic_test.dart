@@ -22,8 +22,8 @@ WorkoutSession _s(String id, String? wid, DateTime start,
     );
 
 SetLog _log(String id, String sid, String? exId, String exName, int idx, DateTime at,
-        {int? reps = 10, double? kg = 20}) =>
-    SetLog(id: id, sessionId: sid, exerciseId: exId, exerciseName: exName, setIndex: idx, reps: reps, loadKg: kg, doneAt: at);
+        {int? reps = 10}) =>
+    SetLog(id: id, sessionId: sid, exerciseId: exId, exerciseName: exName, setIndex: idx, reps: reps, doneAt: at);
 
 CalendarEvent _ev(String title, DateTime start, {String? tagId, bool allDay = false}) => CalendarEvent(
       id: 'e-$title-${start.hour}',
@@ -90,15 +90,15 @@ void main() {
 
   group('lastSetFor', () {
     final older = _s('s1', 'a', DateTime(2026, 9, 20, 9), finished: DateTime(2026, 9, 20, 10), logs: [
-      _log('l1', 's1', 'a1', 'Supino', 1, DateTime(2026, 9, 20, 9, 10), reps: 8, kg: 40),
+      _log('l1', 's1', 'a1', 'Supino', 1, DateTime(2026, 9, 20, 9, 10), reps: 8),
     ]);
     final newer = _s('s2', 'a', DateTime(2026, 9, 24, 9), finished: DateTime(2026, 9, 24, 10), logs: [
-      _log('l2', 's2', 'a1', 'Supino', 1, DateTime(2026, 9, 24, 9, 10), reps: 10, kg: 42.5),
-      _log('l3', 's2', null, 'Remada', 1, DateTime(2026, 9, 24, 9, 20), reps: 12, kg: 30),
+      _log('l2', 's2', 'a1', 'Supino', 1, DateTime(2026, 9, 24, 9, 10), reps: 10),
+      _log('l3', 's2', null, 'Remada', 1, DateTime(2026, 9, 24, 9, 20), reps: 12),
     ]);
 
     test('devolve a série mais recente do exercício, por id', () {
-      expect(lastSetFor('a1', 'Supino', [older, newer])?.loadKg, 42.5);
+      expect(lastSetFor('a1', 'Supino', [older, newer])?.reps, 10);
     });
 
     test('sem id correspondente, procura pelo nome (sem acento/caixa)', () {
@@ -111,19 +111,31 @@ void main() {
   });
 
   group('exerciseProgress', () {
-    test('uma linha por sessão com maior carga, mais recente primeiro', () {
+    test('uma linha por sessão com as repetições de cada série, mais recente primeiro', () {
       final s1 = _s('s1', 'a', DateTime(2026, 9, 20, 9), logs: [
-        _log('l1', 's1', 'a1', 'Supino', 1, DateTime(2026, 9, 20, 9, 10), reps: 10, kg: 40),
-        _log('l2', 's1', 'a1', 'Supino', 2, DateTime(2026, 9, 20, 9, 12), reps: 8, kg: 45),
+        _log('l2', 's1', 'a1', 'Supino', 2, DateTime(2026, 9, 20, 9, 12), reps: 8),
+        _log('l1', 's1', 'a1', 'Supino', 1, DateTime(2026, 9, 20, 9, 10), reps: 10),
+        _log('l0', 's1', 'a1', 'Supino', 3, DateTime(2026, 9, 20, 9, 14), reps: null),
       ]);
       final s2 = _s('s2', 'a', DateTime(2026, 9, 24, 9), logs: [
-        _log('l3', 's2', 'a1', 'Supino', 1, DateTime(2026, 9, 24, 9, 10), reps: 6, kg: 50),
+        _log('l3', 's2', 'a1', 'Supino', 1, DateTime(2026, 9, 24, 9, 10), reps: 6),
       ]);
       final p = exerciseProgress('a1', 'Supino', [s1, s2]);
       expect(p.map((e) => e.day), [DateTime(2026, 9, 24), DateTime(2026, 9, 20)]);
-      expect(p[1].maxLoadKg, 45);
-      expect(p[1].reps, 8);
-      expect(p[1].sets, 2);
+      expect(p[1].reps, [10, 8]);
+      expect(p[1].maxReps, 10);
+      expect(p[1].sets, 3);
+      expect(p[0].reps, [6]);
+    });
+
+    test('sessão sem repetições registradas: maxReps nulo', () {
+      final s1 = _s('s1', 'a', DateTime(2026, 9, 20, 9), logs: [
+        _log('l1', 's1', 'a1', 'Supino', 1, DateTime(2026, 9, 20, 9, 10), reps: null),
+      ]);
+      final p = exerciseProgress('a1', 'Supino', [s1]);
+      expect(p.single.reps, isEmpty);
+      expect(p.single.maxReps, isNull);
+      expect(p.single.sets, 1);
     });
   });
 
@@ -201,18 +213,23 @@ void main() {
   group('serialização', () {
     test('WorkoutExercise vai e volta do mapa do banco', () {
       final e = WorkoutExercise(
-          id: 'x', workoutId: 'w', name: 'Supino', sets: 4, reps: '8–12', loadKg: 42.5, restSeconds: 60, notes: 'n', position: 2);
+          id: 'x', workoutId: 'w', name: 'Supino', sets: 4, reps: '8–12', notes: 'n', position: 2);
       expect(WorkoutExercise.fromMap(e.toMap()), e);
-      expect(e.toMap()['load_kg'], 42.5);
       expect(e.toMap()['workout_id'], 'w');
     });
 
-    test('carga ausente (numeric nulo) continua nula', () {
-      final e = WorkoutExercise.fromMap({'id': 'x', 'workout_id': 'w', 'name': 'Barra', 'load_kg': null});
-      expect(e.loadKg, isNull);
+    test('o mapa do exercício não envia carga nem descanso (o banco usa os padrões)', () {
+      const e = WorkoutExercise(id: 'x', workoutId: 'w', name: 'Supino');
+      expect(e.toMap().keys, isNot(contains('load_kg')));
+      expect(e.toMap().keys, isNot(contains('rest_seconds')));
+    });
+
+    test('fromMap ignora load_kg e rest_seconds que o banco ainda devolve', () {
+      final e = WorkoutExercise.fromMap(
+          {'id': 'x', 'workout_id': 'w', 'name': 'Barra', 'load_kg': 20, 'rest_seconds': 60});
       expect(e.sets, 3);
       expect(e.reps, '10');
-      expect(e.restSeconds, 90);
+      expect(e, const WorkoutExercise(id: 'x', workoutId: 'w', name: 'Barra'));
     });
 
     test('WorkoutSession usa day como data pura e fromMap lê o fuso local', () {
@@ -226,7 +243,7 @@ void main() {
       expect(back.startedAt, DateTime(2026, 9, 28, 9));
     });
 
-    test('SetLog numeric chega como num ou String', () {
+    test('SetLog ignora load_kg que o banco ainda devolve e não o envia', () {
       final l = SetLog.fromMap({
         'id': 'l',
         'session_id': 's',
@@ -237,26 +254,13 @@ void main() {
         'load_kg': '22.50',
         'done_at': '2026-09-28T12:00:00Z',
       });
-      expect(l.loadKg, 22.5);
+      expect(l.reps, 10);
       expect(l.exerciseId, isNull);
+      expect(l.toMap().keys, isNot(contains('load_kg')));
     });
   });
 
-  group('carga em kg', () {
-    test('formatKg usa vírgula e omite zeros à direita', () {
-      expect(formatKg(40), '40');
-      expect(formatKg(42.5), '42,5');
-      expect(formatKg(null), '');
-    });
-
-    test('parseKg aceita vírgula ou ponto e rejeita lixo e negativos', () {
-      expect(parseKg('42,5'), 42.5);
-      expect(parseKg(' 40 '), 40);
-      expect(parseKg(''), isNull);
-      expect(parseKg('abc'), isNull);
-      expect(parseKg('-3'), isNull);
-    });
-
+  group('repetições', () {
     test('firstInt tira o primeiro número de "8–12"', () {
       expect(firstInt('8–12'), 8);
       expect(firstInt('10'), 10);

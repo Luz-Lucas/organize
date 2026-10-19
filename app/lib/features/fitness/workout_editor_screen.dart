@@ -20,21 +20,19 @@ class _Draft {
         name = TextEditingController(text: e?.name ?? ''),
         sets = TextEditingController(text: '${e?.sets ?? 3}'),
         reps = TextEditingController(text: e?.reps ?? '10'),
-        load = TextEditingController(text: formatKg(e?.loadKg)),
-        rest = TextEditingController(text: '${e?.restSeconds ?? 90}'),
         notes = TextEditingController(text: e?.notes ?? '');
 
   final String id;
-  final TextEditingController name, sets, reps, load, rest, notes;
+  final TextEditingController name, sets, reps, notes;
 
   void dispose() {
-    for (final c in [name, sets, reps, load, rest, notes]) {
+    for (final c in [name, sets, reps, notes]) {
       c.dispose();
     }
   }
 }
 
-/// Cria ou edita uma ficha: nome e exercícios (nome, séries, repetições, carga, descanso, observação).
+/// Cria ou edita uma ficha: nome e exercícios (nome, séries, repetições, observação).
 class WorkoutEditorScreen extends ConsumerStatefulWidget {
   const WorkoutEditorScreen({super.key, this.workout});
 
@@ -84,8 +82,6 @@ class _WorkoutEditorScreenState extends ConsumerState<WorkoutEditorScreen> {
         name: n.length > 80 ? n.substring(0, 80) : n,
         sets: (int.tryParse(d.sets.text.trim()) ?? 3).clamp(1, 20),
         reps: reps.isEmpty ? '10' : (reps.length > 20 ? reps.substring(0, 20) : reps),
-        loadKg: parseKg(d.load.text)?.clamp(0, 9999.99),
-        restSeconds: (int.tryParse(d.rest.text.trim()) ?? 90).clamp(0, 900),
         notes: d.notes.text.trim(),
         position: exercises.length,
       ));
@@ -193,12 +189,12 @@ class _ExerciseEditor extends StatelessWidget {
   final bool isFirst, isLast;
   final VoidCallback onUp, onDown, onRemove;
 
-  Widget _small(String key, TextEditingController c, String label, {bool decimal = false, double width = 84}) => SizedBox(
+  Widget _small(String key, TextEditingController c, String label, {double width = 84}) => SizedBox(
         width: width,
         child: TextField(
           key: Key(key),
           controller: c,
-          keyboardType: decimal ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.number,
+          keyboardType: TextInputType.number,
           decoration: InputDecoration(labelText: label, isDense: true),
         ),
       );
@@ -250,8 +246,6 @@ class _ExerciseEditor extends StatelessWidget {
               children: [
                 _small('exercise-sets-$i', draft.sets, 'Séries'),
                 _small('exercise-reps-$i', draft.reps, 'Repetições', width: 110),
-                _small('exercise-load-$i', draft.load, 'Carga (kg)', decimal: true, width: 110),
-                _small('exercise-rest-$i', draft.rest, 'Descanso (s)', width: 110),
               ],
             ),
           ),

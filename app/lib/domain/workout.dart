@@ -3,7 +3,7 @@ import 'calendar_event.dart';
 import 'event_tag.dart';
 import 'json.dart';
 
-/// Exercício de uma ficha. `reps` é texto livre ("8–12"); `loadKg` é a carga planejada (opcional).
+/// Exercício de uma ficha. `reps` é texto livre ("8–12").
 class WorkoutExercise {
   const WorkoutExercise({
     required this.id,
@@ -11,8 +11,6 @@ class WorkoutExercise {
     required this.name,
     this.sets = 3,
     this.reps = '10',
-    this.loadKg,
-    this.restSeconds = 90,
     this.notes = '',
     this.position = 0,
   });
@@ -22,8 +20,6 @@ class WorkoutExercise {
   final String name;
   final int sets;
   final String reps;
-  final double? loadKg;
-  final int restSeconds;
   final String notes;
   final int position;
 
@@ -33,8 +29,6 @@ class WorkoutExercise {
         name: m['name'] as String,
         sets: (m['sets'] as num?)?.toInt() ?? 3,
         reps: (m['reps'] as String?) ?? '10',
-        loadKg: _toDouble(m['load_kg']),
-        restSeconds: (m['rest_seconds'] as num?)?.toInt() ?? 90,
         notes: (m['notes'] as String?) ?? '',
         position: (m['position'] as num?)?.toInt() ?? 0,
       );
@@ -45,8 +39,6 @@ class WorkoutExercise {
         'name': name,
         'sets': sets,
         'reps': reps,
-        'load_kg': loadKg,
-        'rest_seconds': restSeconds,
         'notes': notes,
         'position': position,
       };
@@ -57,11 +49,8 @@ class WorkoutExercise {
     String? name,
     int? sets,
     String? reps,
-    double? loadKg,
-    int? restSeconds,
     String? notes,
     int? position,
-    bool clearLoad = false,
   }) =>
       WorkoutExercise(
         id: id ?? this.id,
@@ -69,8 +58,6 @@ class WorkoutExercise {
         name: name ?? this.name,
         sets: sets ?? this.sets,
         reps: reps ?? this.reps,
-        loadKg: clearLoad ? null : (loadKg ?? this.loadKg),
-        restSeconds: restSeconds ?? this.restSeconds,
         notes: notes ?? this.notes,
         position: position ?? this.position,
       );
@@ -83,13 +70,11 @@ class WorkoutExercise {
       other.name == name &&
       other.sets == sets &&
       other.reps == reps &&
-      other.loadKg == loadKg &&
-      other.restSeconds == restSeconds &&
       other.notes == notes &&
       other.position == position;
 
   @override
-  int get hashCode => Object.hash(id, workoutId, name, sets, reps, loadKg, restSeconds, notes, position);
+  int get hashCode => Object.hash(id, workoutId, name, sets, reps, notes, position);
 }
 
 /// Ficha de treino (Treino A, B…) com os exercícios em ordem.
@@ -134,7 +119,6 @@ class SetLog {
     required this.exerciseName,
     required this.setIndex,
     this.reps,
-    this.loadKg,
     required this.doneAt,
   });
 
@@ -146,7 +130,6 @@ class SetLog {
   /// A partir de 1.
   final int setIndex;
   final int? reps;
-  final double? loadKg;
   final DateTime doneAt;
 
   factory SetLog.fromMap(Map<String, dynamic> m) => SetLog(
@@ -156,7 +139,6 @@ class SetLog {
         exerciseName: m['exercise_name'] as String,
         setIndex: (m['set_index'] as num).toInt(),
         reps: (m['reps'] as num?)?.toInt(),
-        loadKg: _toDouble(m['load_kg']),
         doneAt: parseDate(m['done_at']) ?? DateTime.now(),
       );
 
@@ -167,14 +149,12 @@ class SetLog {
         'exercise_name': exerciseName,
         'set_index': setIndex,
         'reps': reps,
-        'load_kg': loadKg,
         'done_at': encodeDate(doneAt),
       };
 
   SetLog copyWith({
     String? exerciseId,
     int? reps,
-    double? loadKg,
     DateTime? doneAt,
     bool clearExercise = false,
   }) =>
@@ -185,7 +165,6 @@ class SetLog {
         exerciseName: exerciseName,
         setIndex: setIndex,
         reps: reps ?? this.reps,
-        loadKg: loadKg ?? this.loadKg,
         doneAt: doneAt ?? this.doneAt,
       );
 }
@@ -252,13 +231,6 @@ class WorkoutSession {
 String _dayString(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-double? _toDouble(Object? v) => switch (v) {
-      null => null,
-      num n => n.toDouble(),
-      String s => double.tryParse(s),
-      _ => null,
-    };
-
 const _accents = {
   'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
   'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i', 'ó': 'o', 'ò': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
@@ -318,36 +290,36 @@ SetLog? lastSetFor(String exerciseId, String exerciseName, List<WorkoutSession> 
       latest(all.where((l) => _sameName(l, exerciseName)));
 }
 
-/// Um ponto da evolução de um exercício: o melhor da sessão.
+/// Um ponto do histórico de um exercício: o que foi feito numa sessão.
 class ExerciseProgressPoint {
-  const ExerciseProgressPoint({required this.day, required this.maxLoadKg, required this.reps, required this.sets});
+  const ExerciseProgressPoint({required this.day, required this.reps, required this.sets});
 
   final DateTime day;
 
-  /// Maior carga do dia (`null` se nenhuma série teve carga).
-  final double? maxLoadKg;
-
-  /// Repetições da série de maior carga (ou da de mais repetições, sem carga).
-  final int? reps;
+  /// Repetições de cada série com repetições registradas, na ordem das séries.
+  final List<int> reps;
 
   /// Quantas séries foram registradas.
   final int sets;
+
+  /// Maior número de repetições do dia (`null` se nenhuma série teve repetições).
+  int? get maxReps => reps.isEmpty ? null : reps.reduce((a, b) => a > b ? a : b);
 }
 
-/// Evolução do exercício (por id ou por nome), da sessão mais recente para a mais antiga.
+/// Histórico do exercício (por id ou por nome), da sessão mais recente para a mais antiga.
 List<ExerciseProgressPoint> exerciseProgress(
     String exerciseId, String exerciseName, List<WorkoutSession> history) {
   final out = <ExerciseProgressPoint>[];
   final sessions = [...history]..sort((a, b) => b.startedAt.compareTo(a.startedAt));
   for (final s in sessions) {
-    final logs = s.logs.where((l) => l.exerciseId == exerciseId || _sameName(l, exerciseName)).toList();
+    final logs = s.logs.where((l) => l.exerciseId == exerciseId || _sameName(l, exerciseName)).toList()
+      ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
     if (logs.isEmpty) continue;
-    SetLog best = logs.first;
-    for (final l in logs.skip(1)) {
-      final a = l.loadKg ?? -1, b = best.loadKg ?? -1;
-      if (a > b || (a == b && (l.reps ?? 0) > (best.reps ?? 0))) best = l;
-    }
-    out.add(ExerciseProgressPoint(day: s.day, maxLoadKg: best.loadKg, reps: best.reps, sets: logs.length));
+    out.add(ExerciseProgressPoint(
+      day: s.day,
+      reps: [for (final l in logs) if (l.reps != null) l.reps!],
+      sets: logs.length,
+    ));
   }
   return out;
 }
@@ -415,19 +387,6 @@ GymToday gymToday({
   final hasGymEvent = eventsOnDay(events, today).any((e) => isGymEvent(e, tags));
   if (hasGymEvent && next != null) return GymPlanned(next);
   return GymRest(next);
-}
-
-/// "42,5", "40": vírgula decimal, sem zeros à direita. Nulo vira texto vazio.
-String formatKg(double? kg) {
-  if (kg == null) return '';
-  final s = kg == kg.roundToDouble() ? kg.round().toString() : kg.toString();
-  return s.replaceAll('.', ',');
-}
-
-/// Lê uma carga digitada (vírgula ou ponto). Vazio, inválido ou negativo vira nulo.
-double? parseKg(String text) {
-  final v = double.tryParse(text.trim().replaceAll(',', '.'));
-  return v == null || v < 0 || v.isNaN || v.isInfinite ? null : v;
 }
 
 /// Primeiro número inteiro de um texto como "8–12" (8); nulo se não houver.

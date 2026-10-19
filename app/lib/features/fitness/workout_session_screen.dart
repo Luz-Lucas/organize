@@ -9,7 +9,6 @@ import '../../data/repository.dart';
 import '../../domain/ids.dart';
 import '../../domain/workout.dart';
 import '../../ui/common.dart';
-import '../../ui/org_theme.dart';
 import '../../ui/org_widgets.dart';
 import 'exercise_history_sheet.dart';
 import 'fitness_providers.dart';
@@ -81,35 +80,7 @@ class WorkoutSessionScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
-  Timer? _timer;
-  int? _rest;
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _startRest(int seconds) {
-    _timer?.cancel();
-    setState(() => _rest = seconds);
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      final left = (_rest ?? 0) - 1;
-      if (left <= 0) {
-        t.cancel();
-        if (mounted) setState(() => _rest = null);
-      } else if (mounted) {
-        setState(() => _rest = left);
-      }
-    });
-  }
-
-  void _skipRest() {
-    _timer?.cancel();
-    setState(() => _rest = null);
-  }
-
-  Future<void> _toggle(WorkoutSession s, _ExerciseRow row, int setIndex, SetLog? log, int? reps, double? load) async {
+  Future<void> _toggle(WorkoutSession s, _ExerciseRow row, int setIndex, SetLog? log, int? reps) async {
     final repo = ref.read(fitnessRepositoryProvider);
     try {
       if (log != null) {
@@ -123,11 +94,8 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
         exerciseName: _clip(row.name, 80),
         setIndex: setIndex,
         reps: reps?.clamp(0, 999),
-        loadKg: load?.clamp(0, 9999.99),
         doneAt: ref.read(clockProvider)(),
       ));
-      final rest = row.ex?.restSeconds ?? 0;
-      if (mounted && rest > 0) _startRest(rest);
     } on RepositoryException {
       if (mounted) showError(context, 'Não foi possível salvar a série.');
     }
@@ -196,12 +164,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
       ),
       body: session == null
           ? asyncView(sessionsAsync, (_) => const Center(child: Text('Treino não encontrado.')))
-          : Column(
-              children: [
-                Expanded(child: _body(context, session, workout, sessions)),
-                if (_rest != null) _RestBar(seconds: _rest!, onSkip: _skipRest),
-              ],
-            ),
+          : _body(context, session, workout, sessions),
     );
   }
 
@@ -244,7 +207,7 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
                     index: i,
                     row: rows[i],
                     history: history,
-                    onToggle: (j, log, reps, load) => _toggle(s, rows[i], j, log, reps, load),
+                    onToggle: (j, log, reps) => _toggle(s, rows[i], j, log, reps),
                     onHistory: () => showExerciseHistorySheet(
                       context,
                       exerciseId: rows[i].ex?.id,
@@ -263,41 +226,6 @@ class _WorkoutSessionScreenState extends ConsumerState<WorkoutSessionScreen> {
   }
 }
 
-class _RestBar extends StatelessWidget {
-  const _RestBar({required this.seconds, required this.onSkip});
-
-  final int seconds;
-  final VoidCallback onSkip;
-
-  @override
-  Widget build(BuildContext context) {
-    final org = context.org;
-    final theme = Theme.of(context);
-    final mm = (seconds ~/ 60).toString();
-    final ss = (seconds % 60).toString().padLeft(2, '0');
-    return Material(
-      key: const Key('rest-timer'),
-      color: org.accentSoft,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.timer_outlined, color: org.accentText),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Descanso $mm:$ss', style: theme.textTheme.titleMedium?.copyWith(color: org.accentText)),
-              ),
-              TextButton(key: const Key('rest-skip'), onPressed: onSkip, child: const Text('Pular')),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ExerciseCard extends StatelessWidget {
   const _ExerciseCard({
     super.key,
@@ -311,7 +239,7 @@ class _ExerciseCard extends StatelessWidget {
   final int index;
   final _ExerciseRow row;
   final List<WorkoutSession> history;
-  final void Function(int setIndex, SetLog? log, int? reps, double? load) onToggle;
+  final void Function(int setIndex, SetLog? log, int? reps) onToggle;
   final VoidCallback onHistory;
 
   @override
@@ -323,13 +251,10 @@ class _ExerciseCard extends StatelessWidget {
         ? 'Removido da ficha'
         : [
             '${ex.sets} × ${ex.reps}',
-            if (ex.loadKg != null) '${formatKg(ex.loadKg)} kg',
-            if (ex.restSeconds > 0) 'descanso ${ex.restSeconds} s',
           ].join(' · ');
-    // Carga/repetições sugeridas: a última vez daquele exercício; senão o planejado.
+    // Repetições sugeridas: a última vez daquele exercício; senão o planejado.
     final last = ex == null ? null : lastSetFor(ex.id, ex.name, history);
     final suggestReps = last?.reps ?? (ex == null ? null : firstInt(ex.reps));
-    final suggestLoad = last?.loadKg ?? ex?.loadKg;
     return OrgCard(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
       child: Column(
@@ -363,8 +288,7 @@ class _ExerciseCard extends StatelessWidget {
               setIndex: j,
               log: row.logAt(j),
               suggestReps: suggestReps,
-              suggestLoad: suggestLoad,
-              onToggle: (log, reps, load) => onToggle(j, log, reps, load),
+              onToggle: (log, reps) => onToggle(j, log, reps),
             ),
         ],
       ),
@@ -379,7 +303,6 @@ class _SetRow extends StatefulWidget {
     required this.setIndex,
     required this.log,
     required this.suggestReps,
-    required this.suggestLoad,
     required this.onToggle,
   });
 
@@ -387,8 +310,7 @@ class _SetRow extends StatefulWidget {
   final int setIndex;
   final SetLog? log;
   final int? suggestReps;
-  final double? suggestLoad;
-  final void Function(SetLog? log, int? reps, double? load) onToggle;
+  final void Function(SetLog? log, int? reps) onToggle;
 
   @override
   State<_SetRow> createState() => _SetRowState();
@@ -396,30 +318,24 @@ class _SetRow extends StatefulWidget {
 
 class _SetRowState extends State<_SetRow> {
   late final TextEditingController _reps;
-  late final TextEditingController _load;
 
   @override
   void initState() {
     super.initState();
     final l = widget.log;
     _reps = TextEditingController(text: '${l != null ? l.reps ?? '' : widget.suggestReps ?? ''}');
-    _load = TextEditingController(text: formatKg(l != null ? l.loadKg : widget.suggestLoad));
   }
 
   @override
   void didUpdateWidget(_SetRow old) {
     super.didUpdateWidget(old);
     final l = widget.log;
-    if (l != null && (l.reps != old.log?.reps || l.loadKg != old.log?.loadKg)) {
-      _reps.text = '${l.reps ?? ''}';
-      _load.text = formatKg(l.loadKg);
-    }
+    if (l != null && l.reps != old.log?.reps) _reps.text = '${l.reps ?? ''}';
   }
 
   @override
   void dispose() {
     _reps.dispose();
-    _load.dispose();
     super.dispose();
   }
 
@@ -444,20 +360,10 @@ class _SetRowState extends State<_SetRow> {
             decoration: const InputDecoration(labelText: 'reps', isDense: true),
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            key: Key('set-load-$i-$j'),
-            controller: _load,
-            readOnly: done,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'kg', isDense: true),
-          ),
-        ),
         Checkbox(
           key: Key('set-check-$i-$j'),
           value: done,
-          onChanged: (_) => widget.onToggle(widget.log, int.tryParse(_reps.text.trim()), parseKg(_load.text)),
+          onChanged: (_) => widget.onToggle(widget.log, int.tryParse(_reps.text.trim())),
         ),
       ],
     );
