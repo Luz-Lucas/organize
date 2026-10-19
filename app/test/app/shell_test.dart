@@ -4,13 +4,25 @@ import 'package:organizacional/ui/org_widgets.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/domain/note.dart';
 import 'package:organizacional/domain/space.dart';
+import 'package:organizacional/features/fitness/fitness_screen.dart';
+import 'package:organizacional/features/shopping/shopping_screen.dart';
 
 import '../helpers.dart';
 
-const _desktopPaths = ['/', '/agenda', '/tarefas', '/notas', '/noticias', '/casa', '/ajustes'];
+const _desktopPaths = [
+  '/',
+  '/agenda',
+  '/tarefas',
+  '/notas',
+  '/academia',
+  '/compras',
+  '/noticias',
+  '/casa',
+  '/ajustes',
+];
 
 void main() {
-  testWidgets('tela larga mostra a barra lateral com os 7 itens e a árvore de notas',
+  testWidgets('tela larga mostra a barra lateral com os 9 itens e a árvore de notas',
       (tester) async {
     final repo = MemoryRepository();
     await repo.upsertSpace(const Space(id: 's1', name: 'Cálculo I', kind: SpaceKind.materia));
@@ -68,6 +80,45 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('more-/ajustes')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('theme-violeta')), findsOneWidget);
+  });
+
+  testWidgets('celular: Mais lista Academia e Compras no topo e abre as telas', (tester) async {
+    await pumpApp(tester, MemoryRepository(), size: const Size(400, 800), location: '/mais');
+    final academia = tester.getTopLeft(find.byKey(const ValueKey('more-/academia'))).dy;
+    final compras = tester.getTopLeft(find.byKey(const ValueKey('more-/compras'))).dy;
+    expect(academia, lessThan(compras));
+    expect(compras, lessThan(tester.getTopLeft(find.byKey(const ValueKey('more-/noticias'))).dy));
+    expect(find.byIcon(Icons.fitness_center), findsOneWidget);
+    expect(find.byIcon(Icons.shopping_cart_outlined), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('more-/academia')));
+    await tester.pumpAndSettle();
+    expect(find.byType(FitnessScreen), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('nav-/mais')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('more-/compras')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShoppingScreen), findsOneWidget);
+  });
+
+  testWidgets('celular: Academia e Compras acendem o item Mais da barra', (tester) async {
+    for (final path in ['/academia', '/compras']) {
+      await pumpApp(tester, MemoryRepository(), size: const Size(400, 800), location: path);
+      final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+      expect(bar.selectedIndex, 4, reason: path);
+    }
+  });
+
+  testWidgets('tela larga: a barra lateral abre Academia e Compras e marca o item ativo', (tester) async {
+    await pumpApp(tester, MemoryRepository(), size: const Size(1000, 800));
+    await tester.tap(find.byKey(const ValueKey('nav-/academia')));
+    await tester.pumpAndSettle();
+    expect(find.byType(FitnessScreen), findsOneWidget);
+    expect(find.byIcon(Icons.fitness_center), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('nav-/compras')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShoppingScreen), findsOneWidget);
   });
 
   testWidgets('Notas no celular abre a árvore de notas em tela cheia', (tester) async {

@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:organizacional/data/location_repository.dart';
+import 'package:organizacional/data/fitness_repository.dart';
 import 'package:organizacional/data/memory_alexa_repository.dart';
+import 'package:organizacional/data/shopping_repository.dart';
 import 'package:organizacional/data/memory_location_repository.dart';
 import 'package:organizacional/data/memory_news_repository.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/data/memory_settings_repository.dart';
 import 'package:organizacional/domain/alexa.dart';
 import 'package:organizacional/domain/calendar_event.dart';
+import 'package:organizacional/domain/event_tag.dart';
 import 'package:organizacional/domain/news.dart';
 import 'package:organizacional/domain/task_item.dart';
 import 'package:organizacional/domain/user_settings.dart';
+import 'package:organizacional/domain/workout.dart';
 import 'package:organizacional/features/email/email_card.dart';
 import 'package:organizacional/features/notes/note_screen.dart';
 import 'package:organizacional/location/location_service.dart';
@@ -58,112 +62,89 @@ MemoryLocationRepository _locationAt(double metersNorth) => MemoryLocationReposi
     );
 
 void main() {
-  group('Agora e a seguir', () {
-    testWidgets('mostra o evento em andamento e os próximos 2, com a sobra', (tester) async {
+  group('Para hoje', () {
+    testWidgets('mostra horário e local, destaca o que está em andamento e esmaece o que acabou', (tester) async {
       final repo = MemoryRepository();
+      await repo.upsertEvent(_ev('ja', 'Cedo', DateTime(2026, 9, 28, 7)));
       await repo.upsertEvent(_ev('a', 'Cálculo I', DateTime(2026, 9, 28, 9, 30)));
-      await repo.upsertEvent(_ev('b', 'Física', DateTime(2026, 9, 28, 11)));
-      await repo.upsertEvent(_ev('c', 'Química', DateTime(2026, 9, 28, 14), location: 'Lab 2'));
-      await repo.upsertEvent(_ev('d', 'Seminário', DateTime(2026, 9, 28, 18)));
+      await repo.upsertEvent(_ev('b', 'Física', DateTime(2026, 9, 28, 14), location: 'Lab 2'));
+      await repo.upsertEvent(_ev('amanha', 'Aula de amanhã', DateTime(2026, 9, 29, 8)));
       await pumpApp(tester, repo, now: _now, size: _phone);
-      expect(_in('card-now-next', find.text('Agora')), findsOneWidget);
-      expect(_in('card-now-next', find.text('A seguir')), findsOneWidget);
+      expect(_in('today-card', find.text('Para hoje')), findsOneWidget);
+      expect(_in('today-card', find.text('09:30–10:30')), findsOneWidget);
+      expect(_in('today-card', find.text('14:00–15:00 · Lab 2')), findsOneWidget);
+      expect(_in('today-card', find.text('agora')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-done-ja')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-done-a')), findsNothing);
+      expect(find.byKey(const ValueKey('today-done-b')), findsNothing);
+      expect(find.text('Aula de amanhã'), findsNothing);
+      await _tap(tester, find.byKey(const ValueKey('today-event-b')));
+      expect(_path(tester), '/agenda');
+    });
+
+    testWidgets('evento de dia inteiro vem primeiro', (tester) async {
+      final repo = MemoryRepository();
+      await repo.upsertEvent(_ev('a', 'Cálculo I', DateTime(2026, 9, 28, 8)));
+      await repo.upsertEvent(_ev('d', 'Feriado', DateTime(2026, 9, 28), allDay: true, length: const Duration(days: 1)));
+      await pumpApp(tester, repo, now: _now, size: _phone);
+      expect(tester.getTopLeft(find.text('Feriado')).dy, lessThan(tester.getTopLeft(find.text('Cálculo I')).dy));
+    });
+
+    testWidgets('prova ganha o selo "Prova"; aula comum não', (tester) async {
+      final repo = MemoryRepository();
+      await repo.upsertEvent(_ev('p', 'Prova de Redes', DateTime(2026, 9, 28, 14), location: 'Sala B-12'));
+      await repo.upsertEvent(_ev('a', 'Aula comum', DateTime(2026, 9, 28, 16)));
+      await pumpApp(tester, repo, now: _now, size: _phone);
+      expect(_in('today-event-p', find.text('Prova')), findsOneWidget);
+      expect(_in('today-event-a', find.text('Prova')), findsNothing);
+    });
+
+    testWidgets('fica de fora: academia, etiqueta secundária e série que se repete todo dia', (tester) async {
+      final repo = MemoryRepository();
+      await repo.upsertTag(const EventTag(id: 'sec', name: 'Lembrete', color: '#999999', role: EventTagRole.secondary));
+      await repo.upsertEvent(_ev('g', 'Academia', DateTime(2026, 9, 28, 6)));
+      await repo.upsertEvent(_ev('s', 'Passear com o cachorro', DateTime(2026, 9, 28, 7)).copyWith(tagId: 'sec'));
+      for (var i = 0; i < 7; i++) {
+        await repo.upsertEvent(_ev('r$i', 'Tomar remédio', DateTime(2026, 9, 28 + i, 9)).copyWith(seriesId: 'rem'));
+      }
+      await repo.upsertEvent(_ev('a', 'Cálculo I', DateTime(2026, 9, 28, 8)));
+      await pumpApp(tester, repo, now: _now, size: _phone);
       expect(find.text('Cálculo I'), findsOneWidget);
-      expect(find.text('09:30–10:30'), findsOneWidget);
-      expect(find.text('Física'), findsOneWidget);
-      expect(find.text('14:00–15:00 · Lab 2'), findsOneWidget);
-      expect(find.text('Seminário'), findsNothing);
-      expect(find.text('+ 1 evento mais tarde'), findsOneWidget);
-      await _tap(tester, find.byKey(const Key('card-now-next')));
-      expect(_path(tester), '/agenda');
+      expect(_in('today-card', find.text('Academia')), findsNothing);
+      expect(find.text('Passear com o cachorro'), findsNothing);
+      expect(find.text('Tomar remédio'), findsNothing);
     });
 
-    testWidgets('agenda livre hoje mostra o próximo dia com evento', (tester) async {
-      final repo = MemoryRepository();
-      await repo.upsertEvent(_ev('x', 'Aula de quarta', DateTime(2026, 9, 30, 8)));
-      await repo.upsertEvent(_ev('y', 'Aula de amanhã', DateTime(2026, 9, 29, 13)));
-      await pumpApp(tester, repo, now: _now, size: _phone);
-      expect(find.text('Agenda livre hoje'), findsOneWidget);
-      expect(find.text('Próximo: amanhã, 13:00 · Aula de amanhã'), findsOneWidget);
-    });
-
-    testWidgets('agenda livre sem nenhum evento à vista', (tester) async {
-      await pumpApp(tester, MemoryRepository(), now: _now, size: _phone);
-      expect(find.text('Agenda livre hoje'), findsOneWidget);
-      expect(find.text('Nenhum evento à vista.'), findsOneWidget);
-    });
-
-    testWidgets('depois que os eventos acabam: nada mais por hoje', (tester) async {
-      final repo = MemoryRepository();
-      await repo.upsertEvent(_ev('a', 'Cedo', DateTime(2026, 9, 28, 7)));
-      await pumpApp(tester, repo, now: _now, size: _phone);
-      expect(find.text('Nada mais por hoje'), findsOneWidget);
-      expect(find.text('Agenda livre hoje'), findsNothing);
-    });
-  });
-
-  group('Próxima prova', () {
-    testWidgets('amanhã às 10:00 com sala', (tester) async {
-      final repo = MemoryRepository();
-      await repo.upsertEvent(
-          _ev('p', 'Prova de Redes', DateTime(2026, 9, 29, 10), location: 'Sala B-12'));
-      await pumpApp(tester, repo, now: _now, size: _phone);
-      expect(find.byKey(const Key('card-exam')), findsOneWidget);
-      expect(find.text('Prova de Redes'), findsOneWidget);
-      expect(find.text('amanhã às 10:00'), findsOneWidget);
-      expect(find.text('Sala B-12'), findsOneWidget);
-      await _tap(tester, find.byKey(const Key('card-exam')));
-      expect(_path(tester), '/agenda');
-    });
-
-    testWidgets('em N dias, NPn conta como prova e o mais próximo vence', (tester) async {
-      final repo = MemoryRepository();
-      await repo.upsertEvent(_ev('p1', 'Prova de Redes', DateTime(2026, 10, 20, 10)));
-      await repo.upsertEvent(_ev('p2', 'NP1 Cálculo', DateTime(2026, 10, 3, 14)));
-      await repo.upsertEvent(_ev('a', 'Aula comum', DateTime(2026, 9, 29, 8)));
-      await pumpApp(tester, repo, now: _now, size: _phone);
-      expect(find.text('NP1 Cálculo'), findsOneWidget);
-      expect(find.text('em 5 dias'), findsOneWidget);
-      expect(find.text('Prova de Redes'), findsNothing);
-    });
-
-    testWidgets('sem prova nos próximos 30 dias o cartão não aparece', (tester) async {
-      final repo = MemoryRepository();
-      await repo.upsertEvent(_ev('p', 'Prova final', DateTime(2026, 11, 20, 10)));
-      await repo.upsertEvent(_ev('a', 'Aula comum', DateTime(2026, 9, 29, 8)));
-      await pumpApp(tester, repo, now: _now, size: _phone);
-      expect(find.byKey(const Key('card-exam')), findsNothing);
-    });
-  });
-
-  group('Tarefas', () {
-    testWidgets('mostra atrasadas, hoje e em andamento com prioridade e prazo', (tester) async {
+    testWidgets('mostra atrasadas e de hoje com prioridade; amanhã, sem data e concluída ficam fora', (tester) async {
       final repo = MemoryRepository();
       await repo.upsertTask(TaskItem(id: 'o', title: 'Resumo', dueAt: DateTime(2026, 9, 26, 23, 59)));
       await repo.upsertTask(TaskItem(
           id: 'h', title: 'Lista 3', dueAt: DateTime(2026, 9, 28, 23, 59), priority: TaskPriority.alta));
-      await repo.upsertTask(const TaskItem(id: 'd', title: 'Projeto', status: TaskStatus.doing));
+      await repo.upsertTask(TaskItem(id: 'x', title: 'Semana que vem', dueAt: DateTime(2026, 9, 29, 12)));
       await repo.upsertTask(const TaskItem(id: 'f', title: 'Sem data'));
+      await repo.upsertTask(TaskItem(
+          id: 'c', title: 'Já feita', dueAt: DateTime(2026, 9, 28, 9), status: TaskStatus.done));
       await pumpApp(tester, repo, now: _now, size: _phone);
-      expect(find.text('Atrasadas'), findsOneWidget);
-      expect(find.text('Resumo'), findsOneWidget);
+      expect(_in('today-card', find.text('Resumo')), findsOneWidget);
       expect(find.text('atrasada · 26 set.'), findsOneWidget);
-      expect(find.text('Lista 3'), findsOneWidget);
+      expect(_in('today-card', find.text('Lista 3')), findsOneWidget);
       expect(find.text('hoje'), findsOneWidget);
-      expect(_in('card-tasks', find.text('alta')), findsOneWidget);
-      expect(find.text('Projeto'), findsOneWidget);
-      expect(find.text('em andamento'), findsOneWidget);
-      expect(find.text('Sem data'), findsNothing);
+      expect(_in('today-card', find.text('alta')), findsOneWidget);
+      for (final t in ['Semana que vem', 'Sem data', 'Já feita']) {
+        expect(find.text(t), findsNothing, reason: t);
+      }
     });
 
-    testWidgets('mostra no máximo 5 tarefas e conta o resto', (tester) async {
+    testWidgets('mostra no máximo 5 tarefas e "+N tarefas" leva a Tarefas', (tester) async {
       final repo = MemoryRepository();
       for (var i = 0; i < 7; i++) {
         await repo.upsertTask(TaskItem(id: 'o$i', title: 'Atrasada $i', dueAt: DateTime(2026, 9, 20 + i)));
       }
       await pumpApp(tester, repo, now: _now, size: _phone);
-      expect(_in('card-tasks', find.byType(Checkbox)), findsNWidgets(5));
-      expect(find.text('+ 2 tarefas em destaque'), findsOneWidget);
+      expect(_in('today-card', find.byType(Checkbox)), findsNWidgets(5));
+      expect(find.text('+ 2 tarefas'), findsOneWidget);
+      await _tap(tester, find.byKey(const Key('today-more-tasks')));
+      expect(_path(tester), '/tarefas');
     });
 
     testWidgets('o checkbox conclui e "Desfazer" restaura', (tester) async {
@@ -198,37 +179,65 @@ void main() {
       expect((await repo.watchTasks().first).single.isDone, isFalse);
     });
 
-    testWidgets('campo rápido cria tarefa sem prazo e limpa o texto', (tester) async {
+    testWidgets('tocar numa tarefa abre Tarefas', (tester) async {
       final repo = MemoryRepository();
+      await repo.upsertTask(TaskItem(id: 't1', title: 'Lista 3', dueAt: DateTime(2026, 9, 28, 23, 59)));
       await pumpApp(tester, repo, now: _now, size: _phone);
-      await tester.ensureVisible(find.byKey(const Key('quick-task-field')));
-      await tester.enterText(find.byKey(const Key('quick-task-field')), '  Comprar caderno ');
-      await tester.tap(find.byKey(const Key('quick-task-add')));
-      await tester.pumpAndSettle();
-      final created = (await repo.watchTasks().first).single;
-      expect(created.title, 'Comprar caderno');
-      expect(created.dueAt, isNull);
-      expect(find.widgetWithText(TextField, 'Comprar caderno'), findsNothing);
-      expect(find.text('Tarefa adicionada'), findsOneWidget);
-    });
-
-    testWidgets('falha no campo rápido mantém o texto', (tester) async {
-      final repo = MemoryRepository();
-      await pumpApp(tester, repo, now: _now, size: _phone);
-      repo.failWrites = true;
-      await tester.ensureVisible(find.byKey(const Key('quick-task-field')));
-      await tester.enterText(find.byKey(const Key('quick-task-field')), 'Comprar caderno');
-      await tester.tap(find.byKey(const Key('quick-task-add')));
-      await tester.pumpAndSettle();
-      expect(find.text('Não foi possível adicionar. O texto continua no campo.'), findsOneWidget);
-      expect(find.widgetWithText(TextField, 'Comprar caderno'), findsOneWidget);
-    });
-
-    testWidgets('"Ver todas" abre Tarefas', (tester) async {
-      await pumpApp(tester, MemoryRepository(), now: _now, size: _phone);
-      expect(find.text('Nenhuma tarefa para hoje.'), findsOneWidget);
-      await _tap(tester, find.byKey(const Key('tasks-see-all')));
+      await _tap(tester, find.text('Lista 3'));
       expect(_path(tester), '/tarefas');
+    });
+
+    testWidgets('sem nada para hoje: "Dia livre"', (tester) async {
+      await pumpApp(tester, MemoryRepository(), now: _now, size: _phone);
+      expect(_in('today-card', find.text('Dia livre')), findsOneWidget);
+    });
+  });
+
+  group('removidos da Início', () {
+    testWidgets('sem Notícias, "Agora e a seguir", cartão de tarefas e "Próxima prova"', (tester) async {
+      final repo = MemoryRepository();
+      await repo.upsertEvent(_ev('p', 'Prova de Redes', DateTime(2026, 9, 29, 10)));
+      await repo.upsertTask(TaskItem(id: 't', title: 'Lista 3', dueAt: DateTime(2026, 9, 28, 23, 59)));
+      await pumpApp(tester, repo, now: _now, size: _phone, news: NewsRepositoryFixture().build(count: 3));
+      await tester.drag(find.byKey(const Key('dashboard-scroll')), const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      for (final k in ['card-news', 'open-news', 'card-now-next', 'card-tasks', 'card-exam', 'quick-task-field']) {
+        expect(find.byKey(Key(k)), findsNothing, reason: k);
+      }
+      expect(find.text('Manchete 0'), findsNothing);
+      expect(find.text('Agora e a seguir'), findsNothing);
+      expect(find.text('Próxima prova'), findsNothing);
+      expect(find.byKey(const Key('open-home')), findsOneWidget);
+    });
+  });
+
+  group('Academia e Compras', () {
+    testWidgets('a Início mostra os dois cartões; Abrir leva às telas', (tester) async {
+      await pumpApp(tester, MemoryRepository(), now: _now, size: _phone);
+      expect(find.byKey(const Key('gym-card')), findsOneWidget);
+      expect(find.byKey(const Key('gym-create')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('shopping-card')));
+      expect(find.byKey(const Key('shopping-card')), findsOneWidget);
+      await _tap(tester, find.byKey(const Key('shopping-open')));
+      expect(_path(tester), '/compras');
+    });
+
+    testWidgets('tocar no cartão da Academia abre /academia', (tester) async {
+      await pumpApp(tester, MemoryRepository(), now: _now, size: _phone);
+      await _tap(tester, find.descendant(of: find.byKey(const Key('gym-card')), matching: find.text('Academia')));
+      expect(_path(tester), '/academia');
+    });
+
+    testWidgets('treino de hoje aparece na Academia e fora do Para hoje', (tester) async {
+      final fit = MemoryFitnessRepository();
+      await fit.upsertWorkout(const Workout(id: 'w1', name: 'Treino B', exercises: [
+        WorkoutExercise(id: 'e1', workoutId: 'w1', name: 'Supino', sets: 3, reps: '8–12'),
+      ]));
+      final repo = MemoryRepository();
+      await repo.upsertEvent(_ev('g', 'Treino', DateTime(2026, 9, 28, 18)));
+      await pumpApp(tester, repo, now: _now, size: _phone, fitnessRepo: fit);
+      expect(_in('gym-card', find.text('Hoje: Treino B')), findsOneWidget);
+      expect(_in('today-card', find.text('Treino')), findsNothing);
     });
   });
 
@@ -303,35 +312,6 @@ void main() {
     });
   });
 
-  group('Notícias', () {
-    NewsRepositoryFixture fixture() => NewsRepositoryFixture();
-
-    testWidgets('mostra as 3 primeiras manchetes e o título abre Notícias', (tester) async {
-      final news = fixture().build(count: 5);
-      await pumpApp(tester, MemoryRepository(), now: _now, size: _phone, news: news);
-      expect(find.text('Manchete 0'), findsOneWidget);
-      expect(find.text('Manchete 2'), findsOneWidget);
-      expect(find.text('Manchete 3'), findsNothing);
-      await _tap(tester, find.descendant(of: find.byKey(const Key('card-news')), matching: find.text('Notícias')));
-      expect(_path(tester), '/noticias');
-    });
-
-    testWidgets('puxar para atualizar relê o feed', (tester) async {
-      final news = fixture().build(count: 1);
-      await pumpApp(tester, MemoryRepository(), now: _now, size: _phone, news: news);
-      expect(find.text('Manchete 0'), findsOneWidget);
-      await news.setSubscribed('b', true); // mudança no servidor
-      await tester.fling(find.byKey(const Key('dashboard-scroll')), const Offset(0, 400), 1000);
-      await tester.pumpAndSettle();
-      expect(find.text('Manchete nova'), findsOneWidget);
-    });
-
-    testWidgets('sem manchetes mostra dica', (tester) async {
-      await pumpApp(tester, MemoryRepository(), now: _now, size: _phone);
-      expect(find.textContaining('Nenhuma manchete'), findsOneWidget);
-    });
-  });
-
   group('ações rápidas', () {
     testWidgets('Tarefa abre o editor em modo de criação', (tester) async {
       await pumpApp(tester, MemoryRepository(), now: _now, size: _phone);
@@ -381,27 +361,22 @@ void main() {
   });
 
   group('layout', () {
-    testWidgets('celular: uma coluna na ordem de importância', (tester) async {
-      final repo = MemoryRepository();
-      await repo.upsertEvent(_ev('p', 'Prova de Redes', DateTime(2026, 9, 29, 10)));
-      await pumpApp(tester, repo, now: _now, size: _phone);
+    testWidgets('celular: uma coluna na ordem Para hoje, Academia, Compras, Despertares, E-mail', (tester) async {
+      const plan = WakePlan(
+          id: 'p1', label: 'Aula', days: [1, 2, 3, 4, 5], hour: 7, minute: 0, echoDeviceId: 'ECHO');
+      await pumpApp(tester, MemoryRepository(),
+          now: _now, size: _phone, alexa: MemoryAlexaRepository(plans: const [plan]));
       double top(String key) => tester.getTopLeft(find.byKey(Key(key))).dy;
-      final order = [
-        'card-now-next',
-        'card-exam',
-        'card-tasks',
-        'email-card',
-        'card-news',
-      ];
+      final order = ['today-card', 'gym-card', 'shopping-card', 'wake-card', 'email-card'];
       for (var i = 1; i < order.length; i++) {
         expect(top(order[i]), greaterThan(top(order[i - 1])), reason: '${order[i]} depois de ${order[i - 1]}');
       }
     });
 
-    testWidgets('computador: duas colunas, e-mail/notícias à direita', (tester) async {
+    testWidgets('computador: Para hoje à esquerda; os demais à direita', (tester) async {
       await pumpApp(tester, MemoryRepository(), now: _now);
-      final left = tester.getTopLeft(find.byKey(const Key('card-tasks'))).dx;
-      for (final k in ['email-card', 'card-news']) {
+      final left = tester.getTopLeft(find.byKey(const Key('today-card'))).dx;
+      for (final k in ['gym-card', 'shopping-card', 'email-card']) {
         expect(tester.getTopLeft(find.byKey(Key(k))).dx, greaterThan(left), reason: k);
       }
       expect(tester.takeException(), isNull);
@@ -418,7 +393,7 @@ void main() {
       await repo.upsertEvent(_ev('d', 'Dia inteiro com um nome muito longo mesmo', DateTime(2026, 9, 28),
           allDay: true, length: const Duration(days: 1)));
       await repo.upsertEvent(_ev('p', 'Prova de Sistemas Operacionais e Arquitetura de Computadores',
-          DateTime(2026, 10, 2, 10), location: 'Auditório Principal do Campus Central, andar 2'));
+          DateTime(2026, 9, 28, 18), location: 'Auditório Principal do Campus Central, andar 2'));
       for (var i = 0; i < 7; i++) {
         await repo.upsertTask(TaskItem(
           id: 't$i',
@@ -430,12 +405,31 @@ void main() {
       return repo;
     }
 
+    Future<MemoryFitnessRepository> gym() async {
+      final fit = MemoryFitnessRepository();
+      await fit.upsertWorkout(const Workout(
+        id: 'w1',
+        name: 'Treino B — peito, ombros e tríceps com nome bem comprido',
+        exercises: [WorkoutExercise(id: 'e1', workoutId: 'w1', name: 'Supino reto com barra')],
+      ));
+      return fit;
+    }
+
+    Future<MemoryShoppingRepository> market() async {
+      final shop = MemoryShoppingRepository();
+      final list = await shop.ensureDefaultList();
+      for (final n in ['Leite integral de caixinha com tampa', 'Pão', 'Queijo minas frescal', 'Ovos']) {
+        await shop.addItem(listId: list.id, name: n);
+      }
+      return shop;
+    }
+
+    const plan = WakePlan(id: 'p1', label: 'Aula', days: [1, 2, 3, 4, 5], hour: 7, minute: 0, echoDeviceId: 'ECHO');
+
     for (final scale in [1.0, 1.3]) {
       testWidgets('360 dp com texto em ${scale}x', (tester) async {
         tester.platformDispatcher.textScaleFactorTestValue = scale;
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        const plan = WakePlan(
-            id: 'p1', label: 'Aula', days: [1, 2, 3, 4, 5], hour: 7, minute: 0, echoDeviceId: 'ECHO');
         await pumpApp(
           tester,
           await richData(),
@@ -447,22 +441,8 @@ void main() {
             status: BridgeStatus(state: BridgeState.authRequired, lastSeen: _now),
             plans: const [plan],
           ),
-          news: MemoryNewsRepository(
-            sources: const [
-              NewsSource(id: 'a', name: 'Um portal com nome longo', section: 's', feedUrl: 'https://a', subscribed: true),
-            ],
-            items: [
-              for (var i = 0; i < 4; i++)
-                NewsItem(
-                  id: 'i$i',
-                  sourceId: 'a',
-                  sourceName: 'Um portal com nome longo',
-                  title: 'Uma manchete muito comprida que precisa quebrar em várias linhas número $i',
-                  url: 'https://a/$i',
-                  publishedAt: DateTime(2026, 9, 28, 8),
-                ),
-            ],
-          ),
+          fitnessRepo: await gym(),
+          shoppingRepo: await market(),
         );
         expect(tester.takeException(), isNull);
         // Rola até o fim: tudo precisa caber na largura.
@@ -473,6 +453,21 @@ void main() {
         expect(scroll.width, 360);
       });
     }
+
+    testWidgets('tela larga com dados cheios', (tester) async {
+      await pumpApp(
+        tester,
+        await richData(),
+        now: _now,
+        alexa: MemoryAlexaRepository(plans: const [plan]),
+        fitnessRepo: await gym(),
+        shoppingRepo: await market(),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.drag(find.byKey(const Key('dashboard-scroll')), const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
   });
 }
 

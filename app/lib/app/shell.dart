@@ -12,12 +12,14 @@ const _inicio = (path: '/', icon: Icons.space_dashboard_outlined, label: 'Iníci
 const _agenda = (path: '/agenda', icon: Icons.calendar_month_outlined, label: 'Agenda');
 const _tarefas = (path: '/tarefas', icon: Icons.check_circle_outline, label: 'Tarefas');
 const _notas = (path: '/notas', icon: Icons.description_outlined, label: 'Notas');
+const _academia = (path: '/academia', icon: Icons.fitness_center, label: 'Academia');
+const _compras = (path: '/compras', icon: Icons.shopping_cart_outlined, label: 'Compras');
 const _noticias = (path: '/noticias', icon: Icons.newspaper_outlined, label: 'Notícias');
 const _casa = (path: '/casa', icon: Icons.cottage_outlined, label: 'Casa');
 const _ajustes = (path: '/ajustes', icon: Icons.settings_outlined, label: 'Ajustes');
 const _mais = (path: '/mais', icon: Icons.more_horiz, label: 'Mais');
 
-const _sidebarItems = [_inicio, _agenda, _tarefas, _notas, _noticias, _casa, _ajustes];
+const _sidebarItems = [_inicio, _agenda, _tarefas, _notas, _academia, _compras, _noticias, _casa, _ajustes];
 const _bottomItems = [_inicio, _agenda, _tarefas, _notas, _mais];
 
 /// Qual destino de [_sidebarItems] está ativo para [location] (ou null).
@@ -30,6 +32,8 @@ String? _activePath(String location) {
       location.startsWith('/espacos')) {
     return '/notas';
   }
+  if (location.startsWith('/academia')) return '/academia';
+  if (location.startsWith('/compras')) return '/compras';
   if (location.startsWith('/noticias')) return '/noticias';
   if (location.startsWith('/casa')) return '/casa';
   if (location.startsWith('/ajustes')) return '/ajustes';
@@ -80,8 +84,8 @@ class _AppShellState extends State<AppShell> {
         ),
       );
     }
-    // No celular, rotas de "Mais" (Notícias, Casa, Ajustes) acendem o item Mais.
-    final moreActive = const {'/noticias', '/casa', '/ajustes', '/mais'}.contains(active);
+    // No celular, rotas de "Mais" (Academia, Compras, Notícias, Casa, Ajustes) acendem o item Mais.
+    final moreActive = const {'/academia', '/compras', '/noticias', '/casa', '/ajustes', '/mais'}.contains(active);
     final index = moreActive ? 4 : _bottomItems.indexWhere((d) => d.path == active);
     return Scaffold(
       body: UpdateBannerHost(child: widget.child),

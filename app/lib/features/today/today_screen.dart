@@ -25,6 +25,8 @@ import '../../ui/org_theme.dart';
 import '../agenda/event_dialog.dart';
 import '../agenda/tag_style.dart';
 import '../email/email_card.dart';
+import '../fitness/workout_today_card.dart';
+import '../shopping/shopping_card.dart';
 import '../tasks/task_dialog.dart';
 import 'dashboard_cards.dart';
 import 'dashboard_data.dart';
@@ -34,7 +36,7 @@ import 'wake_card.dart';
 /// duas colunas.
 const double dashboardWideContent = 640;
 
-/// Início: painel com o que importa de relance, em cartões compactos.
+/// Início: cabeçalho, ações rápidas, "Para hoje", Academia, Compras, Despertares e E-mail.
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
 
@@ -48,8 +50,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   @override
   void initState() {
     super.initState();
-    // Ao entrar em Hoje, relê as manchetes (o provider pode seguir vivo na troca de tela).
-    ref.invalidate(newsFeedProvider);
     _scheduleMidnightRollover();
   }
 
@@ -67,18 +67,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final nextMidnight = DateTime(now.year, now.month, now.day + 1);
     _midnightTimer = Timer(nextMidnight.difference(now), () {
       if (!mounted) return;
-      ref.invalidate(newsFeedProvider);
       setState(_scheduleMidnightRollover);
     });
-  }
-
-  Future<void> _refresh() async {
-    ref.invalidate(newsFeedProvider);
-    try {
-      await ref.read(newsFeedProvider.future);
-    } catch (_) {
-      // O cartão de notícias mostra o erro; o gesto só precisa terminar.
-    }
   }
 
   // --- Ações rápidas --------------------------------------------------------
@@ -180,12 +170,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   ),
                 ],
               ),
-            ),
-            IconButton(
-              key: const Key('open-news'),
-              tooltip: 'Notícias',
-              icon: const Icon(Icons.newspaper_outlined),
-              onPressed: () => context.go('/noticias'),
             ),
             IconButton(
               key: const Key('open-home'),
@@ -299,12 +283,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final events = ref.watch(eventsFromProvider(startOfDay(now)));
     final tasks = ref.watch(tasksProvider);
     final spaces = ref.watch(spacesProvider);
-    final feed = ref.watch(newsFeedProvider);
     final bridge = ref.watch(bridgeStatusProvider).value;
     final plansAsync = ref.watch(wakePlansProvider);
     final plans = plansAsync.value ?? const <WakePlan>[];
     final names = {for (final s in spaces.value ?? const <Space>[]) s.id: s.name};
-    final exam = events.value == null ? null : nextExam(now, events.value!);
     final strip = _statusStrip(
       now,
       connectionProblem: events.hasError || tasks.hasError,
@@ -312,21 +294,21 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       plans: plans,
     );
 
-    final nowNext = NowNextCard(
+    final paraHoje = ParaHojeCard(
       now: now,
       events: events,
+      tasks: tasks,
       spaceNames: names,
       tags: tagMap(ref.watch(eventTagsProvider).value ?? const <EventTag>[]),
     );
+    final gym = WorkoutTodayCard(onOpen: () => context.go('/academia'));
+    const shopping = ShoppingCard();
     final wakeCard = WakeCard(
       now: now,
       plans: plansAsync,
       overrides: ref.watch(wakeOverridesProvider).value ?? const <WakeOverride>[],
     );
-    final examCard = exam == null ? null : ExamCard(now: now, info: exam);
-    final tasksCard = TasksCard(now: now, tasks: tasks, spaceNames: names);
     const email = EmailCard();
-    final news = NewsCard(now: now, feed: feed);
 
     const gap = SizedBox(height: 12);
     List<Widget> spaced(List<Widget?> items) => [
@@ -342,47 +324,43 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             ?strip,
             _quickActions(),
           ];
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: SingleChildScrollView(
-              key: const Key('dashboard-scroll'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1120),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ...[
-                        for (final w in top) ...[w, const SizedBox(height: 8)],
-                      ],
-                      const SizedBox(height: 4),
-                      if (!wide)
-                        ...spaced([nowNext, wakeCard, examCard, tasksCard, email, news])
-                      else
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: spaced([nowNext, wakeCard, examCard, tasksCard]),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              flex: 2,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: spaced([email, news]),
-                              ),
-                            ),
-                          ],
-                        ),
+          return SingleChildScrollView(
+            key: const Key('dashboard-scroll'),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1120),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ...[
+                      for (final w in top) ...[w, const SizedBox(height: 8)],
                     ],
-                  ),
+                    const SizedBox(height: 4),
+                    if (!wide)
+                      ...spaced([paraHoje, gym, shopping, wakeCard, email])
+                    else
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: spaced([paraHoje]),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: spaced([gym, shopping, wakeCard, email]),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
                 ),
               ),
             ),

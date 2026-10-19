@@ -137,7 +137,7 @@ Em https://developer.amazon.com/alexa/console/ask:
 3. **Endpoint**: HTTPS → `https://<DOMAIN>/alexa`, certificado **"My development endpoint has a certificate from a trusted certificate authority"** → **Save**.
 4. **Test**: ative **Development** e digite "abrir organizacional".
 
-Esperado: a skill responde "Skill ainda não configurada..." e `docker compose logs bridge | grep "skill chamada"` mostra `amzn1.ask.account...`. Copie esse valor para `ALEXA_ALLOWED_USER_ID` no `.env`, rode `docker compose up -d` e teste de novo: o resumo do dia é falado. No Echo: "Alexa, abre organizacional".
+Esperado: a skill responde "Skill ainda não configurada..." e `docker compose logs bridge | grep "skill chamada"` mostra `amzn1.ask.account...`. Copie esse valor para `ALEXA_ALLOWED_USER_ID` no `.env`, rode `docker compose up -d` e teste de novo: o resumo do dia é falado. No Echo: "Alexa, abre organize".
 
 ### Operação
 - Subir/atualizar: `cd bridge && docker compose up -d --build`. Saúde: `https://$DOMAIN/health`.
@@ -147,7 +147,7 @@ Esperado: a skill responde "Skill ainda não configurada..." e `docker compose l
   3. `docker compose restart bridge`
 - Diagnóstico: `docker compose run --rm bridge node dist/scripts/smoke.js`.
 - Despertares: se a ponte cair, o **alarme reserva** (criado até 24 h antes no próprio Echo) toca 10 min depois do horário.
-- Skill: "Alexa, abre organizacional" / "Alexa, pergunte ao organizacional quais são as notícias".
+- Skill: "Alexa, abre organize" / "Alexa, pergunte ao organize quais são as notícias" / "Alexa, peça ao organize para adicionar leite" / "Alexa, pergunte ao organize o que tem na lista".
 
 ### Teste manual da Fase 3 (com a ponte no ar)
 Rode o app: `cd app && flutter run -d linux --dart-define-from-file=env.json`.

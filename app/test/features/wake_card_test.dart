@@ -65,13 +65,13 @@ Future<void> _menu(WidgetTester tester, String planId, String itemKey) async {
 
 void main() {
   group('cartão Despertares na Início', () {
-    testWidgets('aparece logo depois de "Agora e a seguir" e resume o despertar', (tester) async {
+    testWidgets('aparece depois de Para hoje, Academia e Compras, antes do e-mail, e resume o despertar', (tester) async {
       await _pump(tester, _alexa());
-      final nowNext = tester.getTopLeft(find.byKey(const Key('card-now-next'))).dy;
-      final wake = tester.getTopLeft(find.byKey(const Key('wake-card'))).dy;
-      expect(wake, greaterThan(nowNext));
-      // nada entre os dois: o cartão de tarefas fica depois
-      expect(tester.getTopLeft(find.byKey(const Key('card-tasks'))).dy, greaterThan(wake));
+      double top(String key) => tester.getTopLeft(find.byKey(Key(key))).dy;
+      expect(top('wake-card'), greaterThan(top('shopping-card')));
+      expect(top('shopping-card'), greaterThan(top('gym-card')));
+      expect(top('gym-card'), greaterThan(top('today-card')));
+      expect(top('email-card'), greaterThan(top('wake-card')));
       expect(_inCard(find.text('Aula cedo')), findsOneWidget);
       expect(_inCard(find.text('07:00')), findsOneWidget);
       expect(_inCard(find.text('Dias úteis')), findsOneWidget);
@@ -452,10 +452,11 @@ void main() {
       });
     }
 
-    testWidgets('no desktop vai para a coluna da esquerda, junto de "Agora e a seguir"', (tester) async {
+    testWidgets('no desktop vai para a coluna da direita, junto de Academia e Compras', (tester) async {
       await _pump(tester, _alexa(), size: const Size(1200, 900));
-      final left = tester.getTopLeft(find.byKey(const Key('card-now-next'))).dx;
-      expect(tester.getTopLeft(find.byKey(const Key('wake-card'))).dx, left);
+      final right = tester.getTopLeft(find.byKey(const Key('gym-card'))).dx;
+      expect(tester.getTopLeft(find.byKey(const Key('wake-card'))).dx, right);
+      expect(right, greaterThan(tester.getTopLeft(find.byKey(const Key('today-card'))).dx));
     });
   });
 

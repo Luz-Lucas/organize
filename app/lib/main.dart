@@ -15,6 +15,8 @@ import 'app_icon/app_icon.dart';
 import 'data/github_repository.dart';
 import 'features/agenda/agenda_filter.dart';
 import 'features/agenda/agenda_view_prefs.dart';
+import 'features/fitness/fitness_providers.dart';
+import 'features/shopping/shopping_providers.dart';
 import 'features/notes/notebooks/notebooks_prefs.dart';
 import 'files/files_platform.dart';
 import 'data/supabase_alexa_repository.dart';
@@ -24,6 +26,8 @@ import 'data/email_repository.dart';
 import 'data/location_repository.dart';
 import 'data/share_intent_service.dart';
 import 'data/supabase_drive_repository.dart';
+import 'data/supabase_fitness_repository.dart';
+import 'data/supabase_shopping_repository.dart';
 import 'data/supabase_email_repository.dart';
 import 'data/supabase_location_repository.dart';
 import 'data/supabase_news_repository.dart';
@@ -107,6 +111,8 @@ Future<void> main() async {
       driveRepositoryProvider.overrideWithValue(SupabaseDriveRepository(client)),
       if (isAndroid) shareIntentServiceProvider.overrideWithValue(MethodChannelShareIntentService()),
       githubRepositoryProvider.overrideWithValue(SupabaseGithubRepository(client)),
+      fitnessRepositoryProvider.overrideWithValue(SupabaseFitnessRepository(client)),
+      shoppingRepositoryProvider.overrideWithValue(SupabaseShoppingRepository(client)),
       notebookRepositoryProvider.overrideWithValue(SupabaseNotebookRepository(client)),
       notebookPendingStoreProvider.overrideWithValue(const SharedPreferencesNotebookPendingStore()),
       handwritingPrefsStoreProvider.overrideWithValue(const SharedPreferencesHandwritingPrefsStore()),

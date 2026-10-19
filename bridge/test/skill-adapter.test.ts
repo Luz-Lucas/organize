@@ -6,7 +6,7 @@ import { buildSkill } from '../src/skill.js';
 
 describe('ExpressAdapter', () => {
   const app = express();
-  const skill = buildSkill({ allowedUserId: 'u', briefingInput: async () => { throw new Error('não deve ser chamado'); }, log: () => {} });
+  const skill = buildSkill({ allowedUserId: 'u', briefingInput: async () => { throw new Error('não deve ser chamado'); }, log: () => {}, addShopping: async () => { throw new Error('não deve ser chamado'); }, shoppingSummary: async () => [] });
   const adapter = new ExpressAdapter(skill, true, true);
   app.post('/alexa', adapter.getRequestHandlers());
   const server = app.listen(0);

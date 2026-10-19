@@ -180,7 +180,7 @@ export function ddmmyyyy(date: Date, tz: string): string {
 }
 
 /** Garante que a linha `id` existe e pertence ao usuário (service-role ignora RLS). */
-export async function assertOwned(ctx: ToolContext, table: 'spaces' | 'notes' | 'tasks' | 'events', id: string, what: string): Promise<void> {
+export async function assertOwned(ctx: ToolContext, table: 'spaces' | 'notes' | 'tasks' | 'events' | 'workouts' | 'shopping_items', id: string, what: string): Promise<void> {
   const { data, error } = await ctx.db.from(table).select('id').eq('id', id).eq('user_id', ctx.userId).maybeSingle();
   if (error) throw Object.assign(new Error('erro do banco'), { code: error.code });
   if (!data) throw new UserError(`${what} não encontrado(a).`);

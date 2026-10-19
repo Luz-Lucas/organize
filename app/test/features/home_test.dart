@@ -4,6 +4,7 @@ import 'package:organizacional/data/memory_alexa_repository.dart';
 import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/data/memory_settings_repository.dart';
 import 'package:organizacional/domain/user_settings.dart';
+import 'package:organizacional/features/home/home_screen.dart';
 import 'package:organizacional/ui/org_widgets.dart';
 import 'package:organizacional/domain/alexa.dart';
 
@@ -119,7 +120,8 @@ void main() {
     expect(saved.days, [6]);
     expect(saved.echoDeviceId, 'ECHO');
     expect(saved.spotifyQuery, 'rock');
-    expect(find.text('Academia'), findsOneWidget); // voltou para Casa
+    // voltou para Casa (a barra lateral também tem um item "Academia")
+    expect(find.descendant(of: find.byType(HomeScreen), matching: find.text('Academia')), findsOneWidget);
   });
 
   group('atraso do resumo em segundos', () {

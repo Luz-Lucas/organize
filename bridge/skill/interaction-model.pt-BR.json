@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "organizacional",
+      "invocationName": "organize",
       "intents": [
         {
           "name": "ResumoDoDiaIntent",
@@ -12,6 +12,16 @@
           "name": "NoticiasIntent",
           "slots": [],
           "samples": ["quais são as notícias", "notícias", "manchetes", "me conta as notícias", "o que está acontecendo"]
+        },
+        {
+          "name": "AdicionarCompraIntent",
+          "slots": [{ "name": "item", "type": "AMAZON.SearchQuery" }],
+          "samples": ["adicionar {item}", "adicionar {item} na lista", "colocar {item} na lista", "pôr {item} na lista de compras", "anotar {item} na lista"]
+        },
+        {
+          "name": "ListaDeComprasIntent",
+          "slots": [],
+          "samples": ["o que tem na lista", "o que falta comprar", "minha lista de compras", "lista do mercado"]
         },
         { "name": "AMAZON.HelpIntent", "samples": [] },
         { "name": "AMAZON.StopIntent", "samples": [] },

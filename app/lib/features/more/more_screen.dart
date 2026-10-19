@@ -12,6 +12,8 @@ class MoreScreen extends StatelessWidget {
   static const _pushed = {'/github', '/documentos'};
 
   static const _items = [
+    (path: '/academia', icon: Icons.fitness_center, label: 'Academia'),
+    (path: '/compras', icon: Icons.shopping_cart_outlined, label: 'Compras'),
     (path: '/noticias', icon: Icons.newspaper_outlined, label: 'Notícias'),
     (path: '/casa', icon: Icons.cottage_outlined, label: 'Casa'),
     (path: '/github', icon: Icons.code, label: 'GitHub'),

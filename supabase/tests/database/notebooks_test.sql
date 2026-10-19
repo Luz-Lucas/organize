@@ -116,8 +116,8 @@ select is((select count(*) from note_pages where note_id = 'bbbbbbbb-bbbb-bbbb-b
 
 -- Storage: bucket e policies do dono por prefixo <user_id>/
 select is((select public from storage.buckets where id = 'notebook-images'), false, 'bucket notebook-images é privado');
-select is((select file_size_limit from storage.buckets where id = 'notebook-images'), 10485760::bigint,
-  'bucket limita imagens a 10 MB');
+select is((select file_size_limit from storage.buckets where id = 'notebook-images'), 52428800::bigint,
+  'bucket limita arquivos a 50 MB (imagens e PDFs, 20261028)');
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);

@@ -134,14 +134,15 @@ void main() {
     expect(await news.sources(), isEmpty);
   });
 
-  testWidgets('Hoje mostra manchetes e o ícone abre Notícias', (tester) async {
+  testWidgets('Hoje não mostra mais manchetes; Notícias abre pela barra lateral', (tester) async {
     await pumpApp(tester, MemoryRepository(), now: _now, news: _news());
-    expect(find.descendant(of: find.byKey(const Key('card-news')), matching: find.text('Notícias')),
-        findsOneWidget);
-    expect(find.text('Nova IA brasileira'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('open-news')));
+    expect(find.byKey(const Key('card-news')), findsNothing);
+    expect(find.byKey(const Key('open-news')), findsNothing);
+    expect(find.text('Nova IA brasileira'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('nav-/noticias')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Notícias'), findsOneWidget);
+    expect(find.text('Nova IA brasileira'), findsOneWidget);
   });
 
   testWidgets('Ajustes tem botão de voltar para Notícias', (tester) async {
@@ -154,12 +155,16 @@ void main() {
     expect(find.widgetWithText(AppBar, 'Notícias'), findsOneWidget);
   });
 
-  testWidgets('Notícias relê o feed ao entrar vindo de Hoje', (tester) async {
+  testWidgets('Notícias relê o feed a cada vez que se entra vindo de Hoje', (tester) async {
     final news = _news();
     await pumpApp(tester, MemoryRepository(), now: _now, news: news);
+    await tester.tap(find.byKey(const ValueKey('nav-/noticias')));
+    await tester.pumpAndSettle();
     expect(find.text('Chuva forte em BH'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('nav-/')));
+    await tester.pumpAndSettle();
     await news.setSubscribed('g1', false); // mudança no servidor
-    await tester.tap(find.byKey(const Key('open-news')));
+    await tester.tap(find.byKey(const ValueKey('nav-/noticias')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Notícias'), findsOneWidget);
     expect(find.text('Chuva forte em BH'), findsNothing);

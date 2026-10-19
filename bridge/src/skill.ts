@@ -1,13 +1,18 @@
 import askCore from 'ask-sdk-core';
 import type { ErrorHandler, HandlerInput, RequestHandler, Skill } from 'ask-sdk-core';
 import { buildBriefing, escapeSsml, headlinesText, type BriefingInput } from './briefing.js';
+import { addedText, listSummaryText, parseShoppingUtterance } from './shopping.js';
 
-const { SkillBuilders, getRequestType, getIntentName, getUserId } = askCore;
+const { SkillBuilders, getRequestType, getIntentName, getUserId, getSlotValue } = askCore;
 
 export interface SkillDeps {
   allowedUserId: string | null;
   briefingInput: () => Promise<BriefingInput>;
   log: (m: string) => void;
+  /** Põe itens na lista (`null` = padrão, "Mercado"); o que já estava na lista não marcada vem em `skipped`. */
+  addShopping: (items: string[], list: string | null) => Promise<{ added: string[]; skipped: string[]; list: string }>;
+  /** Listas com os itens ainda não marcados. */
+  shoppingSummary: () => Promise<{ list: string; items: string[] }[]>;
 }
 
 export function buildSkill(deps: SkillDeps): Skill {
@@ -34,11 +39,39 @@ export function buildSkill(deps: SkillDeps): Skill {
     canHandle: (h) => isIntent(h, 'NoticiasIntent'),
     handle: async (h) => say(h, headlinesText((await deps.briefingInput()).news)),
   };
+  const addShopping: RequestHandler = {
+    canHandle: (h) => isIntent(h, 'AdicionarCompraIntent'),
+    handle: async (h) => {
+      const spoken = getSlotValue(h.requestEnvelope, 'item') ?? '';
+      try {
+        const lists = (await deps.shoppingSummary()).map((l) => l.list);
+        const { list, items } = parseShoppingUtterance(spoken, lists);
+        if (items.length === 0) {
+          return h.responseBuilder.speak('O que você quer adicionar?').reprompt('O que você quer adicionar à lista?').getResponse();
+        }
+        return say(h, addedText(await deps.addShopping(items, list)));
+      } catch (e) {
+        deps.log(`erro nas compras: ${(e as Error).message}`);
+        return say(h, 'Não consegui acessar sua lista de compras agora. Tente de novo em instantes.');
+      }
+    },
+  };
+  const readShopping: RequestHandler = {
+    canHandle: (h) => isIntent(h, 'ListaDeComprasIntent'),
+    handle: async (h) => {
+      try {
+        return say(h, listSummaryText(await deps.shoppingSummary()));
+      } catch (e) {
+        deps.log(`erro nas compras: ${(e as Error).message}`);
+        return say(h, 'Não consegui acessar sua lista de compras agora. Tente de novo em instantes.');
+      }
+    },
+  };
   const help: RequestHandler = {
     canHandle: (h) => isIntent(h, 'AMAZON.HelpIntent', 'AMAZON.FallbackIntent'),
     handle: (h) =>
       h.responseBuilder
-        .speak('Você pode dizer: qual é o meu dia. Ou: quais são as notícias.')
+        .speak('Você pode dizer: qual é o meu dia. Ou: quais são as notícias. Ou: adicionar leite.')
         .reprompt('O que você quer saber?')
         .getResponse(),
   };
@@ -59,7 +92,7 @@ export function buildSkill(deps: SkillDeps): Skill {
   };
 
   return SkillBuilders.custom()
-    .addRequestHandlers(guard, briefing, news, help, stop, ended)
+    .addRequestHandlers(guard, briefing, news, addShopping, readShopping, help, stop, ended)
     .addErrorHandlers(errors)
     .create();
 }

@@ -10,6 +10,7 @@ import 'package:organizacional/data/alexa_repository.dart';
 import 'package:organizacional/data/drive_repository.dart';
 import 'package:organizacional/data/email_repository.dart';
 import 'package:organizacional/data/file_picker_service.dart';
+import 'package:organizacional/data/fitness_repository.dart';
 import 'package:organizacional/data/memory_drive_repository.dart';
 import 'package:organizacional/data/github_repository.dart';
 import 'package:organizacional/data/memory_github_repository.dart';
@@ -23,6 +24,9 @@ import 'package:organizacional/data/news_repository.dart';
 import 'package:organizacional/data/memory_settings_repository.dart';
 import 'package:organizacional/data/repository.dart';
 import 'package:organizacional/data/settings_repository.dart';
+import 'package:organizacional/data/shopping_repository.dart';
+import 'package:organizacional/features/fitness/fitness_providers.dart';
+import 'package:organizacional/features/shopping/shopping_providers.dart';
 import 'package:organizacional/notebook/data/memory_notebook_repository.dart';
 import 'package:organizacional/notebook/data/notebook_repository.dart';
 import 'package:organizacional/notebook/state/notebook_providers.dart';
@@ -47,6 +51,8 @@ Future<void> pumpApp(
   DriveRepository? driveRepo,
   FilePickerService? filePicker,
   GithubRepository? githubRepo,
+  FitnessRepository? fitnessRepo,
+  ShoppingRepository? shoppingRepo,
   LocationService? locationService,
   NotebookRepository? notebookRepo,
   NotebookImageStore Function(String noteId)? notebookImages,
@@ -69,6 +75,8 @@ Future<void> pumpApp(
       driveRepositoryProvider.overrideWithValue(driveRepo ?? MemoryDriveRepository()),
       if (filePicker != null) filePickerProvider.overrideWithValue(filePicker),
       githubRepositoryProvider.overrideWithValue(githubRepo ?? MemoryGithubRepository()),
+      fitnessRepositoryProvider.overrideWithValue(fitnessRepo ?? MemoryFitnessRepository()),
+      shoppingRepositoryProvider.overrideWithValue(shoppingRepo ?? MemoryShoppingRepository()),
       if (locationService != null) locationServiceProvider.overrideWithValue(locationService),
       notebookRepositoryProvider.overrideWithValue(notebookRepo ?? MemoryNotebookRepository()),
       notebookImageStoreFactoryProvider.overrideWithValue(notebookImages ?? (_) => FakeNotebookImageStore()),

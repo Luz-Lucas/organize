@@ -195,4 +195,30 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
     expect(left.map((r) => `${r.user_id === uid ? 'a' : 'b'}:${r.run_date}`).sort())
       .toEqual(['a:2026-10-13', 'a:2026-10-14', 'a:2026-10-20', 'b:2026-10-13']);
   });
+
+  it('compras: cria "Mercado", ignora repetido, usa lista nomeada e resume só o que falta', async () => {
+    const mk = async (tag: string) => {
+      const u = await db.auth.admin.createUser({ email: `compras-${tag}-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true });
+      if (u.error) throw u.error;
+      return u.data.user.id;
+    };
+    const uid = await mk('a');
+    const other = await mk('b');
+    const s = new SupabaseStore(db, uid, () => {});
+    expect(await s.shoppingSummary()).toEqual([]);
+
+    expect(await s.addShopping(['leite', 'pão'], null)).toEqual({ added: ['leite', 'pão'], skipped: [], list: 'Mercado' });
+    expect(await s.addShopping(['Leite', 'ovos'], null)).toEqual({ added: ['ovos'], skipped: ['Leite'], list: 'Mercado' });
+    const farm = await db.from('shopping_lists').insert({ user_id: uid, name: 'Farmácia', position: 1 });
+    if (farm.error) throw farm.error;
+    expect((await s.addShopping(['dipirona'], 'Farmácia')).list).toBe('Farmácia');
+    // a seção fica por conta do gatilho do banco
+    const sec = await db.from('shopping_items').select('name, section').eq('user_id', uid).eq('name', 'leite').single();
+    expect(sec.data?.section).toBe('frios');
+
+    await db.from('shopping_items').update({ checked: true }).eq('user_id', uid).eq('name', 'pão');
+    const summary = await s.shoppingSummary();
+    expect(summary.map((l) => [l.list, l.items.slice().sort()])).toEqual([['Mercado', ['leite', 'ovos']], ['Farmácia', ['dipirona']]]);
+    expect(await new SupabaseStore(db, other, () => {}).shoppingSummary()).toEqual([]);
+  });
 });

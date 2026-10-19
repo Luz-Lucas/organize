@@ -3,12 +3,13 @@ import 'package:intl/intl.dart';
 import '../../data/location_repository.dart';
 import '../../domain/agenda.dart';
 import '../../domain/calendar_event.dart';
+import '../../domain/event_tag.dart';
 import '../../domain/home_presence.dart';
 import '../../domain/task_item.dart';
 import '../../domain/user_settings.dart';
+import '../../domain/workout.dart';
 
-/// Lógica pura do painel da Início (sem Flutter): "agora e a seguir", próxima
-/// prova, tarefas em destaque e a faixa de presença.
+/// Lógica pura do painel da Início (sem Flutter): "Para hoje" e a faixa de presença.
 
 /// Mesma regra de título dos widgets Android (`widget_snapshot.dart`, kind
 /// `prova`): começa com "prova" ou "np" + dígito, ignorando maiúsculas.
@@ -33,153 +34,62 @@ String dayLabel(DateTime d, DateTime now) {
 
 String hm(DateTime d) => DateFormat.Hm('pt_BR').format(d);
 
-// --- Agora e a seguir -------------------------------------------------------
+// --- Para hoje --------------------------------------------------------------
 
-class NowNext {
-  const NowNext({
-    required this.allDay,
-    required this.current,
-    required this.upcoming,
-    required this.todayCount,
-    required this.nextDayEvent,
-  });
+/// Quantas tarefas o cartão "Para hoje" mostra.
+const todayTaskLimit = 5;
 
-  /// Eventos de dia inteiro de hoje.
-  final List<CalendarEvent> allDay;
+/// Séries que se repetem tantas vezes na janela de 7 dias são rotina (remédio, ponto) e não entram.
+const _frequentSeriesMin = 5;
 
-  /// Eventos com horário em andamento agora.
-  final List<CalendarEvent> current;
+class TodayPlan {
+  const TodayPlan({required this.events, required this.tasks, required this.moreTasks});
 
-  /// Eventos com horário que ainda vão começar hoje (todos, em ordem).
-  final List<CalendarEvent> upcoming;
+  /// Eventos de hoje que importam: dia inteiro primeiro, depois por início.
+  final List<CalendarEvent> events;
 
-  /// Quantos eventos (de qualquer tipo) tocam o dia de hoje.
-  final int todayCount;
+  /// Tarefas atrasadas ou com prazo hoje, por prazo, até [todayTaskLimit].
+  final List<TaskItem> tasks;
 
-  /// Primeiro evento de um dia depois de hoje (para a agenda livre).
-  final CalendarEvent? nextDayEvent;
+  /// Quantas tarefas ficaram de fora do limite.
+  final int moreTasks;
 
-  /// Nada em andamento, nada por vir e nenhum evento de dia inteiro.
-  bool get nothingLeft => allDay.isEmpty && current.isEmpty && upcoming.isEmpty;
-
-  /// Hoje não tem evento algum.
-  bool get freeDay => todayCount == 0;
+  bool get isEmpty => events.isEmpty && tasks.isEmpty;
 }
 
-NowNext buildNowNext(DateTime now, Iterable<CalendarEvent> events) {
-  final today = eventsOnDay(events, now);
-  final tomorrow = DateTime(now.year, now.month, now.day + 1);
-  final future = events.where((e) => !e.startsAt.isBefore(tomorrow)).toList()
-    ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
-  final timed = today.where((e) => !e.allDay);
-  return NowNext(
-    allDay: today.where((e) => e.allDay).toList(),
-    current: timed.where((e) => !e.startsAt.isAfter(now) && e.endsAt.isAfter(now)).toList(),
-    upcoming: timed.where((e) => e.startsAt.isAfter(now)).toList(),
-    todayCount: today.length,
-    nextDayEvent: future.isEmpty ? null : future.first,
-  );
-}
-
-// --- Próxima prova ----------------------------------------------------------
-
-/// Janela de busca da próxima prova, em dias.
-const examWindowDays = 30;
-
-class ExamInfo {
-  const ExamInfo({required this.event, required this.days, required this.inProgress});
-
-  final CalendarEvent event;
-
-  /// Dias de calendário até o início (0 = hoje).
-  final int days;
-  final bool inProgress;
-}
-
-ExamInfo? nextExam(DateTime now, Iterable<CalendarEvent> events) {
-  final candidates = events.where((e) {
-    if (!isExamTitle(e.title) || !e.endsAt.isAfter(now)) return false;
-    return calendarDaysBetween(now, e.startsAt) <= examWindowDays;
-  }).toList()
-    ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
-  if (candidates.isEmpty) return null;
-  final e = candidates.first;
-  final days = calendarDaysBetween(now, e.startsAt);
-  return ExamInfo(
-    event: e,
-    days: days < 0 ? 0 : days,
-    inProgress: !e.allDay && !e.startsAt.isAfter(now),
-  );
-}
-
-/// "hoje às 10:00", "amanhã às 10:00", "em 5 dias" ou "em andamento".
-String examWhen(ExamInfo info) {
-  if (info.inProgress) return 'em andamento';
-  final time = info.event.allDay ? '' : ' às ${hm(info.event.startsAt)}';
-  return switch (info.days) {
-    0 => 'hoje$time',
-    1 => 'amanhã$time',
-    final n => 'em $n dias',
-  };
-}
-
-// --- Tarefas ----------------------------------------------------------------
-
-/// Quantas tarefas o cartão mostra.
-const dashboardTaskLimit = 5;
-
-class TaskPicks {
-  const TaskPicks({
-    required this.overdue,
-    required this.today,
-    required this.doing,
-    required this.hidden,
-    required this.pending,
-  });
-
-  /// Já limitadas a [dashboardTaskLimit] no total.
-  final List<TaskItem> overdue;
-  final List<TaskItem> today;
-  final List<TaskItem> doing;
-
-  /// Quantas tarefas em destaque ficaram de fora do limite.
-  final int hidden;
-
-  /// Total de tarefas não concluídas.
-  final int pending;
-
-  int get shown => overdue.length + today.length + doing.length;
-}
-
-/// Atrasadas, para hoje e em andamento (nessa ordem), até [dashboardTaskLimit].
-TaskPicks pickDashboardTasks(DateTime now, Iterable<TaskItem> tasks) {
-  final groups = groupTasks(tasks, now);
-  final overdue = groups[TaskGroup.atrasadas]!;
-  final today = groups[TaskGroup.hoje]!;
-  final taken = {for (final t in [...overdue, ...today]) t.id};
-  final doing = tasks.where((t) => t.status == TaskStatus.doing && !taken.contains(t.id)).toList()
-    ..sort((a, b) {
-      if (a.dueAt == null && b.dueAt == null) return a.title.compareTo(b.title);
-      if (a.dueAt == null) return 1;
-      if (b.dueAt == null) return -1;
-      return a.dueAt!.compareTo(b.dueAt!);
-    });
-  final total = overdue.length + today.length + doing.length;
-  var room = dashboardTaskLimit;
-  List<TaskItem> take(List<TaskItem> l) {
-    final out = l.take(room).toList();
-    room -= out.length;
-    return out;
+/// O que importa hoje. Ficam de fora dos eventos: academia (tem cartão próprio), etiqueta de papel
+/// `secondary` e séries com 5 ou mais ocorrências em `[início de hoje, +7 dias)` na lista recebida.
+TodayPlan buildTodayPlan(
+  DateTime now,
+  Iterable<CalendarEvent> events,
+  Map<String, EventTag> tags,
+  Iterable<TaskItem> tasks,
+) {
+  final start = DateTime(now.year, now.month, now.day);
+  final windowEnd = DateTime(now.year, now.month, now.day + 7);
+  final perSeries = <String, int>{};
+  for (final e in events) {
+    final id = e.seriesId;
+    if (id != null && !e.startsAt.isBefore(start) && e.startsAt.isBefore(windowEnd)) {
+      perSeries[id] = (perSeries[id] ?? 0) + 1;
+    }
+  }
+  bool matters(CalendarEvent e) {
+    if (isGymEvent(e, tags)) return false;
+    if (e.tagId != null && tags[e.tagId]?.role == EventTagRole.secondary) return false;
+    final id = e.seriesId;
+    return id == null || (perSeries[id] ?? 0) < _frequentSeriesMin;
   }
 
-  final o = take(overdue), t = take(today), d = take(doing);
-  final pending = tasks.where((t) => !t.isDone).length;
-  return TaskPicks(
-    overdue: o,
-    today: t,
-    doing: d,
-    hidden: total - (o.length + t.length + d.length),
-    pending: pending,
+  final today = eventsOnDay(events, now).where(matters).toList();
+  final ordered = [...today.where((e) => e.allDay), ...today.where((e) => !e.allDay)];
+
+  final groups = groupTasks(tasks, now);
+  final due = [...groups[TaskGroup.atrasadas]!, ...groups[TaskGroup.hoje]!];
+  return TodayPlan(
+    events: ordered,
+    tasks: due.take(todayTaskLimit).toList(),
+    moreTasks: due.length > todayTaskLimit ? due.length - todayTaskLimit : 0,
   );
 }
 
