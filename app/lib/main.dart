@@ -60,6 +60,7 @@ import 'update/update_providers.dart';
 import 'update/windows_update_installer.dart';
 import 'widgets/widget_background.dart';
 import 'widgets/widget_links.dart';
+import 'widgets/widget_shop_action.dart';
 import 'widgets/widget_sink.dart';
 import 'widgets/widget_sync.dart';
 
@@ -95,6 +96,7 @@ Future<void> main() async {
     HomeWidget.initiallyLaunchedFromHomeWidget().then(handle).catchError((_) {});
     HomeWidget.widgetClicked.listen(handle, onError: (_) {});
     registerWidgetBackgroundRefresh().catchError((_) {});
+    registerWidgetInteractivity().catchError((_) {});
     registerLocationBackgroundReport().catchError((_) {});
   }
   // Reconhecimento de escrita e corretor: só no Android (ML Kit / corretor do sistema);

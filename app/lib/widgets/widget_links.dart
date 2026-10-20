@@ -6,6 +6,8 @@ String? routeForWidgetUri(Uri uri) {
       return '/agenda';
     case 'tarefas':
       return '/tarefas';
+    case 'compras':
+      return '/compras';
   }
   return null;
 }

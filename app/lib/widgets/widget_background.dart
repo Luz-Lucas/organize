@@ -4,6 +4,7 @@ import 'package:workmanager/workmanager.dart';
 
 import '../domain/calendar_event.dart';
 import '../domain/event_tag.dart';
+import '../domain/shopping.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
 import '../location/location_background.dart';
@@ -24,6 +25,10 @@ abstract interface class WidgetDataSource {
 
   /// Etiquetas dos eventos (só para a cor no widget).
   Future<List<EventTag>> tags();
+
+  /// Listas e itens de compras (widget Mercado).
+  Future<List<ShoppingList>> shoppingLists();
+  Future<List<ShoppingItem>> shoppingItems();
 }
 
 class SupabaseWidgetDataSource implements WidgetDataSource {
@@ -55,6 +60,18 @@ class SupabaseWidgetDataSource implements WidgetDataSource {
   }
 
   @override
+  Future<List<ShoppingList>> shoppingLists() async {
+    final rows = await _db.from('shopping_lists').select().order('position');
+    return rows.map(ShoppingList.fromMap).toList();
+  }
+
+  @override
+  Future<List<ShoppingItem>> shoppingItems() async {
+    final rows = await _db.from('shopping_items').select().eq('checked', false);
+    return rows.map(ShoppingItem.fromMap).toList();
+  }
+
+  @override
   Future<String> themeId() async {
     final row = await _db.from('user_settings').select('theme').maybeSingle();
     final t = row?['theme'];
@@ -66,7 +83,9 @@ class SupabaseWidgetDataSource implements WidgetDataSource {
 /// `{'w_state': 'error'}`, para não sobrescrever o último resumo bom.
 Future<Map<String, String>> fetchSnapshot(WidgetDataSource source, DateTime now) async {
   try {
-    final events = await source.events(widgetWindowStart(now), widgetWindowEnd(now));
+    // Uma consulta só: a janela do calendário (mês anterior ao seguinte) contém a dos 14 dias,
+    // e buildWidgetSnapshot filtra cada chave pela sua janela.
+    final events = await source.events(calendarWindowStart(now), calendarWindowEnd(now));
     final tasks = await source.openTasks();
     final theme = await source.themeId();
     // A cor é só enfeite: sem as etiquetas o resumo sai igual, sem o ponto colorido.
@@ -74,7 +93,26 @@ Future<Map<String, String>> fetchSnapshot(WidgetDataSource source, DateTime now)
     try {
       tags = await source.tags();
     } catch (_) {}
-    return buildWidgetSnapshot(now: now, events: events, tasks: tasks, themeId: theme, tags: tags);
+    // Mercado também é secundário: se falhar, w_shop não é gravado e o último continua valendo.
+    List<ShoppingList>? lists;
+    List<ShoppingItem>? items;
+    try {
+      lists = await source.shoppingLists();
+      items = await source.shoppingItems();
+    } catch (_) {
+      lists = null;
+      items = null;
+    }
+    return buildWidgetSnapshot(
+      now: now,
+      events: events,
+      tasks: tasks,
+      themeId: theme,
+      tags: tags,
+      calendarEvents: events,
+      shoppingLists: lists,
+      shoppingItems: items,
+    );
   } catch (_) {
     return {'w_state': 'error'};
   }
@@ -101,7 +139,7 @@ Future<bool> refreshWidgetsInBackground({
 
 /// Cliente do Supabase para o isolate de segundo plano (reaproveita o do app
 /// quando a execução é dentro dele; senão inicializa com as chaves do build).
-Future<SupabaseClient?> _backgroundClient() async {
+Future<SupabaseClient?> backgroundSupabaseClient() async {
   try {
     return Supabase.instance.client; // já inicializado (execução no app)
   } catch (_) {
@@ -121,7 +159,7 @@ void callbackDispatcher() {
     try {
       WidgetsFlutterBinding.ensureInitialized();
       if (isLegacySamsungTask(taskName)) return true; // sincronização removida: se ainda disparar, não faz nada
-      final client = await _backgroundClient();
+      final client = await backgroundSupabaseClient();
       if (taskName == locationReportTask) {
         await runLocationReportTask(client);
         return true; // sem sessão/casa/permissão não é erro: tenta de novo em 15 min

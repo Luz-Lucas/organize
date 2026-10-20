@@ -3,6 +3,7 @@ import 'dart:ui' show Color;
 
 import '../domain/calendar_event.dart';
 import '../domain/event_tag.dart';
+import '../domain/shopping.dart';
 import '../domain/task_item.dart';
 import '../features/notes/notebooks/notebooks_logic.dart' show folderColorHex, parseFolderColor;
 import '../ui/themes.dart';
@@ -45,6 +46,11 @@ String _kind(String title) {
 DateTime widgetWindowStart(DateTime now) => DateTime(now.year, now.month, now.day - 1);
 DateTime widgetWindowEnd(DateTime now) => DateTime(now.year, now.month, now.day + 15);
 
+/// Janela do widget Calendário: do 1º dia do mês anterior ao 1º dia do mês depois do seguinte
+/// (fim exclusivo). As setas do widget não passam disso.
+DateTime calendarWindowStart(DateTime now) => DateTime(now.year, now.month - 1, 1);
+DateTime calendarWindowEnd(DateTime now) => DateTime(now.year, now.month + 2, 1);
+
 /// Monta o resumo que os widgets Android leem (contrato em
 /// docs/superpowers/specs/2026-10-11-widgets-android-design.md).
 /// `state` aceita apenas `ok` ou `signed_out`; `error` é gravado pelo
@@ -52,6 +58,9 @@ DateTime widgetWindowEnd(DateTime now) => DateTime(now.year, now.month, now.day 
 /// aparelho) vira `w_bg_alpha`; sem ele a chave não é gravada, preservando a escolha.
 /// Tarefas de série (`seriesId`) não entram no widget.
 /// Com [tags], cada evento etiquetado leva `tagColor` (`#RRGGBB`) para o widget desenhar o ponto colorido.
+/// [calendarEvents] (widget Calendário) vira `w_cal_events` + `w_cal_range`; [shoppingLists] e [shoppingItems]
+/// (widget Mercado) viram `w_shop`. Quando `null` (ainda não carregados ou consulta falhou) as chaves
+/// não são gravadas, preservando o último resumo; em `signed_out` são gravadas vazias.
 Map<String, String> buildWidgetSnapshot({
   required DateTime now,
   required Iterable<CalendarEvent> events,
@@ -60,6 +69,9 @@ Map<String, String> buildWidgetSnapshot({
   String state = 'ok',
   int? bgTransparencyPct,
   Iterable<EventTag> tags = const [],
+  Iterable<CalendarEvent>? calendarEvents,
+  Iterable<ShoppingList>? shoppingLists,
+  Iterable<ShoppingItem>? shoppingItems,
 }) {
   assert(state == 'ok' || state == 'signed_out', 'state inválido: $state');
   final signedOut = state == 'signed_out';
@@ -112,6 +124,22 @@ Map<String, String> buildWidgetSnapshot({
           })
       .toList();
 
+  final calStart = calendarWindowStart(now);
+  final calEnd = calendarWindowEnd(now);
+  final calJson = signedOut || calendarEvents == null
+      ? <Map<String, Object?>>[]
+      : (calendarEvents.where((e) => !e.endsAt.isBefore(calStart) && e.startsAt.isBefore(calEnd)).toList()
+            ..sort((a, b) => a.startsAt.compareTo(b.startsAt)))
+          .map((e) => {
+                'id': e.id,
+                'title': e.title,
+                'start': e.startsAt.millisecondsSinceEpoch,
+                'end': e.endsAt.millisecondsSinceEpoch,
+                'allDay': e.allDay,
+                'tagColor': e.tagId == null ? null : tagColors[e.tagId],
+              })
+          .toList();
+
   return {
     'w_state': state,
     'w_generated_at': now.millisecondsSinceEpoch.toString(),
@@ -119,5 +147,44 @@ Map<String, String> buildWidgetSnapshot({
     if (bgTransparencyPct != null) widgetBgAlphaKey: widgetBgAlphaFor(bgTransparencyPct).toString(),
     'w_events': jsonEncode(eventsJson),
     'w_tasks': jsonEncode(tasksJson),
+    if (signedOut || calendarEvents != null) ...{
+      'w_cal_events': jsonEncode(calJson),
+      'w_cal_range': jsonEncode({
+        'from': calStart.millisecondsSinceEpoch,
+        'to': calEnd.millisecondsSinceEpoch,
+      }),
+    },
+    if (signedOut || (shoppingLists != null && shoppingItems != null))
+      'w_shop': jsonEncode(_shopJson(
+          signedOut ? const [] : shoppingLists!, signedOut ? const [] : shoppingItems!)),
+  };
+}
+
+/// Primeira lista (por `position`) com os itens não marcados agrupados por seção.
+/// Sem nenhuma lista: `listId` nulo e nenhuma seção (o widget mostra "Lista vazia").
+Map<String, Object?> _shopJson(Iterable<ShoppingList> lists, Iterable<ShoppingItem> items) {
+  final indexed = lists.toList().asMap().entries.toList()
+    ..sort((a, b) {
+      final p = a.value.position.compareTo(b.value.position);
+      return p != 0 ? p : a.key.compareTo(b.key);
+    });
+  if (indexed.isEmpty) {
+    return {'listId': null, 'listName': 'Mercado', 'sections': <Object>[]};
+  }
+  final first = indexed.first.value;
+  final pending = items.where((i) => i.listId == first.id && !i.checked).toList();
+  return {
+    'listId': first.id,
+    'listName': first.name,
+    'sections': [
+      for (final (section, group) in groupBySection(pending, first.sectionOrder))
+        {
+          'name': section.name,
+          'label': section.label,
+          'items': [
+            for (final i in group) {'id': i.id, 'name': i.name, 'quantity': i.quantity},
+          ],
+        },
+    ],
   };
 }

@@ -13,10 +13,14 @@ import dev.organizacional.organizacional.R
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 
-/** Base dos três widgets: desenha por id (com a altura de cada um) e trata clique/redimensionamento. */
+/** Base dos widgets: desenha por id (com a altura de cada um) e trata clique/redimensionamento. */
 abstract class BaseOrgWidget : HomeWidgetProvider() {
     protected abstract val layoutId: Int
     protected abstract val clickUri: String
+
+    /** Id do widget que está sendo desenhado (para providers com estado por instância, como o Calendário). */
+    protected var drawingId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
+        private set
 
     protected abstract fun render(
         context: Context,
@@ -47,7 +51,8 @@ abstract class BaseOrgWidget : HomeWidgetProvider() {
         draw(context, appWidgetManager, appWidgetId, prefs)
     }
 
-    private fun draw(context: Context, mgr: AppWidgetManager, id: Int, prefs: SharedPreferences) {
+    protected fun draw(context: Context, mgr: AppWidgetManager, id: Int, prefs: SharedPreferences) {
+        drawingId = id
         val views = RemoteViews(context.packageName, layoutId)
         val theme = WidgetData.parseTheme(prefs)
         val options = mgr.getAppWidgetOptions(id)

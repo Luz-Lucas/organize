@@ -15,6 +15,8 @@ const widgetProviderNames = [
   '$_pkg.TarefasWidgetProvider',
   '$_pkg.ProvaWidgetProvider',
   '$_pkg.AgendaTarefasWidgetProvider',
+  '$_pkg.CalendarioWidgetProvider',
+  '$_pkg.MercadoWidgetProvider',
 ];
 
 class HomeWidgetSink implements WidgetSink {

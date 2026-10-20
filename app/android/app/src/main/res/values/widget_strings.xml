@@ -8,6 +8,10 @@
     <string name="widget_prova_desc">Contagem para a próxima prova</string>
     <string name="widget_agenda_tarefas_label">Organize · Agenda e Tarefas</string>
     <string name="widget_agenda_tarefas_desc">Eventos de hoje e tarefas em aberto</string>
+    <string name="widget_calendario_label">Organize · Calendário</string>
+    <string name="widget_calendario_desc">Mês com pontinhos nos dias com eventos e a lista do dia escolhido</string>
+    <string name="widget_mercado_label">Organize · Lista de mercado</string>
+    <string name="widget_mercado_desc">Itens pendentes da lista de compras; toque para marcar como comprado</string>
     <string name="widget_hoje_title">HOJE</string>
     <string name="widget_tarefas_title">TAREFAS</string>
     <string name="widget_prova_title">PRÓXIMA PROVA</string>

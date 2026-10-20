@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/providers.dart';
 import '../domain/event_tag.dart';
+import '../features/shopping/shopping_providers.dart';
 import 'widget_appearance.dart';
 import 'widget_sink.dart';
 import 'widget_snapshot.dart';
@@ -60,8 +61,9 @@ const widgetSyncDebounce = Duration(seconds: 2);
 final widgetSyncProvider = Provider<void>((ref) {
   final sink = ref.watch(widgetSinkProvider);
   final clock = ref.watch(clockProvider);
-  // Janela fixada no dia da primeira leitura; o filtro final usa o `now` de cada flush.
-  final from = widgetWindowStart(clock());
+  // Janela fixada no dia da primeira leitura (mês anterior em diante, cobre também a de 14 dias);
+  // o filtro final usa o `now` de cada flush.
+  final from = calendarWindowStart(clock());
   Timer? timer;
   var disposed = false;
   ref.onDispose(() {
@@ -88,6 +90,10 @@ final widgetSyncProvider = Provider<void>((ref) {
         themeId: themeId,
         bgTransparencyPct: bgPct,
         tags: ref.read(eventTagsProvider).value ?? const <EventTag>[],
+        calendarEvents: events,
+        // Sem compras carregadas (ou sem repositório) as chaves de mercado ficam como estavam.
+        shoppingLists: ref.read(shoppingListsProvider).value,
+        shoppingItems: ref.read(shoppingItemsProvider).value,
       ));
       await sink.refresh();
     } catch (_) {
@@ -104,4 +110,6 @@ final widgetSyncProvider = Provider<void>((ref) {
   ref.listen(tasksProvider, (_, _) => schedule(), fireImmediately: true);
   ref.listen(eventTagsProvider, (_, _) => schedule(), fireImmediately: true);
   ref.listen(settingsProvider, (_, _) => schedule(), fireImmediately: true);
+  ref.listen(shoppingListsProvider, (_, _) => schedule(), fireImmediately: true);
+  ref.listen(shoppingItemsProvider, (_, _) => schedule(), fireImmediately: true);
 });

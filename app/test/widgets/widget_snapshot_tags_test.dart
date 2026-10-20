@@ -7,6 +7,7 @@ import 'package:organizacional/data/memory_repository.dart';
 import 'package:organizacional/data/memory_settings_repository.dart';
 import 'package:organizacional/domain/calendar_event.dart';
 import 'package:organizacional/domain/event_tag.dart';
+import 'package:organizacional/domain/shopping.dart';
 import 'package:organizacional/domain/task_item.dart';
 import 'package:organizacional/widgets/widget_background.dart';
 import 'package:organizacional/widgets/widget_snapshot.dart';
@@ -46,6 +47,12 @@ class _TagSource implements WidgetDataSource {
     if (failTags) throw Exception('sem rede');
     return [_aula];
   }
+
+  @override
+  Future<List<ShoppingList>> shoppingLists() async => const [];
+
+  @override
+  Future<List<ShoppingItem>> shoppingItems() async => const [];
 }
 
 void main() {
