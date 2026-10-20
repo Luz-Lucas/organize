@@ -7,23 +7,11 @@ import {
   startOfLocalDay, toIso,
 } from './util.js';
 import { taskOut } from './tasks.js';
-import { addWallMinutes, expandRepeat, MAX_OCCURRENCES } from './recurrence.js';
+import { addWallMinutes, expandRepeat, normalizeRepeat, repeatSchema } from './recurrence.js';
 
 const title = z.string().trim().min(1).max(200);
 const when = z.string().min(8).max(40);
 const tagName = z.string().trim().min(1).max(40).describe('Nome da etiqueta (ver list_event_tags), sem diferenciar maiúsculas');
-const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use AAAA-MM-DD.');
-const repeatSchema = z.object({
-  freq: z.enum(['daily', 'weekdays', 'weekly', 'biweekly', 'monthly']),
-  days: z.array(z.number().int().min(1).max(7)).max(7).optional()
-    .describe('Dias da semana (1 = seg … 7 = dom) para weekly/biweekly; vazio = o dia da semana do início'),
-  until: ymd.optional().describe('Último dia da repetição (AAAA-MM-DD, inclusivo)'),
-  count: z.number().int().min(1).max(MAX_OCCURRENCES).optional().describe('Quantidade de ocorrências (1 a 366)'),
-}).describe(
-  'Repetição: daily (todo dia), weekdays (seg–sex), weekly, biweekly (a cada 2 semanas), monthly (mesmo dia do mês; ' +
-  'meses sem esse dia são pulados). Termina em `until` ou `count` (o que vier primeiro); sem nenhum dos dois, ' +
-  'repete por 3 meses. Limites: 366 ocorrências e 1 ano a partir do início.');
-
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 interface Tag { id: string; name: string; color: string; role: string }
@@ -144,14 +132,7 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
     };
     const tagMap = new Map(tag ? [[tag.id, tag] as const] : []);
     if (a.repeat) {
-      const rule = { freq: a.repeat.freq, days: [...new Set(a.repeat.days ?? [])].sort(), until: a.repeat.until ?? null, count: a.repeat.count ?? null };
-      if (rule.until === null && rule.count === null) {
-        const l = toIso(starts, tz)!;
-        rule.until = new Date(Date.UTC(Number(l.slice(0, 4)), Number(l.slice(5, 7)) - 1 + 3, Number(l.slice(8, 10)))).toISOString().slice(0, 10);
-      }
-      if (rule.until !== null && rule.until < toIso(starts, tz)!.slice(0, 10)) {
-        throw new UserError('A data final da repetição não pode ser antes do início.');
-      }
+      const rule = normalizeRepeat(a.repeat, starts, tz);
       const minutes = Math.round((ends.getTime() - starts.getTime()) / 60000);
       const seriesId = randomUUID();
       const rows = expandRepeat(starts, rule, tz).map((s0) => ({

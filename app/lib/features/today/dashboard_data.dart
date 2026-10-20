@@ -6,6 +6,7 @@ import '../../domain/calendar_event.dart';
 import '../../domain/event_tag.dart';
 import '../../domain/home_presence.dart';
 import '../../domain/task_item.dart';
+import '../../domain/task_series.dart';
 import '../../domain/user_settings.dart';
 import '../../domain/workout.dart';
 
@@ -48,7 +49,8 @@ class TodayPlan {
   /// Eventos de hoje que importam: dia inteiro primeiro, depois por início.
   final List<CalendarEvent> events;
 
-  /// Tarefas atrasadas ou com prazo hoje, por prazo, até [todayTaskLimit].
+  /// Tarefas atrasadas ou com prazo hoje, por prazo, até [todayTaskLimit]. De cada série de tarefas
+  /// conta só a próxima pendente.
   final List<TaskItem> tasks;
 
   /// Quantas tarefas ficaram de fora do limite.
@@ -84,7 +86,7 @@ TodayPlan buildTodayPlan(
   final today = eventsOnDay(events, now).where(matters).toList();
   final ordered = [...today.where((e) => e.allDay), ...today.where((e) => !e.allDay)];
 
-  final groups = groupTasks(tasks, now);
+  final groups = groupTasks(nextPendingPerSeries(tasks), now);
   final due = [...groups[TaskGroup.atrasadas]!, ...groups[TaskGroup.hoje]!];
   return TodayPlan(
     events: ordered,

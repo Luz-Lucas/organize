@@ -46,10 +46,13 @@ enum OrgBadgeTone {
 
 /// Selo pequeno (status, prioridade, contagem).
 class OrgBadge extends StatelessWidget {
-  const OrgBadge(this.label, {super.key, this.tone = OrgBadgeTone.accent});
+  const OrgBadge(this.label, {super.key, this.tone = OrgBadgeTone.accent, this.icon});
 
   final String label;
   final OrgBadgeTone tone;
+
+  /// Ícone pequeno antes do texto (opcional).
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +64,7 @@ class OrgBadge extends StatelessWidget {
       OrgBadgeTone.neutral => (org.surface, org.inkMuted),
       OrgBadgeTone.danger => (scheme.errorContainer, scheme.error),
     };
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(color: fg);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -68,10 +72,16 @@ class OrgBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(org.radiusSm),
         border: tone == OrgBadgeTone.neutral ? Border.all(color: org.line) : null,
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: fg),
-      ),
+      child: icon == null
+          ? Text(label, style: style)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 12, color: fg),
+                const SizedBox(width: 4),
+                Flexible(child: Text(label, style: style)),
+              ],
+            ),
     );
   }
 }

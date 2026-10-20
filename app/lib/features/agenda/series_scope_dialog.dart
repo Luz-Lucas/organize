@@ -2,13 +2,41 @@ import 'package:flutter/material.dart';
 
 import '../../domain/recurrence.dart';
 
+/// Textos da pergunta de escopo (evento ou tarefa).
+class SeriesScopeLabels {
+  const SeriesScopeLabels({required this.title, required this.one, required this.following, required this.all});
+
+  final String title;
+  final String one;
+  final String following;
+  final String all;
+
+  static const event = SeriesScopeLabels(
+    title: 'Este evento se repete',
+    one: 'Só este evento',
+    following: 'Este e os seguintes',
+    all: 'Todos os eventos da série',
+  );
+
+  static const task = SeriesScopeLabels(
+    title: 'Esta tarefa se repete',
+    one: 'Só esta tarefa',
+    following: 'Esta e as seguintes',
+    all: 'Todas as tarefas da série',
+  );
+}
+
 /// Pergunta a quais ocorrências de uma série a ação vale. Devolve `null` se o
 /// usuário cancelar.
-Future<SeriesScope?> showSeriesScopeDialog(BuildContext context, {required bool deleting}) =>
+Future<SeriesScope?> showSeriesScopeDialog(
+  BuildContext context, {
+  required bool deleting,
+  SeriesScopeLabels labels = SeriesScopeLabels.event,
+}) =>
     showDialog<SeriesScope>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Este evento se repete'),
+        title: Text(labels.title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -17,17 +45,17 @@ Future<SeriesScope?> showSeriesScopeDialog(BuildContext context, {required bool 
             const SizedBox(height: 8),
             _Option(
               key: const Key('series-scope-one'),
-              label: 'Só este evento',
+              label: labels.one,
               onTap: () => Navigator.of(ctx).pop(SeriesScope.one),
             ),
             _Option(
               key: const Key('series-scope-following'),
-              label: 'Este e os seguintes',
+              label: labels.following,
               onTap: () => Navigator.of(ctx).pop(SeriesScope.following),
             ),
             _Option(
               key: const Key('series-scope-all'),
-              label: 'Todos os eventos da série',
+              label: labels.all,
               onTap: () => Navigator.of(ctx).pop(SeriesScope.all),
             ),
           ],

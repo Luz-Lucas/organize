@@ -6,6 +6,7 @@ import '../../data/repository.dart';
 import '../../domain/ids.dart';
 import '../../domain/space.dart';
 import '../../domain/task_item.dart';
+import '../../domain/task_series.dart';
 import '../../ui/common.dart';
 import '../../ui/org_widgets.dart';
 import 'kanban_board.dart';
@@ -101,9 +102,11 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
               final selected = spaceList.any((s) => s.id == ref.watch(tasksSpaceFilterProvider))
                   ? ref.watch(tasksSpaceFilterProvider)
                   : null;
+              // Tarefas de série: só a próxima pendente de cada uma (as concluídas ficam).
+              final current = nextPendingPerSeries(taskList);
               final visible = selected == null
-                  ? taskList
-                  : taskList.where((t) => t.spaceId == selected).toList();
+                  ? current
+                  : current.where((t) => t.spaceId == selected).toList();
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

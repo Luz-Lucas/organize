@@ -50,6 +50,7 @@ DateTime widgetWindowEnd(DateTime now) => DateTime(now.year, now.month, now.day 
 /// `state` aceita apenas `ok` ou `signed_out`; `error` é gravado pelo
 /// segundo plano sem tocar nas demais chaves. `bgTransparencyPct` (preferência do
 /// aparelho) vira `w_bg_alpha`; sem ele a chave não é gravada, preservando a escolha.
+/// Tarefas de série (`seriesId`) não entram no widget.
 /// Com [tags], cada evento etiquetado leva `tagColor` (`#RRGGBB`) para o widget desenhar o ponto colorido.
 Map<String, String> buildWidgetSnapshot({
   required DateTime now,
@@ -74,7 +75,7 @@ Map<String, String> buildWidgetSnapshot({
 
   final open = signedOut
       ? <TaskItem>[]
-      : (tasks.where((t) => !t.isDone).toList()
+      : (tasks.where((t) => !t.isDone && t.seriesId == null).toList()
         ..sort((a, b) {
           final byStatus = (a.status == TaskStatus.doing ? 0 : 1)
               .compareTo(b.status == TaskStatus.doing ? 0 : 1);

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../domain/agenda.dart';
@@ -10,6 +9,7 @@ import '../../domain/recurrence.dart';
 import '../../domain/space.dart';
 import '../../ui/org_theme.dart';
 import '../notes/notebooks/notebooks_logic.dart' show parseFolderColor;
+import 'repeat_section.dart';
 import 'series_scope_dialog.dart';
 
 /// Diálogo de criar/editar evento. Fecha devolvendo o [CalendarEvent] salvo.
@@ -89,53 +89,17 @@ class _EventDialogState extends State<EventDialog> {
   String? _error;
 
   // Repetição (só em evento novo).
-  RepeatFreq _freq = RepeatFreq.none;
-  Set<int> _repeatDays = {};
-  bool _daysTouched = false;
-  bool _untilMode = true;
-  DateTime? _until;
-  late final TextEditingController _count = TextEditingController(text: '10');
+  final _repeat = RepeatController();
 
   @override
   void dispose() {
     _title.dispose();
     _location.dispose();
-    _count.dispose();
+    _repeat.dispose();
     super.dispose();
   }
 
   bool get _canRepeat => widget.existing == null && widget.onCreateSeries != null;
-  bool get _weeklyLike => _freq == RepeatFreq.weekly || _freq == RepeatFreq.biweekly;
-  Set<int> get _effectiveDays => _daysTouched ? _repeatDays : {_startDay.weekday};
-  DateTime get _effectiveUntil => _until ?? DateTime(_startDay.year, _startDay.month + 3, _startDay.day);
-  int? get _countValue {
-    final n = int.tryParse(_count.text.trim());
-    return n != null && n >= 1 && n <= maxSeriesOccurrences ? n : null;
-  }
-
-  /// Regra de repetição escolhida, ou `null` se estiver incompleta/inválida.
-  Recurrence? get _recurrence {
-    if (_freq == RepeatFreq.none) return null;
-    if (_untilMode && _effectiveUntil.isBefore(_startDay)) return null;
-    if (!_untilMode && _countValue == null) return null;
-    return Recurrence(
-      freq: _freq,
-      days: _weeklyLike ? _effectiveDays : const {},
-      until: _untilMode ? _effectiveUntil : null,
-      count: _untilMode ? null : _countValue,
-    );
-  }
-
-  Future<void> _pickUntil() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _effectiveUntil.isBefore(_startDay) ? _startDay : _effectiveUntil,
-      firstDate: _startDay,
-      lastDate: DateTime(_startDay.year + 1, _startDay.month, _startDay.day),
-    );
-    if (picked != null) setState(() => _until = picked);
-  }
-
   DateTime get _startsAt =>
       DateTime(_startDay.year, _startDay.month, _startDay.day, _start.hour, _start.minute);
 
@@ -222,18 +186,14 @@ class _EventDialogState extends State<EventDialog> {
     );
 
     Future<String?> Function()? save;
-    if (_canRepeat && _freq != RepeatFreq.none) {
-      final rule = _recurrence;
-      if (rule == null) {
-        setState(() => _error = _untilMode
-            ? 'A data final não pode ser antes do início.'
-            : 'Informe de 1 a $maxSeriesOccurrences repetições.');
+    if (_canRepeat && _repeat.active) {
+      final failure = _repeat.problem(_startDay, start,
+          emptyMessage: 'A repetição não gera nenhum evento nesse período.');
+      if (failure != null) {
+        setState(() => _error = failure);
         return;
       }
-      if (rule.expandStarts(start).isEmpty) {
-        setState(() => _error = 'A repetição não gera nenhum evento nesse período.');
-        return;
-      }
+      final rule = _repeat.recurrence(_startDay)!;
       save = () => widget.onCreateSeries!(event, rule);
     } else if (old?.seriesId != null && widget.onSaveScoped != null) {
       final scope = await showSeriesScopeDialog(context, deleting: false);
@@ -298,102 +258,6 @@ class _EventDialogState extends State<EventDialog> {
       }
     }
     if (mounted) Navigator.of(context).pop();
-  }
-
-  static const _dayLabels = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
-
-  List<Widget> _repeatSection(BuildContext context) {
-    final theme = Theme.of(context);
-    final org = context.org;
-    final rule = _recurrence;
-    return [
-      DropdownButtonFormField<RepeatFreq>(
-        key: const Key('event-repeat'),
-        isExpanded: true, // textos longos ("Quinzenal…") cortam com reticências em vez de estourar a 360 dp
-        initialValue: _freq,
-        decoration: const InputDecoration(labelText: 'Repetir'),
-        items: [
-          for (final f in RepeatFreq.values) DropdownMenuItem(value: f, child: Text(f.label)),
-        ],
-        onChanged: _busy ? null : (f) => setState(() => _freq = f ?? RepeatFreq.none),
-      ),
-      if (_freq != RepeatFreq.none) ...[
-        if (_weeklyLike)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                for (var d = 1; d <= 7; d++)
-                  FilterChip(
-                    key: Key('event-repeat-day-$d'),
-                    label: Text(_dayLabels[d - 1]),
-                    selected: _effectiveDays.contains(d),
-                    onSelected: (on) => setState(() {
-                      final next = {..._effectiveDays};
-                      on ? next.add(d) : next.remove(d);
-                      if (next.isEmpty) return; // pelo menos um dia
-                      _repeatDays = next;
-                      _daysTouched = true;
-                    }),
-                  ),
-              ],
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Wrap(
-            spacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ChoiceChip(
-                key: const Key('event-repeat-mode-until'),
-                label: const Text('Até'),
-                selected: _untilMode,
-                onSelected: (_) => setState(() => _untilMode = true),
-              ),
-              ChoiceChip(
-                key: const Key('event-repeat-mode-count'),
-                label: const Text('Vezes'),
-                selected: !_untilMode,
-                onSelected: (_) => setState(() => _untilMode = false),
-              ),
-              if (_untilMode)
-                TextButton(
-                  key: const Key('event-repeat-until'),
-                  onPressed: _pickUntil,
-                  child: Text(DateFormat("EEE, d 'de' MMM", 'pt_BR').format(_effectiveUntil)),
-                )
-              else
-                SizedBox(
-                  width: 96,
-                  child: TextField(
-                    key: const Key('event-repeat-count'),
-                    controller: _count,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(labelText: 'Vezes', isDense: true),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 8),
-          child: Text(
-            rule == null
-                ? (_untilMode
-                    ? 'Escolha uma data final a partir do início.'
-                    : 'Digite quantas vezes repetir (1 a $maxSeriesOccurrences).')
-                : rule.summary(_startsAt),
-            key: const Key('event-repeat-summary'),
-            style: theme.textTheme.bodySmall?.copyWith(color: org.accentText),
-          ),
-        ),
-      ],
-    ];
   }
 
   Future<void> _createTag() async {
@@ -502,7 +366,14 @@ class _EventDialogState extends State<EventDialog> {
                   child: Text('Termina no dia seguinte',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: org.accentText)),
                 ),
-              if (_canRepeat) ..._repeatSection(context),
+              if (_canRepeat)
+                RepeatSection(
+                  controller: _repeat,
+                  startDay: _startDay,
+                  startsAt: _startsAt,
+                  keyPrefix: 'event',
+                  enabled: !_busy,
+                ),
               TextField(
                 key: const Key('event-location'),
                 controller: _location,

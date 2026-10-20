@@ -132,6 +132,44 @@ void main() {
       expect(p.tasks.first.id, 'o0');
       expect(p.moreTasks, 3);
     });
+
+    group('tarefas de série', () {
+      TaskItem occ(String id, DateTime due, {TaskStatus status = TaskStatus.todo}) =>
+          TaskItem(id: id, title: 'Lab', dueAt: due, status: status, seriesId: 'lab');
+
+      test('só a próxima pendente da série entra, mesmo com várias vencidas', () {
+        final p = buildTodayPlan(_now, const [], tags, [
+          occ('o1', DateTime(2026, 9, 15, 23, 59)),
+          occ('o2', DateTime(2026, 9, 22, 23, 59)),
+          occ('o3', DateTime(2026, 9, 28, 23, 59)),
+        ]);
+        expect(p.tasks.map((e) => e.id), ['o1']);
+        expect(p.moreTasks, 0);
+      });
+
+      test('concluída a atrasada, aparece a seguinte', () {
+        final p = buildTodayPlan(_now, const [], tags, [
+          occ('o1', DateTime(2026, 9, 15, 23, 59), status: TaskStatus.done),
+          occ('o2', DateTime(2026, 9, 22, 23, 59)),
+          occ('o3', DateTime(2026, 9, 28, 23, 59)),
+        ]);
+        expect(p.tasks.map((e) => e.id), ['o2']);
+      });
+
+      test('próxima de uma semana à frente não entra; série inteira concluída não quebra', () {
+        final future = buildTodayPlan(_now, const [], tags, [
+          occ('o1', DateTime(2026, 9, 28, 23, 59), status: TaskStatus.done),
+          occ('o2', DateTime(2026, 10, 5, 23, 59)),
+        ]);
+        expect(future.tasks, isEmpty);
+        final allDone = buildTodayPlan(_now, const [], tags, [
+          occ('o1', DateTime(2026, 9, 21, 23, 59), status: TaskStatus.done),
+          occ('o2', DateTime(2026, 9, 28, 23, 59), status: TaskStatus.done),
+        ]);
+        expect(allDone.tasks, isEmpty);
+        expect(allDone.moreTasks, 0);
+      });
+    });
   });
 
   group('presenceChip', () {

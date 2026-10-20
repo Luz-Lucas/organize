@@ -1,4 +1,5 @@
-import { parseWhen, toIso } from './util.js';
+import { z } from 'zod';
+import { UserError, parseWhen, toIso } from './util.js';
 
 /** Regra de repetição (mesma do app: `lib/domain/recurrence.dart`). Dias ISO: 1 = seg … 7 = dom. */
 export interface Repeat {
@@ -74,4 +75,33 @@ export function addWallMinutes(start: Date, minutes: number, tz: string): Date {
     Number(local.slice(11, 13)), Number(local.slice(14, 16)) + minutes,
   );
   return parseWhen(new Date(wall).toISOString().slice(0, 19), tz);
+}
+
+const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use AAAA-MM-DD.');
+
+/** Parâmetro `repeat` de create_event e create_task. */
+export const repeatSchema = z.object({
+  freq: z.enum(['daily', 'weekdays', 'weekly', 'biweekly', 'monthly']),
+  days: z.array(z.number().int().min(1).max(7)).max(7).optional()
+    .describe('Dias da semana (1 = seg … 7 = dom) para weekly/biweekly; vazio = o dia da semana do início'),
+  until: ymd.optional().describe('Último dia da repetição (AAAA-MM-DD, inclusivo)'),
+  count: z.number().int().min(1).max(MAX_OCCURRENCES).optional().describe('Quantidade de ocorrências (1 a 366)'),
+}).describe(
+  'Repetição: daily (todo dia), weekdays (seg–sex), weekly, biweekly (a cada 2 semanas), monthly (mesmo dia do mês; ' +
+  'meses sem esse dia são pulados). Termina em `until` ou `count` (o que vier primeiro); sem nenhum dos dois, ' +
+  'repete por 3 meses. Limites: 366 ocorrências e 1 ano a partir do início.');
+
+export type RepeatInput = z.infer<typeof repeatSchema>;
+
+/** Regra gravada em `recurrence`: dias ordenados e sem repetição; sem fim informado, termina 3 meses depois do início. */
+export function normalizeRepeat(r: RepeatInput, start: Date, tz: string): Repeat & { days: number[]; until: string | null; count: number | null } {
+  const rule = { freq: r.freq, days: [...new Set(r.days ?? [])].sort(), until: r.until ?? null, count: r.count ?? null };
+  const l = toIso(start, tz)!;
+  if (rule.until === null && rule.count === null) {
+    rule.until = new Date(Date.UTC(Number(l.slice(0, 4)), Number(l.slice(5, 7)) - 1 + 3, Number(l.slice(8, 10)))).toISOString().slice(0, 10);
+  }
+  if (rule.until !== null && rule.until < l.slice(0, 10)) {
+    throw new UserError('A data final da repetição não pode ser antes do início.');
+  }
+  return rule;
 }

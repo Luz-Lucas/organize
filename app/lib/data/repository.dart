@@ -27,6 +27,13 @@ abstract interface class Repository {
   Future<void> upsertTask(TaskItem task);
   Future<void> deleteTask(String id);
 
+  /// Grava/apaga várias ocorrências de uma vez (séries de tarefas).
+  Future<void> upsertTasks(List<TaskItem> tasks);
+  Future<void> deleteTasks(List<String> ids);
+
+  /// Todas as ocorrências da série de tarefas (inclusive as concluídas), por prazo.
+  Future<List<TaskItem>> listTaskSeries(String seriesId);
+
   /// Eventos que terminam em [from] ou depois.
   Stream<List<CalendarEvent>> watchEvents({required DateTime from});
   Future<void> upsertEvent(CalendarEvent event);

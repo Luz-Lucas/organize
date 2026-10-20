@@ -52,6 +52,7 @@ class TaskCard extends StatelessWidget {
           ),
           if (spaceName != null ||
               due != null ||
+              task.seriesId != null ||
               task.noteId != null ||
               task.priority != TaskPriority.media) ...[
             const SizedBox(height: 8),
@@ -69,6 +70,13 @@ class TaskCard extends StatelessWidget {
                   OrgBadge(
                     dueLabel(due, now, done: task.isDone),
                     tone: urgent ? OrgBadgeTone.danger : OrgBadgeTone.neutral,
+                  ),
+                if (task.seriesId != null)
+                  OrgBadge(
+                    task.recurrence?.shortLabel(due ?? now) ?? 'Repete',
+                    key: Key('task-series-badge-${task.id}'),
+                    tone: OrgBadgeTone.neutral,
+                    icon: Icons.repeat,
                   ),
                 if (task.noteId != null)
                   Icon(Icons.description_outlined, size: 16, color: org.inkMuted),

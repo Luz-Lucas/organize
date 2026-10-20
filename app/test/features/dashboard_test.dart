@@ -135,6 +135,23 @@ void main() {
       }
     });
 
+    testWidgets('tarefa de série: só a próxima pendente aparece; concluí-la mostra a seguinte', (tester) async {
+      final repo = MemoryRepository();
+      for (var i = 0; i < 3; i++) {
+        await repo.upsertTask(TaskItem(
+            id: 'o$i', title: 'Lab de S01', dueAt: DateTime(2026, 9, 24 + 2 * i, 23, 59), seriesId: 'lab'));
+      } // 24/09 e 26/09 atrasadas, 28/09 hoje
+      await pumpApp(tester, repo, now: _now, size: _phone);
+      expect(find.byKey(const ValueKey('today-task-o0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-task-o1')), findsNothing);
+      expect(find.byKey(const ValueKey('today-task-o2')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('task-check-o0')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-task-o0')), findsNothing);
+      expect(find.byKey(const ValueKey('today-task-o1')), findsOneWidget);
+    });
+
     testWidgets('mostra no máximo 5 tarefas e "+N tarefas" leva a Tarefas', (tester) async {
       final repo = MemoryRepository();
       for (var i = 0; i < 7; i++) {

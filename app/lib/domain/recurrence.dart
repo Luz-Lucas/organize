@@ -100,25 +100,38 @@ class Recurrence {
     return out;
   }
 
-  /// Ex.: "Toda semana às ter e qui, até 15 dez · 18 ocorrências".
-  String summary(DateTime firstStart) {
-    final starts = expandStarts(firstStart);
-    if (starts.isEmpty) return 'Nenhuma ocorrência no período';
+  String _head(DateTime at) {
     String names(Set<int> ds) {
       final l = (ds.toList()..sort()).map((d) => _weekdayNames[d - 1]).toList();
       return l.length == 1 ? l.single : '${l.sublist(0, l.length - 1).join(', ')} e ${l.last}';
     }
 
-    final head = switch (freq) {
+    return switch (freq) {
       RepeatFreq.none => freq.label,
       RepeatFreq.daily || RepeatFreq.weekdays => freq.label,
-      RepeatFreq.weekly || RepeatFreq.biweekly =>
-        '${freq.label} às ${names(days.isEmpty ? {firstStart.weekday} : days)}',
-      RepeatFreq.monthly => 'Todo mês no dia ${firstStart.day}',
+      RepeatFreq.weekly || RepeatFreq.biweekly => '${freq.label} às ${names(days.isEmpty ? {at.weekday} : days)}',
+      RepeatFreq.monthly => 'Todo mês no dia ${at.day}',
     };
+  }
+
+  /// Ex.: "Toda semana às ter e qui, até 15 dez · 18 ocorrências".
+  String summary(DateTime firstStart) {
+    final starts = expandStarts(firstStart);
+    if (starts.isEmpty) return 'Nenhuma ocorrência no período';
     final last = starts.last;
     final n = starts.length;
-    return '$head, até ${last.day} ${_monthNames[last.month - 1]} · $n ${n == 1 ? 'ocorrência' : 'ocorrências'}';
+    return '${_head(firstStart)}, até ${last.day} ${_monthNames[last.month - 1]} · $n ${n == 1 ? 'ocorrência' : 'ocorrências'}';
+  }
+
+  /// Resumo curto para o selo de uma ocorrência [at] da série, sem expandir a regra:
+  /// "Toda semana às ter, até 1 dez" ou, em série por quantidade, "Toda semana às ter · 8 vezes".
+  String shortLabel(DateTime at) {
+    final head = _head(at);
+    final u = until;
+    if (u != null) return '$head, até ${u.day} ${_monthNames[u.month - 1]}';
+    final c = count;
+    if (c != null) return '$head · $c ${c == 1 ? 'vez' : 'vezes'}';
+    return head;
   }
 
   @override

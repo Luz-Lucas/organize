@@ -69,6 +69,35 @@ class SupabaseRepository implements Repository {
   Future<void> deleteTask(String id) => _delete('tasks', id);
 
   @override
+  Future<void> upsertTasks(List<TaskItem> tasks) {
+    if (tasks.isEmpty) return Future.value();
+    return _guard(() async => await _db.from('tasks').upsert(tasks.map((t) => t.toMap()).toList()));
+  }
+
+  /// Em lotes: o filtro `id in (...)` vai na URL e uma série longa (até 366 uuids) a estouraria.
+  @override
+  Future<void> deleteTasks(List<String> ids) => _guard(() async {
+        for (var i = 0; i < ids.length; i += _deleteBatch) {
+          final batch = ids.sublist(i, i + _deleteBatch > ids.length ? ids.length : i + _deleteBatch);
+          await _db.from('tasks').delete().inFilter('id', batch);
+        }
+      });
+
+  static const _deleteBatch = 100;
+
+  @override
+  Future<List<TaskItem>> listTaskSeries(String seriesId) async {
+    try {
+      final rows = await _db.from('tasks').select().eq('series_id', seriesId).order('due_at', ascending: true);
+      return rows.map<TaskItem>(TaskItem.fromMap).toList();
+    } on PostgrestException catch (e) {
+      throw RepositoryException(e.message);
+    } catch (e) {
+      throw RepositoryException('Falha de conexão: $e');
+    }
+  }
+
+  @override
   Stream<List<CalendarEvent>> watchEvents({required DateTime from}) => _db
       .from('events')
       .stream(primaryKey: ['id'])

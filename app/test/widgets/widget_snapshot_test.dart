@@ -26,6 +26,15 @@ Map<String, String> build({
     buildWidgetSnapshot(now: now, events: e, tasks: t, themeId: theme, state: state);
 
 void main() {
+  test('tarefas de série não vão para o widget', () {
+    final s = build(t: [
+      const TaskItem(id: 'avulsa', title: 'Avulsa'),
+      TaskItem(id: 'o1', title: 'Lab', dueAt: DateTime(2026, 10, 11, 23, 59), seriesId: 'lab'),
+      TaskItem(id: 'o2', title: 'Lab', dueAt: DateTime(2026, 10, 18, 23, 59), seriesId: 'lab'),
+    ]);
+    expect(tasks(s).map((t) => t['id']), ['avulsa']);
+  });
+
   test('chaves e tema', () {
     final s = build();
     expect(s.keys, containsAll(['w_state', 'w_generated_at', 'w_theme', 'w_events', 'w_tasks']));
