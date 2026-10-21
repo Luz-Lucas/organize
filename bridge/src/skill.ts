@@ -1,7 +1,10 @@
 import askCore from 'ask-sdk-core';
 import type { ErrorHandler, HandlerInput, RequestHandler, Skill } from 'ask-sdk-core';
+import type { IntentRequest } from 'ask-sdk-model';
 import { buildBriefing, escapeSsml, headlinesText, type BriefingInput } from './briefing.js';
-import { addedText, listSummaryText, parseShoppingUtterance } from './shopping.js';
+import { eventRange, parseSpokenRequest, taskDue, type SpokenDate } from './spoken-date.js';
+import { eventAddedText, taskAddedText } from './spoken-reply.js';
+import { localParts } from './time.js';
 
 const { SkillBuilders, getRequestType, getIntentName, getUserId, getSlotValue } = askCore;
 
@@ -9,10 +12,14 @@ export interface SkillDeps {
   allowedUserId: string | null;
   briefingInput: () => Promise<BriefingInput>;
   log: (m: string) => void;
-  /** Põe itens na lista (`null` = padrão, "Mercado"); o que já estava na lista não marcada vem em `skipped`. */
-  addShopping: (items: string[], list: string | null) => Promise<{ added: string[]; skipped: string[]; list: string }>;
-  /** Listas com os itens ainda não marcados. */
-  shoppingSummary: () => Promise<{ list: string; items: string[] }[]>;
+  /** Fuso da ponte: define o "hoje" e as horas faladas. */
+  timeZone: string;
+  /** Relógio (os testes fixam). */
+  now?: () => Date;
+  /** Cria uma tarefa (`dueAt` null = sem prazo). */
+  addTask: (task: { title: string; dueAt: Date | null }) => Promise<void>;
+  /** Cria um evento (dia inteiro: início e fim à meia-noite local). */
+  addEvent: (event: { title: string; startsAt: Date; endsAt: Date; allDay: boolean }) => Promise<void>;
 }
 
 export function buildSkill(deps: SkillDeps): Skill {
@@ -39,39 +46,58 @@ export function buildSkill(deps: SkillDeps): Skill {
     canHandle: (h) => isIntent(h, 'NoticiasIntent'),
     handle: async (h) => say(h, headlinesText((await deps.briefingInput()).news)),
   };
-  const addShopping: RequestHandler = {
-    canHandle: (h) => isIntent(h, 'AdicionarCompraIntent'),
+  const now = () => (deps.now ?? (() => new Date()))();
+  const todayOf = (at: Date): SpokenDate => {
+    const [y, m, d] = localParts(at, deps.timeZone).date.split('-').map(Number);
+    return { y, m, d };
+  };
+  /** Pergunta de novo mantendo a sessão: a próxima fala preenche o campo `pedido` do mesmo intent. */
+  const askAgain = (h: HandlerInput, question: string) =>
+    h.responseBuilder
+      .speak(question)
+      .reprompt(question)
+      .addElicitSlotDirective('pedido', (h.requestEnvelope.request as IntentRequest).intent)
+      .getResponse();
+
+  const addTask: RequestHandler = {
+    canHandle: (h) => isIntent(h, 'AdicionarTarefaIntent'),
     handle: async (h) => {
-      const spoken = getSlotValue(h.requestEnvelope, 'item') ?? '';
+      const at = now();
+      const parsed = parseSpokenRequest(getSlotValue(h.requestEnvelope, 'pedido') ?? '', at, deps.timeZone);
+      const { title, time } = parsed;
+      if (!title) return askAgain(h, 'Qual é a tarefa?');
+      const date = parsed.date ?? (time ? todayOf(at) : null); // "às 17h" sem dia vale para hoje
       try {
-        const lists = (await deps.shoppingSummary()).map((l) => l.list);
-        const { list, items } = parseShoppingUtterance(spoken, lists);
-        if (items.length === 0) {
-          return h.responseBuilder.speak('O que você quer adicionar?').reprompt('O que você quer adicionar à lista?').getResponse();
-        }
-        return say(h, addedText(await deps.addShopping(items, list)));
+        await deps.addTask({ title, dueAt: date ? taskDue(date, time, deps.timeZone) : null });
       } catch (e) {
-        deps.log(`erro nas compras: ${(e as Error).message}`);
-        return say(h, 'Não consegui acessar sua lista de compras agora. Tente de novo em instantes.');
+        deps.log(`erro ao criar tarefa: ${(e as Error).message}`);
+        return say(h, 'Não consegui anotar a tarefa agora. Tente de novo em instantes.');
       }
+      return say(h, taskAddedText(title, date, time, todayOf(at)));
     },
   };
-  const readShopping: RequestHandler = {
-    canHandle: (h) => isIntent(h, 'ListaDeComprasIntent'),
+  const addEvent: RequestHandler = {
+    canHandle: (h) => isIntent(h, 'CriarEventoIntent'),
     handle: async (h) => {
+      const at = now();
+      const today = todayOf(at);
+      const parsed = parseSpokenRequest(getSlotValue(h.requestEnvelope, 'pedido') ?? '', at, deps.timeZone);
+      if (!parsed.title) return askAgain(h, 'O que você quer marcar?');
+      const date = parsed.date ?? today;
       try {
-        return say(h, listSummaryText(await deps.shoppingSummary()));
+        await deps.addEvent({ title: parsed.title, ...eventRange(date, parsed.time, deps.timeZone) });
       } catch (e) {
-        deps.log(`erro nas compras: ${(e as Error).message}`);
-        return say(h, 'Não consegui acessar sua lista de compras agora. Tente de novo em instantes.');
+        deps.log(`erro ao criar evento: ${(e as Error).message}`);
+        return say(h, 'Não consegui marcar o evento agora. Tente de novo em instantes.');
       }
+      return say(h, eventAddedText(parsed.title, date, parsed.time, today));
     },
   };
   const help: RequestHandler = {
     canHandle: (h) => isIntent(h, 'AMAZON.HelpIntent', 'AMAZON.FallbackIntent'),
     handle: (h) =>
       h.responseBuilder
-        .speak('Você pode dizer: qual é o meu dia. Ou: quais são as notícias. Ou: adicionar leite.')
+        .speak('Você pode dizer: qual é o meu dia; adicionar tarefa estudar para sexta; ou marcar reunião amanhã às 15h.')
         .reprompt('O que você quer saber?')
         .getResponse(),
   };
@@ -92,7 +118,7 @@ export function buildSkill(deps: SkillDeps): Skill {
   };
 
   return SkillBuilders.custom()
-    .addRequestHandlers(guard, briefing, news, addShopping, readShopping, help, stop, ended)
+    .addRequestHandlers(guard, briefing, news, addTask, addEvent, help, stop, ended)
     .addErrorHandlers(errors)
     .create();
 }

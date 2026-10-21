@@ -14,14 +14,21 @@
           "samples": ["quais são as notícias", "notícias", "manchetes", "me conta as notícias", "o que está acontecendo"]
         },
         {
-          "name": "AdicionarCompraIntent",
-          "slots": [{ "name": "item", "type": "AMAZON.SearchQuery" }],
-          "samples": ["adicionar {item}", "adicionar {item} na lista", "colocar {item} na lista", "pôr {item} na lista de compras", "anotar {item} na lista"]
+          "name": "AdicionarTarefaIntent",
+          "slots": [{ "name": "pedido", "type": "AMAZON.SearchQuery" }],
+          "samples": [
+            "adicionar tarefa {pedido}", "adicionar a tarefa {pedido}", "adiciona a tarefa {pedido}", "adiciona tarefa {pedido}",
+            "nova tarefa {pedido}", "criar tarefa {pedido}", "criar a tarefa {pedido}", "anotar tarefa {pedido}",
+            "me lembra de {pedido}", "lembrar de {pedido}"
+          ]
         },
         {
-          "name": "ListaDeComprasIntent",
-          "slots": [],
-          "samples": ["o que tem na lista", "o que falta comprar", "minha lista de compras", "lista do mercado"]
+          "name": "CriarEventoIntent",
+          "slots": [{ "name": "pedido", "type": "AMAZON.SearchQuery" }],
+          "samples": [
+            "marcar {pedido}", "marca {pedido}", "agendar {pedido}", "agenda {pedido}",
+            "criar evento {pedido}", "criar um evento {pedido}", "novo evento {pedido}", "adicionar evento {pedido}"
+          ]
         },
         { "name": "AMAZON.HelpIntent", "samples": [] },
         { "name": "AMAZON.StopIntent", "samples": [] },

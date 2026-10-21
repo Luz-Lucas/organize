@@ -29,28 +29,24 @@ const intent = (name: string, slots?: Record<string, string>) => ({
   },
 });
 
-/** Compras em memória: lista Mercado e Farmácia; repetidos (sem acento) são "já estava". */
-function fakeShopping(initial: Record<string, string[]> = { Mercado: [], 'Farmácia': [] }) {
-  const lists = new Map(Object.entries(initial).map(([k, v]) => [k, [...v]]));
-  const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-  const calls: Array<{ items: string[]; list: string | null }> = [];
-  const deps: Pick<SkillDeps, 'addShopping' | 'shoppingSummary'> = {
-    async addShopping(items, list) {
-      calls.push({ items, list });
-      const name = list ?? 'Mercado';
-      const cur = lists.get(name) ?? [];
-      lists.set(name, cur);
-      const added: string[] = [];
-      const skipped: string[] = [];
-      for (const i of items) {
-        if (cur.some((c) => fold(c) === fold(i))) skipped.push(i);
-        else { cur.push(i); added.push(i); }
-      }
-      return { added, skipped, list: name };
-    },
-    async shoppingSummary() { return [...lists].map(([list, items]) => ({ list, items })); },
+const TZ = 'America/Sao_Paulo';
+// terça-feira, 20/10/2026, 12:00 em São Paulo
+const NOW = new Date('2026-10-20T15:00:00Z');
+
+type NewTask = Parameters<SkillDeps['addTask']>[0];
+type NewEvent = Parameters<SkillDeps['addEvent']>[0];
+
+/** Agenda em memória: guarda o que a skill pediu para gravar. */
+function fakeAgenda() {
+  const tasks: NewTask[] = [];
+  const events: NewEvent[] = [];
+  const deps: Pick<SkillDeps, 'timeZone' | 'now' | 'addTask' | 'addEvent'> = {
+    timeZone: TZ,
+    now: () => NOW,
+    async addTask(t) { tasks.push(t); },
+    async addEvent(e) { events.push(e); },
   };
-  return { deps, calls };
+  return { deps, tasks, events };
 }
 
 async function ssml(skill: ReturnType<typeof buildSkill>, request: Record<string, unknown>, userId = USER) {
@@ -62,7 +58,7 @@ async function ssml(skill: ReturnType<typeof buildSkill>, request: Record<string
 
 describe('skill', () => {
   const logs: string[] = [];
-  const skill = buildSkill({ allowedUserId: USER, briefingInput: async () => input, log: (m) => logs.push(m), ...fakeShopping().deps });
+  const skill = buildSkill({ allowedUserId: USER, briefingInput: async () => input, log: (m) => logs.push(m), ...fakeAgenda().deps });
 
   it('abrir a skill fala o resumo com SSML escapado', async () => {
     const out = await ssml(skill, { type: 'LaunchRequest' });
@@ -82,13 +78,13 @@ describe('skill', () => {
 
   it('sem ALEXA_ALLOWED_USER_ID configurado, loga o id da conta', async () => {
     const seen: string[] = [];
-    const open = buildSkill({ allowedUserId: null, briefingInput: async () => input, log: (m) => seen.push(m), ...fakeShopping().deps });
+    const open = buildSkill({ allowedUserId: null, briefingInput: async () => input, log: (m) => seen.push(m), ...fakeAgenda().deps });
     expect(await ssml(open, { type: 'LaunchRequest' })).toContain('ainda não configurada');
     expect(seen.join('\n')).toContain(USER);
   });
 
   it('erro ao ler a agenda vira mensagem amigável', async () => {
-    const broken = buildSkill({ allowedUserId: USER, briefingInput: async () => { throw new Error('db fora'); }, log: () => {}, ...fakeShopping().deps });
+    const broken = buildSkill({ allowedUserId: USER, briefingInput: async () => { throw new Error('db fora'); }, log: () => {}, ...fakeAgenda().deps });
     expect(await ssml(broken, { type: 'LaunchRequest' })).toContain('Não consegui acessar sua agenda agora.');
   });
 
@@ -96,85 +92,146 @@ describe('skill', () => {
     expect(await ssml(skill, intent('AMAZON.StopIntent'))).toContain('Até mais!');
   });
 
-  it('ajuda cita adicionar leite', async () => {
-    expect(await ssml(skill, intent('AMAZON.HelpIntent'))).toContain('adicionar leite');
+  it('ajuda cita o dia, tarefas e eventos', async () => {
+    expect(await ssml(skill, intent('AMAZON.HelpIntent'))).toContain(
+      'Você pode dizer: qual é o meu dia; adicionar tarefa estudar para sexta; ou marcar reunião amanhã às 15h.',
+    );
   });
 
-  describe('compras', () => {
-    const build = (initial?: Record<string, string[]>) => {
-      const f = fakeShopping(initial);
+  it('as compras saíram da skill', async () => {
+    const help = await ssml(skill, intent('AMAZON.HelpIntent'));
+    expect(help).not.toMatch(/leite|compra|lista/i);
+  });
+
+  describe('AdicionarTarefaIntent', () => {
+    const build = () => {
+      const f = fakeAgenda();
       return { ...f, skill: buildSkill({ allowedUserId: USER, briefingInput: async () => input, log: () => {}, ...f.deps }) };
     };
+    const pedido = (v?: string) => intent('AdicionarTarefaIntent', v === undefined ? undefined : { pedido: v });
 
-    it('adicionar itens na lista padrão', async () => {
-      const { skill: s, calls } = build();
-      const out = await ssml(s, intent('AdicionarCompraIntent', { item: 'leite e pão' }));
-      expect(out).toContain('Anotei leite e pão na lista Mercado.');
-      expect(calls).toEqual([{ items: ['leite', 'pão'], list: null }]);
+    it('título e sexta: grava com prazo até 23:59 e confirma', async () => {
+      const { skill: s, tasks, events } = build();
+      expect(await ssml(s, pedido('estudar cálculo para sexta'))).toContain('Anotei a tarefa estudar cálculo para sexta, 23 de outubro.');
+      expect(tasks).toEqual([{ title: 'estudar cálculo', dueAt: new Date('2026-10-24T02:59:00Z') }]);
+      expect(events).toEqual([]);
     });
 
-    it('"na farmácia" vai para a lista com esse nome', async () => {
-      const { skill: s, calls } = build();
-      const out = await ssml(s, intent('AdicionarCompraIntent', { item: 'dipirona na farmacia' }));
-      expect(out).toContain('Anotei dipirona na lista Farmácia.');
-      expect(calls).toEqual([{ items: ['dipirona'], list: 'Farmácia' }]);
+    it('sem prazo', async () => {
+      const { skill: s, tasks } = build();
+      expect(await ssml(s, pedido('estudar cálculo'))).toContain('Anotei a tarefa estudar cálculo.');
+      expect(tasks).toEqual([{ title: 'estudar cálculo', dueAt: null }]);
     });
 
-    it('repetido avisa que já estava na lista', async () => {
-      const { skill: s } = build({ Mercado: ['Leite'] });
-      expect(await ssml(s, intent('AdicionarCompraIntent', { item: 'leite' }))).toContain('Leite já estava na lista.');
-      const mix = await ssml(s, intent('AdicionarCompraIntent', { item: 'leite e ovos' }));
-      expect(mix).toContain('Anotei ovos na lista Mercado.');
-      expect(mix).toContain('Leite já estava na lista.');
+    it('hoje, amanhã e com hora', async () => {
+      const { skill: s, tasks } = build();
+      expect(await ssml(s, pedido('pagar a luz hoje'))).toContain('Anotei a tarefa pagar a luz para hoje.');
+      expect(await ssml(s, pedido('ligar pro João amanhã'))).toContain('Anotei a tarefa ligar pro João para amanhã, quarta.');
+      expect(await ssml(s, pedido('enviar relatório dia 25 às 3 da tarde'))).toContain('Anotei a tarefa enviar relatório para domingo, 25 de outubro, às 15h.');
+      expect(tasks.map((t) => t.dueAt?.toISOString())).toEqual([
+        '2026-10-21T02:59:00.000Z', '2026-10-22T02:59:00.000Z', '2026-10-25T18:00:00.000Z',
+      ]);
     });
 
-    it('vários repetidos usam o plural', async () => {
-      const { skill: s } = build({ Mercado: ['leite', 'pão'] });
-      expect(await ssml(s, intent('AdicionarCompraIntent', { item: 'leite e pão' }))).toContain('Leite e pão já estavam na lista.');
+    it('hora sem data vale para hoje', async () => {
+      const { skill: s, tasks } = build();
+      expect(await ssml(s, pedido('ligar para o João às 17h'))).toContain('Anotei a tarefa ligar para o João para hoje, às 17h.');
+      expect(tasks).toEqual([{ title: 'ligar para o João', dueAt: new Date('2026-10-20T20:00:00Z') }]);
     });
 
-    it('sem item pergunta o que adicionar e mantém a sessão', async () => {
-      const { skill: s, calls } = build();
+    it('sem pedido pergunta qual é a tarefa e mantém a sessão', async () => {
+      const { skill: s, tasks } = build();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await s.invoke(envelope(intent('AdicionarCompraIntent')) as any);
-      expect((res.response.outputSpeech as any)?.ssml).toContain('O que você quer adicionar?');
+      const res: any = await s.invoke(envelope(pedido()) as any);
+      expect(res.response.outputSpeech.ssml).toContain('Qual é a tarefa?');
       expect(res.response.shouldEndSession).toBe(false);
-      expect(calls).toEqual([]);
+      expect(res.response.reprompt.outputSpeech.ssml).toContain('Qual é a tarefa?');
+      expect(res.response.directives).toEqual([
+        expect.objectContaining({ type: 'Dialog.ElicitSlot', slotToElicit: 'pedido', updatedIntent: expect.objectContaining({ name: 'AdicionarTarefaIntent' }) }),
+      ]);
+      expect(tasks).toEqual([]);
     });
 
-    it('item com caracteres de SSML é escapado', async () => {
+    it('só data, sem título, também pergunta de novo', async () => {
+      const { skill: s, tasks } = build();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res: any = await s.invoke(envelope(pedido('para sexta')) as any);
+      expect(res.response.outputSpeech.ssml).toContain('Qual é a tarefa?');
+      expect(res.response.shouldEndSession).toBe(false);
+      expect(tasks).toEqual([]);
+    });
+
+    it('título com caracteres de SSML é escapado na fala', async () => {
       const { skill: s } = build();
-      const out = await ssml(s, intent('AdicionarCompraIntent', { item: 'P&D <x>' }));
-      expect(out).toContain('P&amp;D &lt;x&gt;');
-    });
-
-    it('ler a lista: poucos itens', async () => {
-      const { skill: s } = build({ Mercado: ['leite', 'pão', 'ovos'], 'Farmácia': [] });
-      expect(await ssml(s, intent('ListaDeComprasIntent'))).toContain('Na lista Mercado: leite, pão e ovos.');
-    });
-
-    it('ler a lista: resume além de três itens', async () => {
-      const { skill: s } = build({ Mercado: ['leite', 'pão', 'ovos', 'arroz', 'feijão', 'sal'] });
-      expect(await ssml(s, intent('ListaDeComprasIntent'))).toContain('Na lista Mercado: leite, pão, ovos e 3 outros.');
-      const um = build({ Mercado: ['leite', 'pão', 'ovos', 'sal'] }).skill;
-      expect(await ssml(um, intent('ListaDeComprasIntent'))).toContain('leite, pão, ovos e 1 outro.');
-    });
-
-    it('ler a lista: várias listas e lista vazia', async () => {
-      const { skill: s } = build({ Mercado: ['leite'], 'Farmácia': ['dipirona'] });
-      const out = await ssml(s, intent('ListaDeComprasIntent'));
-      expect(out).toContain('Na lista Mercado: leite.');
-      expect(out).toContain('Na lista Farmácia: dipirona.');
-      expect(await ssml(build().skill, intent('ListaDeComprasIntent'))).toContain('Sua lista está vazia.');
+      expect(await ssml(s, pedido('revisar P&D <x>'))).toContain('P&amp;D &lt;x&gt;');
     });
 
     it('falha no banco vira mensagem amigável', async () => {
-      const f = fakeShopping();
+      const f = fakeAgenda();
       const broken = buildSkill({
-        allowedUserId: USER, briefingInput: async () => input, log: () => {},
-        addShopping: async () => { throw new Error('db fora'); }, shoppingSummary: f.deps.shoppingSummary,
+        allowedUserId: USER, briefingInput: async () => input, log: () => {}, ...f.deps,
+        addTask: async () => { throw new Error('db fora'); },
       });
-      expect(await ssml(broken, intent('AdicionarCompraIntent', { item: 'leite' }))).toContain('Não consegui acessar sua lista de compras');
+      expect(await ssml(broken, pedido('estudar'))).toContain('Não consegui anotar a tarefa agora.');
+    });
+  });
+
+  describe('CriarEventoIntent', () => {
+    const build = () => {
+      const f = fakeAgenda();
+      return { ...f, skill: buildSkill({ allowedUserId: USER, briefingInput: async () => input, log: () => {}, ...f.deps }) };
+    };
+    const pedido = (v?: string) => intent('CriarEventoIntent', v === undefined ? undefined : { pedido: v });
+
+    it('com hora: evento de 1 hora', async () => {
+      const { skill: s, events, tasks } = build();
+      expect(await ssml(s, pedido('reunião com o Pedro amanhã às 15h'))).toContain('Marquei reunião com o Pedro amanhã, quarta, das 15h às 16h.');
+      expect(events).toEqual([{
+        title: 'reunião com o Pedro', startsAt: new Date('2026-10-21T18:00:00Z'), endsAt: new Date('2026-10-21T19:00:00Z'), allDay: false,
+      }]);
+      expect(tasks).toEqual([]);
+    });
+
+    it('sem hora: dia inteiro', async () => {
+      const { skill: s, events } = build();
+      expect(await ssml(s, pedido('feriado na sexta'))).toContain('Marquei feriado na sexta, 23 de outubro, o dia todo.');
+      expect(events).toEqual([{
+        title: 'feriado', startsAt: new Date('2026-10-23T03:00:00Z'), endsAt: new Date('2026-10-24T03:00:00Z'), allDay: true,
+      }]);
+    });
+
+    it('sem data, o padrão é hoje', async () => {
+      const { skill: s, events } = build();
+      expect(await ssml(s, pedido('dentista às 17h30'))).toContain('Marquei dentista hoje, das 17h30 às 18h30.');
+      expect(events[0].startsAt).toEqual(new Date('2026-10-20T20:30:00Z'));
+      expect(await ssml(s, pedido('almoço ao meio-dia'))).toContain('Marquei almoço hoje, do meio-dia às 13h.');
+      expect(await ssml(s, pedido('feriado'))).toContain('Marquei feriado hoje, o dia todo.');
+    });
+
+    it('evento que atravessa a meia-noite', async () => {
+      const { skill: s } = build();
+      expect(await ssml(s, pedido('festa sábado às 23h'))).toContain('Marquei festa no sábado, 24 de outubro, das 23h à meia-noite.');
+    });
+
+    it('sem pedido ou sem título, pergunta e mantém a sessão', async () => {
+      const { skill: s, events } = build();
+      for (const v of [undefined, 'amanhã às 15h']) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res: any = await s.invoke(envelope(pedido(v)) as any);
+        expect(res.response.outputSpeech.ssml).toContain('O que você quer marcar?');
+        expect(res.response.shouldEndSession).toBe(false);
+        expect(res.response.directives[0]).toMatchObject({ type: 'Dialog.ElicitSlot', slotToElicit: 'pedido' });
+      }
+      expect(events).toEqual([]);
+    });
+
+    it('falha no banco vira mensagem amigável', async () => {
+      const f = fakeAgenda();
+      const broken = buildSkill({
+        allowedUserId: USER, briefingInput: async () => input, log: () => {}, ...f.deps,
+        addEvent: async () => { throw new Error('db fora'); },
+      });
+      expect(await ssml(broken, pedido('dentista amanhã'))).toContain('Não consegui marcar o evento agora.');
     });
   });
 });

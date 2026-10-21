@@ -5,7 +5,6 @@ import type { EchoDevice, Routine, SmartDevice } from './gateway.js';
 import type { DeviceAction } from './gateway.js';
 import type { PresenceInput } from './presence.js';
 import type { AfterMusic, PhoneAlarm, RunStatus, WakeDeviceAction, WakeOverride, WakePlan, WakeRun } from './scheduler.js';
-import { fold } from './shopping.js';
 import { zonedDayRange } from './time.js';
 import type { WakeStore } from './wake.js';
 
@@ -162,51 +161,23 @@ export class SupabaseStore implements WakeStore {
     };
   }
 
-  /** Listas de compras do usuário, na ordem do app. */
-  private async shoppingLists(): Promise<{ id: string; name: string }[]> {
-    return this.check(await this.db.from('shopping_lists').select('id, name')
-      .eq('user_id', this.userId).order('position').order('created_at')) as { id: string; name: string }[];
+  /** Cria uma tarefa manual (a fazer, prioridade média), como o `create_task` do MCP. */
+  async addTask(task: { title: string; dueAt: Date | null }): Promise<void> {
+    this.check(await this.db.from('tasks').insert({
+      user_id: this.userId, title: task.title, description: '', status: 'todo', priority: 'media',
+      due_at: task.dueAt?.toISOString() ?? null, completed_at: null, space_id: null, note_id: null, source: 'manual',
+    }));
   }
 
   /**
-   * Põe itens na lista (`listName` null = "Mercado"; a lista que faltar é criada).
-   * Ignora o que já está na lista sem marcar (`skipped`); a seção fica nula e o gatilho do banco decide.
+   * Cria um evento manual, como o `create_event` do MCP. A etiqueta fica nula: o MCP também não classifica
+   * ao criar (o app etiqueta pelas regras da agenda quando abre).
    */
-  async addShopping(items: string[], listName: string | null): Promise<{ added: string[]; skipped: string[]; list: string }> {
-    const lists = await this.shoppingLists();
-    const name = listName ?? 'Mercado';
-    let target = lists.find((l) => fold(l.name) === fold(name));
-    if (!target) {
-      target = this.check(await this.db.from('shopping_lists').insert({ user_id: this.userId, name, position: lists.length })
-        .select('id, name').single()) as { id: string; name: string };
-    }
-    const existing = this.check(await this.db.from('shopping_items').select('name')
-      .eq('user_id', this.userId).eq('list_id', target.id).eq('checked', false)) as Row[];
-    const have = new Set(existing.map((r) => fold(String(r.name))));
-    const added: string[] = [];
-    const skipped: string[] = [];
-    for (const raw of items) {
-      const name = raw.trim().slice(0, 80);
-      if (!name) continue;
-      if (have.has(fold(name))) { skipped.push(name); continue; }
-      have.add(fold(name));
-      added.push(name);
-    }
-    if (added.length) {
-      this.check(await this.db.from('shopping_items')
-        .insert(added.map((name) => ({ user_id: this.userId, list_id: target.id, name }))));
-    }
-    return { added, skipped, list: target.name };
-  }
-
-  /** Listas com os itens ainda não marcados (o que falta comprar). */
-  async shoppingSummary(): Promise<{ list: string; items: string[] }[]> {
-    const lists = await this.shoppingLists();
-    if (lists.length === 0) return [];
-    const rows = this.check(await this.db.from('shopping_items').select('list_id, name')
-      .eq('user_id', this.userId).eq('checked', false)
-      .order('position').order('created_at')) as Row[];
-    return lists.map((l) => ({ list: l.name, items: rows.filter((r) => r.list_id === l.id).map((r) => String(r.name)) }));
+  async addEvent(event: { title: string; startsAt: Date; endsAt: Date; allDay: boolean }): Promise<void> {
+    this.check(await this.db.from('events').insert({
+      user_id: this.userId, title: event.title, all_day: event.allDay, location: null, space_id: null, source: 'manual',
+      tag_id: null, starts_at: event.startsAt.toISOString(), ends_at: event.endsAt.toISOString(),
+    }));
   }
 
   async listWakePlans(): Promise<WakePlan[]> {

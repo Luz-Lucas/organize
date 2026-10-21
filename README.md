@@ -147,7 +147,7 @@ Esperado: a skill responde "Skill ainda não configurada..." e `docker compose l
   3. `docker compose restart bridge`
 - Diagnóstico: `docker compose run --rm bridge node dist/scripts/smoke.js`.
 - Despertares: se a ponte cair, o **alarme reserva** (criado até 24 h antes no próprio Echo) toca 10 min depois do horário.
-- Skill: "Alexa, abre organize" / "Alexa, pergunte ao organize quais são as notícias" / "Alexa, peça ao organize para adicionar leite" / "Alexa, pergunte ao organize o que tem na lista".
+- Skill: "Alexa, abre organize" (resumo do dia) / "Alexa, pergunte ao organize quais são as notícias" / "Alexa, peça ao organize para adicionar tarefa estudar cálculo para sexta" / "Alexa, peça ao organize para marcar reunião com o Pedro amanhã às 15h". Tarefa: título + prazo opcional (só data vale até 23:59; com hora usa a hora). Evento: data (padrão hoje) e hora; com hora dura 1 h, sem hora é o dia todo.
 
 ### Teste manual da Fase 3 (com a ponte no ar)
 Rode o app: `cd app && flutter run -d linux --dart-define-from-file=env.json`.
