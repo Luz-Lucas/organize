@@ -402,7 +402,13 @@ void main() {
 
     expect(find.byKey(const Key('note-body')), findsOneWidget);
     expect(find.text('conteúdo'), findsOneWidget);
-    expect(find.text('Sem conexão com o servidor. Tentando de novo…'), findsOneWidget);
+    // O aviso é global e só aparece com erro há mais de 4 s; aqui o Riverpod
+    // reassina o stream logo (queda curta), então o editor segue intacto e sem faixa.
+    expect(find.text('Sem conexão com o servidor. Tentando de novo…'), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.byKey(const Key('note-body')), findsOneWidget);
+    expect(find.text('conteúdo'), findsOneWidget);
+    expect(find.text('Sem conexão com o servidor. Tentando de novo…'), findsNothing);
   });
 
   testWidgets(

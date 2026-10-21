@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/alexa_repository.dart';
@@ -107,3 +110,47 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
 final settingsProvider = StreamProvider<UserSettings>(
     (ref) => ref.watch(settingsRepositoryProvider).watchSettings());
 
+
+/// Há quanto tempo seguido algum stream principal precisa estar com erro para
+/// o aviso de conexão aparecer (quedas curtas de reconexão não mostram nada).
+final connectionGraceProvider = Provider<Duration>((ref) => const Duration(seconds: 4));
+
+/// `true` quando algum dos streams principais está com erro há mais de
+/// [connectionGraceProvider] seguidos; volta a `false` assim que todos se recuperam.
+final connectionProblemProvider =
+    NotifierProvider<ConnectionProblem, bool>(ConnectionProblem.new);
+
+class ConnectionProblem extends Notifier<bool> {
+  Timer? _timer;
+
+  @override
+  bool build() {
+    ref.onDispose(() => _timer?.cancel());
+    final streams = <ProviderListenable<AsyncValue<Object?>>>[
+      spacesProvider,
+      notesProvider,
+      tasksProvider,
+      eventTagsProvider,
+      settingsProvider,
+    ];
+    for (final s in streams) {
+      ref.listen(s, (_, _) => _update(streams));
+    }
+    return false;
+  }
+
+  void _update(List<ProviderListenable<AsyncValue<Object?>>> streams) {
+    final failing = streams.any((s) => ref.read(s).hasError);
+    if (!failing) {
+      _timer?.cancel();
+      _timer = null;
+      if (state) state = false;
+      return;
+    }
+    if (state || _timer != null) return; // já avisando, ou contagem em andamento
+    _timer = Timer(ref.read(connectionGraceProvider), () {
+      _timer = null;
+      if (streams.any((s) => ref.read(s).hasError)) state = true;
+    });
+  }
+}

@@ -186,7 +186,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   /// Faixa de status: presença, ponte da Alexa e problemas de conexão.
   Widget? _statusStrip(
     DateTime now, {
-    required bool connectionProblem,
     required BridgeStatus? bridge,
     required List<WakePlan> plans,
   }) {
@@ -225,14 +224,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         semantics: banner,
         tone: _ChipTone.warn,
         onTap: () => context.go('/casa'),
-      ));
-    }
-    if (connectionProblem) {
-      chips.add(const _StatusChip(
-        key: Key('status-connection'),
-        icon: Icons.wifi_off_outlined,
-        label: 'Sem conexão com o servidor',
-        tone: _ChipTone.warn,
       ));
     }
     if (chips.isEmpty) return null;
@@ -289,7 +280,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final names = {for (final s in spaces.value ?? const <Space>[]) s.id: s.name};
     final strip = _statusStrip(
       now,
-      connectionProblem: events.hasError || tasks.hasError,
       bridge: bridge,
       plans: plans,
     );

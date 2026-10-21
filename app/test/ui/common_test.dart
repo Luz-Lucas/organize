@@ -22,7 +22,7 @@ void main() {
     return controller;
   }
 
-  testWidgets('erro depois de dados mantém os dados e mostra aviso não bloqueante',
+  testWidgets('erro depois de dados mantém os dados na tela (sem tela de erro)',
       (tester) async {
     final controller = await pump(tester);
     controller.add(1);
@@ -33,7 +33,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('valor: 1'), findsOneWidget, reason: 'os dados continuam na tela');
-    expect(find.text('Sem conexão com o servidor. Tentando de novo…'), findsOneWidget);
+    expect(find.text('Não foi possível carregar. Tentando de novo…'), findsNothing);
     await controller.close();
   });
 
@@ -46,6 +46,49 @@ void main() {
 
     expect(find.textContaining('valor:'), findsNothing);
     expect(find.text('Não foi possível carregar. Tentando de novo…'), findsOneWidget);
+    await controller.close();
+  });
+
+  testWidgets('o que o usuário digitou no builder sobrevive à ida e volta dados -> erro -> dados',
+      (tester) async {
+    final controller = StreamController<int>();
+    final provider = StreamProvider<int>((ref) => controller.stream);
+    await tester.pumpWidget(ProviderScope(
+      child: Consumer(
+        builder: (context, ref, _) {
+          final value = ref.watch(provider);
+          return MaterialApp(
+            home: Scaffold(
+              body: asyncView(value, (n) => Column(children: [Text('valor: $n'), const TextField()])),
+            ),
+          );
+        },
+      ),
+    ));
+    controller.add(1);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'rascunho');
+
+    // StateError não é retentado pelo Riverpod: o erro fica observável.
+    controller.addError(StateError('queda do websocket'));
+    await tester.pump();
+    expect(find.text('valor: 1'), findsOneWidget);
+    expect(find.text('rascunho'), findsOneWidget, reason: 'o texto não some quando cai a conexão');
+
+    controller.add(2);
+    await tester.pump();
+    expect(find.text('valor: 2'), findsOneWidget);
+    expect(find.text('rascunho'), findsOneWidget, reason: 'nem quando a conexão volta');
+    await controller.close();
+  });
+
+  testWidgets('asyncView não desenha aviso: o aviso é único e global na casca', (tester) async {
+    final controller = await pump(tester);
+    controller.add(1);
+    await tester.pump();
+    controller.addError(StateError('queda'));
+    await tester.pump();
+    expect(find.text('Sem conexão com o servidor. Tentando de novo…'), findsNothing);
     await controller.close();
   });
 }

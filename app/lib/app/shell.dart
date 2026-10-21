@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../features/notes/notes_tree.dart';
 import '../update/update_banner.dart';
 import 'back_navigation.dart';
+import 'connection_banner.dart';
 import '../ui/org_theme.dart';
 
 typedef _Dest = ({String path, IconData icon, String label});
@@ -79,7 +80,7 @@ class _AppShellState extends State<AppShell> {
               noteId: _noteId,
               onToggle: () => setState(() => _collapsed = !_collapsed),
             ),
-            Expanded(child: UpdateBannerHost(child: widget.child)),
+            Expanded(child: ConnectionBannerHost(child: UpdateBannerHost(child: widget.child))),
           ],
         ),
       );
@@ -88,7 +89,7 @@ class _AppShellState extends State<AppShell> {
     final moreActive = const {'/academia', '/compras', '/noticias', '/casa', '/ajustes', '/mais'}.contains(active);
     final index = moreActive ? 4 : _bottomItems.indexWhere((d) => d.path == active);
     return Scaffold(
-      body: UpdateBannerHost(child: widget.child),
+      body: ConnectionBannerHost(child: UpdateBannerHost(child: widget.child)),
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(border: Border(top: BorderSide(color: context.org.line))),
         child: NavigationBar(

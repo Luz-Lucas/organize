@@ -8,21 +8,14 @@ import '../data/repository.dart';
 export 'org_widgets.dart' show EmptyHint, SectionHeader;
 
 /// Renderiza [value] com [builder]. Se o stream falhar (ex.: queda de rede)
-/// mas já houver dados carregados, mantém os dados na tela e mostra um aviso
-/// discreto em vez de substituir tudo pela tela de erro; a tela de erro cheia
-/// só aparece quando ainda não há dados.
+/// mas já houver dados carregados, mantém os dados na tela, SEM mudar a forma
+/// da árvore (embrulhar o conteúdo faria o Flutter descartar o estado de
+/// campos de texto, abas e chips a cada queda/volta do websocket). O aviso de
+/// conexão é único e global, na casca do app (`ConnectionBannerHost`). A tela
+/// de erro cheia só aparece quando ainda não há dados.
 Widget asyncView<T>(AsyncValue<T> value, Widget Function(T data) builder) {
   final data = value.value;
-  if (data != null) {
-    final content = builder(data);
-    if (!value.hasError) return content;
-    return Column(
-      children: [
-        const _ConnectionNotice('Sem conexão com o servidor. Tentando de novo…'),
-        Expanded(child: content),
-      ],
-    );
-  }
+  if (data != null) return builder(data);
   return value.when(
     data: builder,
     loading: () => const Center(child: CircularProgressIndicator()),
@@ -33,35 +26,6 @@ Widget asyncView<T>(AsyncValue<T> value, Widget Function(T data) builder) {
       ),
     ),
   );
-}
-
-class _ConnectionNotice extends StatelessWidget {
-  const _ConnectionNotice(this.message);
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.errorContainer,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.cloud_off_outlined, size: 18, color: theme.colorScheme.onErrorContainer),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(message, style: TextStyle(color: theme.colorScheme.onErrorContainer)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 String plural(int n, String one, String many) => '$n ${n == 1 ? one : many}';

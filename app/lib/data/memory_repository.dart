@@ -22,16 +22,40 @@ class MemoryRepository implements Repository {
   /// Quando true, toda escrita falha, simulando uma queda de conexão.
   bool failWrites = false;
 
+  final _errors = StreamController<Object>.broadcast(sync: true);
+  bool _streamsDown = false;
+
+  /// Simula a queda do websocket: todos os streams emitem [error] (sem fechar) e
+  /// quem assinar enquanto estiver "fora do ar" também recebe o erro. Volta ao
+  /// normal com [emitData] ou na próxima escrita bem-sucedida.
+  void emitStreamError([Object error = const RepositoryException('Sem conexão (simulado)')]) {
+    _streamsDown = true;
+    _errors.add(error);
+  }
+
+  /// Fim da queda simulada: reemite o estado atual para quem está assinando.
+  void emitData() {
+    _streamsDown = false;
+    _changes.add(null);
+  }
+
   Stream<List<T>> _watch<T>(List<T> Function() snapshot) {
     StreamSubscription<void>? sub;
+    StreamSubscription<Object>? errSub;
     late final StreamController<List<T>> controller;
     controller = StreamController<List<T>>(
       onListen: () {
-        controller.add(snapshot());
+        if (_streamsDown) {
+          controller.addError(const RepositoryException('Sem conexão (simulado)'));
+        } else {
+          controller.add(snapshot());
+        }
         sub = _changes.stream.listen((_) => controller.add(snapshot()));
+        errSub = _errors.stream.listen(controller.addError);
       },
       onCancel: () {
         sub?.cancel();
+        errSub?.cancel();
         controller.close();
       },
     );
@@ -41,6 +65,7 @@ class MemoryRepository implements Repository {
   Future<void> _write(void Function() change) async {
     if (failWrites) throw const RepositoryException('Sem conexão (simulado)');
     change();
+    _streamsDown = false;
     _changes.add(null);
   }
 
