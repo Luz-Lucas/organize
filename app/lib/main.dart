@@ -9,6 +9,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/app.dart';
+import 'app/local_overrides.dart';
+import 'app/sync_host.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
 import 'app_icon/app_icon.dart';
@@ -54,6 +56,8 @@ import 'reminders/reminder_background.dart';
 import 'reminders/reminder_plugin_sink.dart';
 import 'reminders/reminder_sync.dart';
 import 'location/location_service.dart';
+import 'sync/supabase_remote_source.dart';
+import 'sync/sync_session.dart';
 import 'update/android_update_installer.dart';
 import 'update/linux_update_installer.dart';
 import 'update/release_repository.dart';
@@ -114,71 +118,110 @@ Future<void> main() async {
   // Reconhecimento de escrita e corretor: só no Android (ML Kit / corretor do sistema);
   // no Linux e no Windows ficam os Noop e nada muda.
   final inkPolicy = InkDownloadPolicy();
-  runApp(ProviderScope(
-    overrides: [
-      repositoryProvider.overrideWithValue(SupabaseRepository(client)),
-      newsRepositoryProvider.overrideWithValue(SupabaseNewsRepository(client)),
-      alexaRepositoryProvider.overrideWithValue(SupabaseAlexaRepository(client)),
-      settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
-      locationRepositoryProvider.overrideWithValue(SupabaseLocationRepository(client)),
-      emailRepositoryProvider.overrideWithValue(SupabaseEmailRepository(client)),
-      driveRepositoryProvider.overrideWithValue(SupabaseDriveRepository(client)),
-      if (isAndroid) shareIntentServiceProvider.overrideWithValue(MethodChannelShareIntentService()),
-      githubRepositoryProvider.overrideWithValue(SupabaseGithubRepository(client)),
-      fitnessRepositoryProvider.overrideWithValue(SupabaseFitnessRepository(client)),
-      shoppingRepositoryProvider.overrideWithValue(SupabaseShoppingRepository(client)),
-      notebookRepositoryProvider.overrideWithValue(SupabaseNotebookRepository(client)),
-      notebookPendingStoreProvider.overrideWithValue(const SharedPreferencesNotebookPendingStore()),
-      handwritingPrefsStoreProvider.overrideWithValue(const SharedPreferencesHandwritingPrefsStore()),
-      ignoredWordsStoreProvider.overrideWithValue(const SharedPreferencesIgnoredWordsStore()),
-      inkDownloadPolicyProvider.overrideWithValue(inkPolicy),
-      if (isAndroid) inkRecognizerProvider.overrideWithValue(MlKitInkRecognizer(policy: inkPolicy)),
-      if (isAndroid) spellCheckerProvider.overrideWithValue(PlatformSpellChecker()),
-      // PDF no Caderno (PDFium): Android, Linux e Windows.
-      if (!kIsWeb) pdfRasterizerProvider.overrideWithValue(const PdfrxRasterizer()),
-      notesTabPrefsProvider.overrideWithValue(const SharedPreferencesNotesTabPrefs()),
-      agendaFilterPrefsProvider.overrideWithValue(const SharedPreferencesAgendaFilterPrefs()),
-      agendaViewPrefsProvider.overrideWithValue(const SharedPreferencesAgendaViewPrefs()),
-      notebookImageStoreFactoryProvider
-          .overrideWithValue((noteId) => SupabaseNotebookImageStore(client, noteId: noteId)),
-      notebookPdfStoreFactoryProvider.overrideWithValue((noteId) => CachedNotebookPdfStore(
-            SupabaseNotebookImageStore(client, noteId: noteId),
-            () async => Directory('${(await getApplicationCacheDirectory()).path}${Platform.pathSeparator}notebook-pdfs'),
-          )),
-      if (!kIsWeb) pdfViewBuilderProvider.overrideWithValue(buildPdfrxView),
-      pdfReadingPositionsProvider.overrideWithValue(const SharedPreferencesPdfReadingPositions()),
-      filesPlatformProvider.overrideWithValue(
-          isAndroid
-              ? MethodChannelFilesPlatform()
-              : (!kIsWeb && Platform.isLinux
-                  ? LinuxFilesPlatform()
-                  : (!kIsWeb && Platform.isWindows ? WindowsFilesPlatform() : const NoopFilesPlatform()))),
-      signOutProvider.overrideWithValue(() => client.auth.signOut()),
-      if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
-      if (reminderSink != null) reminderSinkProvider.overrideWithValue(reminderSink),
-      if (isAndroid) locationServiceProvider.overrideWithValue(const GeolocatorLocationService()),
-      locationSignedInProvider.overrideWithValue(() => client.auth.currentSession != null),
-      if (isAndroid) appIconServiceProvider.overrideWithValue(const MethodChannelAppIconService()),
-      currentEmailProvider.overrideWithValue(client.auth.currentUser?.email),
-      // Atualização por dentro do app (Android, Linux e Windows). No desktop só em build de release:
-      // em `flutter run` a pasta do executável é a de desenvolvimento e não deve ser trocada.
-      releaseRepositoryProvider.overrideWithValue(SupabaseReleaseRepository(client)),
-      updatePrefsProvider.overrideWithValue(const SharedPreferencesUpdatePrefs()),
-      installedVersionLoaderProvider.overrideWithValue(loadInstalledVersionFromPlatform),
-      updateInstallerProvider.overrideWithValue(
-          isAndroid
-              ? AndroidUpdateInstaller()
-              : (kIsWeb || !kReleaseMode
-                  ? const NoopUpdateInstaller()
-                  : (Platform.isLinux
-                      ? LinuxUpdateInstaller()
-                      : (Platform.isWindows ? WindowsUpdateInstaller() : const NoopUpdateInstaller())))),
-      updateExitProvider.overrideWithValue(() => exit(0)),
-    ],
-    child: ShareIntentListener(
-      router: router,
-      isSignedIn: () => client.auth.currentSession != null,
-      child: OrganizacionalApp(router: router),
+  final onlineAlexa = SupabaseAlexaRepository(client);
+  // O app guarda tudo no aparelho primeiro (banco local por conta, dono: `SyncHost`) e o sincronizador leva à
+  // nuvem. Cada conta tem a sua própria árvore de provedores (chave por usuário): trocar de conta recria tudo.
+  runApp(SyncHost(
+    userIds: client.auth.onAuthStateChange.map((s) => s.session?.user.id),
+    initialUserId: client.auth.currentUser?.id,
+    openSession: (userId) async => SyncSession.open(
+      userId: userId,
+      supportDir: await getApplicationSupportDirectory(),
+      remote: SupabaseRemoteSource(client),
+    ),
+    loading: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(),
+      home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+    ),
+    builder: (context, session) => ProviderScope(
+      key: ValueKey(session?.userId ?? 'online'),
+      overrides: [
+        if (session != null)
+          ...localFirstOverrides(
+            session: session,
+            onlineAlexa: onlineAlexa,
+            seedEventTagsRemote: () async {
+              final n = await client.rpc('seed_my_event_tags');
+              return n is num ? n.toInt() : 0;
+            },
+          )
+        else ...[
+          // Sem banco local (deslogado, ou o banco não abriu): tudo direto na nuvem, como antes.
+          repositoryProvider.overrideWithValue(SupabaseRepository(client)),
+          alexaRepositoryProvider.overrideWithValue(onlineAlexa),
+          settingsRepositoryProvider.overrideWithValue(SupabaseSettingsRepository(client)),
+          fitnessRepositoryProvider.overrideWithValue(SupabaseFitnessRepository(client)),
+          shoppingRepositoryProvider.overrideWithValue(SupabaseShoppingRepository(client)),
+        ],
+        newsRepositoryProvider.overrideWithValue(SupabaseNewsRepository(client)),
+        locationRepositoryProvider.overrideWithValue(SupabaseLocationRepository(client)),
+        emailRepositoryProvider.overrideWithValue(SupabaseEmailRepository(client)),
+        driveRepositoryProvider.overrideWithValue(SupabaseDriveRepository(client)),
+        if (isAndroid) shareIntentServiceProvider.overrideWithValue(MethodChannelShareIntentService()),
+        githubRepositoryProvider.overrideWithValue(SupabaseGithubRepository(client)),
+        notebookRepositoryProvider.overrideWithValue(SupabaseNotebookRepository(client)),
+        notebookPendingStoreProvider.overrideWithValue(const SharedPreferencesNotebookPendingStore()),
+        handwritingPrefsStoreProvider.overrideWithValue(const SharedPreferencesHandwritingPrefsStore()),
+        ignoredWordsStoreProvider.overrideWithValue(const SharedPreferencesIgnoredWordsStore()),
+        inkDownloadPolicyProvider.overrideWithValue(inkPolicy),
+        if (isAndroid) inkRecognizerProvider.overrideWithValue(MlKitInkRecognizer(policy: inkPolicy)),
+        if (isAndroid) spellCheckerProvider.overrideWithValue(PlatformSpellChecker()),
+        // PDF no Caderno (PDFium): Android, Linux e Windows.
+        if (!kIsWeb) pdfRasterizerProvider.overrideWithValue(const PdfrxRasterizer()),
+        notesTabPrefsProvider.overrideWithValue(const SharedPreferencesNotesTabPrefs()),
+        agendaFilterPrefsProvider.overrideWithValue(const SharedPreferencesAgendaFilterPrefs()),
+        agendaViewPrefsProvider.overrideWithValue(const SharedPreferencesAgendaViewPrefs()),
+        notebookImageStoreFactoryProvider
+            .overrideWithValue((noteId) => SupabaseNotebookImageStore(client, noteId: noteId)),
+        notebookPdfStoreFactoryProvider.overrideWithValue((noteId) => CachedNotebookPdfStore(
+              SupabaseNotebookImageStore(client, noteId: noteId),
+              () async => Directory('${(await getApplicationCacheDirectory()).path}${Platform.pathSeparator}notebook-pdfs'),
+            )),
+        if (!kIsWeb) pdfViewBuilderProvider.overrideWithValue(buildPdfrxView),
+        pdfReadingPositionsProvider.overrideWithValue(const SharedPreferencesPdfReadingPositions()),
+        filesPlatformProvider.overrideWithValue(
+            isAndroid
+                ? MethodChannelFilesPlatform()
+                : (!kIsWeb && Platform.isLinux
+                    ? LinuxFilesPlatform()
+                    : (!kIsWeb && Platform.isWindows ? WindowsFilesPlatform() : const NoopFilesPlatform()))),
+        signOutProvider.overrideWithValue(() async {
+          // Antes de sair (o que apaga o banco do aparelho), tenta enviar o que ainda estava na fila.
+          final engine = session?.engine;
+          if (engine != null) {
+            try {
+              await engine.flush().timeout(const Duration(seconds: 5));
+            } catch (_) {}
+          }
+          await client.auth.signOut();
+        }),
+        if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
+        if (reminderSink != null) reminderSinkProvider.overrideWithValue(reminderSink),
+        if (isAndroid) locationServiceProvider.overrideWithValue(const GeolocatorLocationService()),
+        locationSignedInProvider.overrideWithValue(() => client.auth.currentSession != null),
+        if (isAndroid) appIconServiceProvider.overrideWithValue(const MethodChannelAppIconService()),
+        currentEmailProvider.overrideWithValue(client.auth.currentUser?.email),
+        // Atualização por dentro do app (Android, Linux e Windows). No desktop só em build de release:
+        // em `flutter run` a pasta do executável é a de desenvolvimento e não deve ser trocada.
+        releaseRepositoryProvider.overrideWithValue(SupabaseReleaseRepository(client)),
+        updatePrefsProvider.overrideWithValue(const SharedPreferencesUpdatePrefs()),
+        installedVersionLoaderProvider.overrideWithValue(loadInstalledVersionFromPlatform),
+        updateInstallerProvider.overrideWithValue(
+            isAndroid
+                ? AndroidUpdateInstaller()
+                : (kIsWeb || !kReleaseMode
+                    ? const NoopUpdateInstaller()
+                    : (Platform.isLinux
+                        ? LinuxUpdateInstaller()
+                        : (Platform.isWindows ? WindowsUpdateInstaller() : const NoopUpdateInstaller())))),
+        updateExitProvider.overrideWithValue(() => exit(0)),
+      ],
+      child: ShareIntentListener(
+        router: router,
+        isSignedIn: () => client.auth.currentSession != null,
+        child: OrganizacionalApp(router: router),
+      ),
     ),
   ));
 }

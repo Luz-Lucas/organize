@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:organizacional/app/providers.dart';
+import 'package:organizacional/app/sync_providers.dart';
 import 'package:organizacional/data/shopping_repository.dart';
 import 'package:organizacional/domain/shopping.dart';
 import 'package:organizacional/features/shopping/shopping_card.dart';
@@ -51,6 +54,31 @@ Future<void> _add(WidgetTester tester, String name, {String qty = ''}) async {
 }
 
 void main() {
+  testWidgets('só cria o Mercado depois da carga inicial da nuvem (senão duplicaria a lista que ainda vai chegar)',
+      (tester) async {
+    final repo = MemoryShoppingRepository();
+    final loaded = Completer<void>();
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        shoppingRepositoryProvider.overrideWithValue(repo),
+        syncReadyProvider.overrideWithValue(loaded.future),
+        clockProvider.overrideWithValue(() => DateTime(2026, 10, 19, 10)),
+      ],
+      child: MaterialApp(theme: buildOrgTheme(orgThemes.first, googleFonts: false), home: const ShoppingScreen()),
+    ));
+    await tester.pump(const Duration(seconds: 1));
+    expect(await repo.watchLists().first, isEmpty, reason: 'ainda carregando: nada de criar lista');
+
+    // a nuvem entrega a lista dela e só então a carga termina
+    await repo.upsertList(const ShoppingList(id: 'da-nuvem', name: 'Feira'));
+    loaded.complete();
+    await tester.pumpAndSettle();
+    expect((await repo.watchLists().first).map((l) => l.name), ['Feira']);
+  });
+
   testWidgets('primeira abertura cria a lista Mercado sozinha', (tester) async {
     final repo = MemoryShoppingRepository();
     await _pump(tester, repo);

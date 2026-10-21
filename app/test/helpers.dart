@@ -57,6 +57,10 @@ Future<void> pumpApp(
   NotebookRepository? notebookRepo,
   NotebookImageStore Function(String noteId)? notebookImages,
   void Function()? exitApp,
+
+  /// Troca de uma vez os repositórios principal, Academia, Compras, ajustes e Alexa (ex.: os local-primeiro).
+  /// Quando informado, [repo], [fitnessRepo], [shoppingRepo], [settings] e [alexa] não valem.
+  List<Override>? repositoryOverrides,
   List<Override> overrides = const [],
 }) async {
   tester.view.physicalSize = size;
@@ -64,19 +68,22 @@ Future<void> pumpApp(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      repositoryProvider.overrideWithValue(repo),
+      if (repositoryOverrides == null) ...[
+        repositoryProvider.overrideWithValue(repo),
+        alexaRepositoryProvider.overrideWithValue(alexa ?? MemoryAlexaRepository()),
+        settingsRepositoryProvider.overrideWithValue(settings ?? MemorySettingsRepository()),
+        fitnessRepositoryProvider.overrideWithValue(fitnessRepo ?? MemoryFitnessRepository()),
+        shoppingRepositoryProvider.overrideWithValue(shoppingRepo ?? MemoryShoppingRepository()),
+      ] else
+        ...repositoryOverrides,
       clockProvider.overrideWithValue(() => now ?? defaultNow),
       newsRepositoryProvider.overrideWithValue(news ?? MemoryNewsRepository()),
       linkOpenerProvider.overrideWithValue(openLink ?? (_) async => true),
-      alexaRepositoryProvider.overrideWithValue(alexa ?? MemoryAlexaRepository()),
-      settingsRepositoryProvider.overrideWithValue(settings ?? MemorySettingsRepository()),
       locationRepositoryProvider.overrideWithValue(locationRepo ?? MemoryLocationRepository()),
       emailRepositoryProvider.overrideWithValue(emailRepo ?? MemoryEmailRepository()),
       driveRepositoryProvider.overrideWithValue(driveRepo ?? MemoryDriveRepository()),
       if (filePicker != null) filePickerProvider.overrideWithValue(filePicker),
       githubRepositoryProvider.overrideWithValue(githubRepo ?? MemoryGithubRepository()),
-      fitnessRepositoryProvider.overrideWithValue(fitnessRepo ?? MemoryFitnessRepository()),
-      shoppingRepositoryProvider.overrideWithValue(shoppingRepo ?? MemoryShoppingRepository()),
       if (locationService != null) locationServiceProvider.overrideWithValue(locationService),
       notebookRepositoryProvider.overrideWithValue(notebookRepo ?? MemoryNotebookRepository()),
       notebookImageStoreFactoryProvider.overrideWithValue(notebookImages ?? (_) => FakeNotebookImageStore()),

@@ -65,8 +65,8 @@ class LocalStore {
     await File(path).parent.create(recursive: true);
     final db = sqlite3.open(path);
     try {
+      db.execute('PRAGMA busy_timeout = 5000'); // antes do WAL: o app e o segundo plano podem abrir juntos
       db.execute('PRAGMA journal_mode = WAL');
-      db.execute('PRAGMA busy_timeout = 5000');
     } catch (_) {
       db.close();
       rethrow;
@@ -90,6 +90,7 @@ class LocalStore {
   final _localWrites = StreamController<void>.broadcast(sync: true);
 
   void _init() {
+    _dataVersion = _db.select('PRAGMA data_version').first.values.first as int;
     final version = _db.select('PRAGMA user_version').first.values.first as int;
     if (version < 1) {
       _db.execute('''
@@ -115,6 +116,21 @@ class LocalStore {
         PRAGMA user_version = 1;
       ''');
     }
+  }
+
+  int? _dataVersion;
+
+  /// Outra conexão ao mesmo arquivo (o isolate de segundo plano, que grava a conclusão de uma tarefa ou
+  /// marca um item do Mercado) pode ter gravado: se sim, reemite todos os streams. Devolve se houve mudança.
+  bool checkExternalChanges() {
+    if (_closed) return false;
+    final version = _db.select('PRAGMA data_version').first.values.first as int;
+    final previous = _dataVersion;
+    _dataVersion = version;
+    if (previous == null || previous == version) return false;
+    _touch(null);
+    _touchPending();
+    return true;
   }
 
   /// Coluna-chave da tabela.

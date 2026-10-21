@@ -4,9 +4,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/local_repository.dart';
 import '../domain/calendar_event.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
+import '../sync/background_local.dart';
+import '../sync/local_store.dart';
 import '../widgets/widget_background.dart';
 import 'reminder_actions.dart';
 import 'reminder_plugin_sink.dart';
@@ -48,6 +51,31 @@ class SupabaseReminderDataSource implements ReminderDataSource {
   }
 }
 
+/// Lê do banco local do app (inclui o que ainda não subiu): os lembretes não dependem de rede.
+class LocalReminderDataSource implements ReminderDataSource {
+  LocalReminderDataSource(this._store);
+
+  final LocalStore _store;
+
+  @override
+  Future<List<TaskItem>> openTasks() async => [
+        for (final r in await _store.all('tasks'))
+          if (r['status'] != 'done' && r['due_at'] != null) TaskItem.fromMap(r),
+      ];
+
+  @override
+  Future<List<CalendarEvent>> events(DateTime from, DateTime to) async => [
+        for (final r in await _store.all('events')) CalendarEvent.fromMap(r),
+      ].where((e) => !e.endsAt.isBefore(from) && !e.startsAt.isAfter(to)).toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+  @override
+  Future<UserSettings> settings() async {
+    final rows = await _store.all('user_settings');
+    return rows.isEmpty ? const UserSettings() : UserSettings.fromMap(rows.first);
+  }
+}
+
 /// Busca tarefas, eventos e ajustes e reagenda os lembretes. [source] nulo = sem sessão:
 /// cancela tudo (o aparelho não deve avisar de uma conta que saiu). Falha ao buscar (sem rede)
 /// mantém o que já estava agendado e devolve `false`.
@@ -79,12 +107,13 @@ Future<bool> runReminderReschedule({
 Future<bool> rescheduleRemindersInBackground({
   required SupabaseClient? Function() client,
   required DateTime now,
+  ReminderDataSource? localSource,
 }) async {
   DartPluginRegistrant.ensureInitialized();
   final c = client();
   final signedIn = c != null && c.auth.currentSession != null;
   return runReminderReschedule(
-    source: signedIn ? SupabaseReminderDataSource(c) : null,
+    source: signedIn ? (localSource ?? SupabaseReminderDataSource(c)) : null,
     sink: PluginReminderSink(),
     now: now,
   );
@@ -99,6 +128,16 @@ Future<void> completeTaskInBackground(SupabaseClient? client, String taskId, Dat
       .eq('id', taskId);
 }
 
+/// Conclui a tarefa no banco local (vai para a fila, linha inteira) e devolve `true`; `false` se a tarefa
+/// não está no banco local (quem chamou usa a nuvem).
+Future<bool> completeTaskLocally(BackgroundLocal local, String taskId, DateTime now) async {
+  final row = await local.store.get('tasks', taskId);
+  if (row == null) return false;
+  final task = TaskItem.fromMap(row);
+  await LocalFirstRepository(local.store).upsertTask(task.copyWith(status: TaskStatus.done, completedAt: now));
+  return true;
+}
+
 /// Chamado pelo plugin num isolate sem interface quando o usuário toca em "Concluir".
 @pragma('vm:entry-point')
 Future<void> reminderBackgroundResponse(NotificationResponse response) async {
@@ -107,7 +146,22 @@ Future<void> reminderBackgroundResponse(NotificationResponse response) async {
   final sink = PluginReminderSink();
   await handleReminderResponse(
     response,
-    complete: (id) async => completeTaskInBackground(await backgroundSupabaseClient(), id, DateTime.now()),
+    complete: (id) async {
+      final client = await backgroundSupabaseClient();
+      // Com o banco local da conta: grava nele (fila) e tenta enviar; a tarefa some do app na hora.
+      final local = await openBackgroundLocal(client);
+      if (local != null) {
+        try {
+          if (await completeTaskLocally(local, id, DateTime.now())) {
+            await local.push();
+            return;
+          }
+        } finally {
+          await local.close();
+        }
+      }
+      await completeTaskInBackground(client, id, DateTime.now());
+    },
     cancelPending: sink.cancelPendingForTask,
   );
 }

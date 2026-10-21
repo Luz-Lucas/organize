@@ -228,6 +228,7 @@ class SyncEngine {
         _failed(message);
         return false;
       }
+      if (_disposed) return true; // fechou durante o envio: sem ack, o reenvio é idempotente
       store.ackOutbox(group);
       _succeeded();
     }

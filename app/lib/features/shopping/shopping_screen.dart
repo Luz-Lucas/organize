@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/sync_providers.dart';
 import '../../data/repository.dart';
 import '../../data/shopping_repository.dart';
 import '../../domain/ids.dart';
@@ -27,9 +28,13 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
   void initState() {
     super.initState();
     // Primeiro uso: cria "Mercado" sozinha (não faz nada se já houver lista).
-    ref.read(shoppingRepositoryProvider).ensureDefaultList().then<void>((_) {}, onError: (Object _) {
-      if (mounted) showError(context, 'Não foi possível abrir suas listas.');
-    });
+    // Só depois da carga inicial da nuvem: antes, as listas dela ainda não chegaram e criaria "Mercado" em duplicidade.
+    ref.read(syncReadyProvider).then((_) => ref.read(shoppingRepositoryProvider).ensureDefaultList()).then<void>(
+      (_) {},
+      onError: (Object _) {
+        if (mounted) showError(context, 'Não foi possível abrir suas listas.');
+      },
+    );
     _name.addListener(() => setState(() {}));
   }
 

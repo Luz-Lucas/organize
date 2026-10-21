@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:home_widget/home_widget.dart';
 
+import '../data/local_shopping_repository.dart';
 import '../data/shopping_repository.dart';
 import '../data/supabase_shopping_repository.dart';
 import 'widget_background.dart';
@@ -49,11 +50,20 @@ Future<bool> handleWidgetInteraction(
 @pragma('vm:entry-point')
 Future<void> widgetInteractivityCallback(Uri? uri) async {
   WidgetsFlutterBinding.ensureInitialized();
-  await handleWidgetInteraction(uri, () async {
-    final client = await backgroundSupabaseClient();
-    if (client == null || client.auth.currentSession == null) return null;
-    return SupabaseShoppingRepository(client);
-  });
+  final client = await backgroundSupabaseClient();
+  if (client == null || client.auth.currentSession == null) return;
+  // Com o banco local da conta: marca nele (fila) e tenta enviar; sem ele, direto na nuvem como antes.
+  final local = await openBackgroundLocal(client);
+  if (local != null) {
+    try {
+      final ok = await handleWidgetInteraction(uri, () async => LocalFirstShoppingRepository(local.store));
+      if (ok) await local.push();
+      return;
+    } finally {
+      await local.close();
+    }
+  }
+  await handleWidgetInteraction(uri, () async => SupabaseShoppingRepository(client));
 }
 
 /// Registra o callback acima (Android).

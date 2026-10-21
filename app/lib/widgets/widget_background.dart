@@ -2,12 +2,17 @@ import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:workmanager/workmanager.dart';
 
+import 'package:path_provider/path_provider.dart';
+
 import '../domain/calendar_event.dart';
 import '../domain/event_tag.dart';
 import '../domain/shopping.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
 import '../location/location_background.dart';
+import '../sync/background_local.dart';
+import '../sync/local_store.dart';
+import '../sync/supabase_remote_source.dart';
 import '../reminders/reminder_background.dart';
 import 'widget_sink.dart';
 import 'widget_snapshot.dart';
@@ -80,6 +85,50 @@ class SupabaseWidgetDataSource implements WidgetDataSource {
   }
 }
 
+/// Lê do banco local do app (o mesmo que as telas mostram, com o que ainda não subiu): o widget fica
+/// certo mesmo sem rede.
+class LocalWidgetDataSource implements WidgetDataSource {
+  LocalWidgetDataSource(this._store);
+
+  final LocalStore _store;
+
+  @override
+  Future<List<CalendarEvent>> events(DateTime from, DateTime to) async {
+    final out = [
+      for (final r in await _store.all('events')) CalendarEvent.fromMap(r),
+    ].where((e) => !e.endsAt.isBefore(from) && !e.startsAt.isAfter(to)).toList()
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    return out;
+  }
+
+  @override
+  Future<List<TaskItem>> openTasks() async => [
+        for (final r in await _store.all('tasks'))
+          if (r['status'] != 'done') TaskItem.fromMap(r),
+      ];
+
+  @override
+  Future<List<EventTag>> tags() async => [for (final r in await _store.all('event_tags')) EventTag.fromMap(r)];
+
+  @override
+  Future<List<ShoppingList>> shoppingLists() async => [
+        for (final r in await _store.all('shopping_lists')) ShoppingList.fromMap(r),
+      ]..sort((a, b) => a.position.compareTo(b.position));
+
+  @override
+  Future<List<ShoppingItem>> shoppingItems() async => [
+        for (final r in await _store.all('shopping_items'))
+          if (r['checked'] != true) ShoppingItem.fromMap(r),
+      ];
+
+  @override
+  Future<String> themeId() async {
+    final rows = await _store.all('user_settings');
+    final t = rows.isEmpty ? null : rows.first['theme'];
+    return t is String && themeIds.contains(t) ? t : 'violeta';
+  }
+}
+
 /// Busca os dados e monta o resumo. Em falha devolve apenas
 /// `{'w_state': 'error'}`, para não sobrescrever o último resumo bom.
 Future<Map<String, String>> fetchSnapshot(WidgetDataSource source, DateTime now) async {
@@ -124,6 +173,7 @@ Future<bool> refreshWidgetsInBackground({
   required SupabaseClient? Function() client,
   required WidgetSink sink,
   required DateTime now,
+  WidgetDataSource? localSource,
 }) async {
   final c = client();
   final Map<String, String> data;
@@ -131,11 +181,22 @@ Future<bool> refreshWidgetsInBackground({
     data = buildWidgetSnapshot(
         now: now, events: const [], tasks: const [], themeId: 'violeta', state: 'signed_out');
   } else {
-    data = await fetchSnapshot(SupabaseWidgetDataSource(c), now);
+    data = await fetchSnapshot(localSource ?? SupabaseWidgetDataSource(c), now);
   }
   await sink.save(data);
   await sink.refresh();
   return data['w_state'] != 'error';
+}
+
+/// Abre o banco local da conta logada para o segundo plano (`null` se não houver: o app nunca abriu com
+/// ela, ou não há sessão). Quem abriu deve fechar.
+Future<BackgroundLocal?> openBackgroundLocal(SupabaseClient? client) {
+  if (client == null) return Future.value(null);
+  return BackgroundLocal.open(
+    userId: client.auth.currentUser?.id,
+    remote: SupabaseRemoteSource(client),
+    supportDir: getApplicationSupportDirectory,
+  );
 }
 
 /// Cliente do Supabase para o isolate de segundo plano (reaproveita o do app
@@ -165,16 +226,30 @@ void callbackDispatcher() {
         await runLocationReportTask(client);
         return true; // sem sessão/casa/permissão não é erro: tenta de novo em 15 min
       }
-      await refreshWidgetsInBackground(
-        client: () => client,
-        sink: const HomeWidgetSink(),
-        now: DateTime.now(),
-      );
-      // Reagenda os lembretes do celular (a janela de 3 dias anda e o app pode estar fechado há dias).
+      // Com o banco local da conta: envia o que ficou na fila, recarrega e lê dele (o widget e os lembretes
+      // mostram o mesmo que o app, até sem rede). Sem ele, fala direto com a nuvem.
+      final local = await openBackgroundLocal(client);
       try {
-        await rescheduleRemindersInBackground(client: () => client, now: DateTime.now());
-      } catch (_) {
-        // Lembretes são secundários: a atualização dos widgets já valeu.
+        final pulled = local == null ? false : await local.pullAndPush();
+        final useLocal = local != null && (pulled || await local.hasData());
+        await refreshWidgetsInBackground(
+          client: () => client,
+          sink: const HomeWidgetSink(),
+          now: DateTime.now(),
+          localSource: useLocal ? LocalWidgetDataSource(local.store) : null,
+        );
+        // Reagenda os lembretes do celular (a janela de 3 dias anda e o app pode estar fechado há dias).
+        try {
+          await rescheduleRemindersInBackground(
+            client: () => client,
+            now: DateTime.now(),
+            localSource: useLocal ? LocalReminderDataSource(local.store) : null,
+          );
+        } catch (_) {
+          // Lembretes são secundários: a atualização dos widgets já valeu.
+        }
+      } finally {
+        await local?.close();
       }
       return true;
     } catch (_) {

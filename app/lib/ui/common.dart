@@ -11,7 +11,7 @@ export 'org_widgets.dart' show EmptyHint, SectionHeader;
 /// mas já houver dados carregados, mantém os dados na tela, SEM mudar a forma
 /// da árvore (embrulhar o conteúdo faria o Flutter descartar o estado de
 /// campos de texto, abas e chips a cada queda/volta do websocket). O aviso de
-/// conexão é único e global, na casca do app (`ConnectionBannerHost`). A tela
+/// conexão é único e global, na casca do app (`SyncStatusHost`, um ícone discreto). A tela
 /// de erro cheia só aparece quando ainda não há dados.
 Widget asyncView<T>(AsyncValue<T> value, Widget Function(T data) builder) {
   final data = value.value;

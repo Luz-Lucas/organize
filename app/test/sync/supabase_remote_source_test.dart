@@ -123,6 +123,35 @@ void main() {
       expect(requests.first.url.queryParameters['id'], startsWith('in.('));
     });
 
+    test('wake_overrides (chave composta): fetchAll acrescenta o id, upsert tira o id e usa o conflito próprio', () async {
+      respond = (req) async => req.method == 'GET'
+          ? json([
+              {'plan_id': 'p1', 'run_date': '2026-10-22', 'skip': true},
+            ])
+          : http.Response('', 201);
+      final rows = await source.fetchAll('wake_overrides');
+      expect(rows.single['id'], 'p1|2026-10-22');
+      expect(requests.single.url.queryParameters['order'], startsWith('plan_id.asc'));
+
+      await source.upsert('wake_overrides', [
+        {'id': 'p1|2026-10-22', 'plan_id': 'p1', 'run_date': '2026-10-22', 'skip': true},
+      ]);
+      final post = requests.last;
+      expect(post.url.queryParameters['on_conflict'], 'plan_id,run_date');
+      expect(jsonDecode(post.body), [
+        {'plan_id': 'p1', 'run_date': '2026-10-22', 'skip': true},
+      ]);
+    });
+
+    test('wake_overrides: delete filtra por plano e data de cada id', () async {
+      respond = (_) async => http.Response('', 204);
+      await source.delete('wake_overrides', ['p1|2026-10-22', 'p2|2026-10-23']);
+      expect(requests, hasLength(2));
+      expect(requests[0].url.queryParameters['plan_id'], 'eq.p1');
+      expect(requests[0].url.queryParameters['run_date'], 'eq.2026-10-22');
+      expect(requests[1].url.queryParameters['plan_id'], 'eq.p2');
+    });
+
     test('violação de restrição vira PermanentSyncError e 503 vira TransientSyncError', () async {
       respond = (_) async => json({'code': '23505', 'message': 'duplicate key', 'details': null, 'hint': null}, 409);
       await expectLater(source.upsert('tasks', [{'id': 'a'}]), throwsA(isA<PermanentSyncError>()));
