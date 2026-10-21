@@ -134,6 +134,16 @@ describe('skill', () => {
       expect(tasks).toEqual([{ title: 'mandar mensagem para a Joana', dueAt: new Date('2026-10-22T02:59:00Z'), priority: 'alta' }]);
     });
 
+    it('"cancelar", "nada", "deixa pra lá" depois de "Qual é a tarefa?" encerram sem anotar', async () => {
+      const { skill: s, tasks } = build();
+      for (const v of ['cancelar', 'Nada.', 'deixa pra lá', 'parar', 'não']) {
+        expect(await ssml(s, pedido(v))).toContain('Tudo bem, não anotei nada.');
+      }
+      expect(tasks).toEqual([]);
+      // Palavras de cancelar dentro de uma tarefa de verdade continuam valendo.
+      expect(await ssml(s, pedido('cancelar a assinatura da academia'))).toContain('Anotei a tarefa cancelar a assinatura da academia.');
+    });
+
     it('sem prazo, também com prioridade alta', async () => {
       const { skill: s, tasks } = build();
       expect(await ssml(s, pedido('mandar mensagem para a Joana'))).toContain('Anotei a tarefa mandar mensagem para a Joana.');

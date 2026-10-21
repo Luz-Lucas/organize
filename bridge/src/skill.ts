@@ -19,6 +19,17 @@ export interface SkillDeps {
   addTask: (task: { title: string; dueAt: Date | null; priority: 'baixa' | 'media' | 'alta' }) => Promise<void>;
 }
 
+const CANCEL_WORDS = new Set([
+  'cancelar', 'cancela', 'cancele', 'parar', 'para', 'pare', 'sair', 'sai', 'nada', 'nenhuma', 'nenhum', 'nao',
+  'esquece', 'esqueca', 'deixa', 'deixa pra la', 'deixa para la', 'nada nao', 'nao quero', 'obrigado', 'obrigada', 'tchau',
+]);
+
+/** Fala que encerra a conversa em vez de virar tarefa (sem acento, sem pontuação). */
+export function isCancelWord(text: string): boolean {
+  const t = text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]/g, '').trim().replace(/\s+/g, ' ');
+  return CANCEL_WORDS.has(t);
+}
+
 export function buildSkill(deps: SkillDeps): Skill {
   const say = (h: HandlerInput, text: string) =>
     h.responseBuilder.speak(escapeSsml(text)).withShouldEndSession(true).getResponse();
@@ -61,7 +72,10 @@ export function buildSkill(deps: SkillDeps): Skill {
     canHandle: (h) => isIntent(h, 'AdicionarTarefaIntent'),
     handle: async (h) => {
       const at = now();
-      const parsed = parseSpokenRequest(getSlotValue(h.requestEnvelope, 'pedido') ?? '', at, deps.timeZone);
+      const spoken = getSlotValue(h.requestEnvelope, 'pedido') ?? '';
+      // Depois de "Qual é a tarefa?" a fala inteira vira o slot, inclusive "cancelar".
+      if (isCancelWord(spoken)) return say(h, 'Tudo bem, não anotei nada.');
+      const parsed = parseSpokenRequest(spoken, at, deps.timeZone);
       const { title, time } = parsed;
       if (!title) return askTask(h);
       const date = parsed.date ?? (time ? todayOf(at) : null); // "às 17h" sem dia vale para hoje
