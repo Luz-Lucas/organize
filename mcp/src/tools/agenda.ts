@@ -6,7 +6,7 @@ import {
   DESTRUCTIVE, READ, UserError, WRITE, assertOwned, check, clampLimit, isDateOnly, ok, okData, parseWhen, safe,
   startOfLocalDay, toIso,
 } from './util.js';
-import { taskOut } from './tasks.js';
+import { remindersSchema, taskOut, uniqReminders } from './tasks.js';
 import { addWallMinutes, expandRepeat, normalizeRepeat, repeatSchema } from './recurrence.js';
 
 const title = z.string().trim().min(1).max(200);
@@ -42,7 +42,7 @@ function eventOut(r: Row, tz: string, tags: Map<string, Tag> = new Map()) {
   return {
     id: r.id, title: r.title, startsAt: toIso(r.starts_at, tz), endsAt: toIso(r.ends_at, tz),
     allDay: r.all_day, location: r.location, spaceId: r.space_id, source: r.source, seriesId: r.series_id ?? null,
-    tag: tagOut(r.tag_id ? tags.get(r.tag_id) : null),
+    tag: tagOut(r.tag_id ? tags.get(r.tag_id) : null), reminders: r.reminders ?? [],
   };
 }
 
@@ -110,11 +110,12 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
       'Cria um evento na agenda. `endsAt` é opcional (padrão: 1 h depois, ou até o fim do dia se `allDay`). ' +
       'O fim pode atravessar a meia-noite (22:00 → 02:00 do dia seguinte), mas não pode ser antes do início. ' +
       'Com `repeat`, cria uma série: uma linha por ocorrência, todas com o mesmo `seriesId` e a mesma duração. ' +
-      'Com `tag`, usa a etiqueta colorida pelo nome (sem diferenciar maiúsculas); veja os nomes em list_event_tags.',
+      'Com `tag`, usa a etiqueta colorida pelo nome (sem diferenciar maiúsculas); veja os nomes em list_event_tags. ' +
+      '`reminders` (padrão [30]) diz quantos minutos antes avisar; evento de dia inteiro não avisa.',
     inputSchema: {
       title, startsAt: when, endsAt: when.optional(), allDay: z.boolean().optional(),
       location: z.string().trim().max(200).optional(), spaceId: z.string().uuid().optional(),
-      repeat: repeatSchema.optional(), tag: tagName.optional(),
+      repeat: repeatSchema.optional(), tag: tagName.optional(), reminders: remindersSchema.optional(),
     },
     annotations: { ...WRITE, idempotentHint: false },
   }, safe(async (a) => {
@@ -129,6 +130,7 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
     const base = {
       user_id: ctx.userId, title: a.title, all_day: allDay, location: a.location || null,
       space_id: a.spaceId ?? null, source: 'manual', tag_id: tag?.id ?? null,
+      ...(a.reminders === undefined ? {} : { reminders: uniqReminders(a.reminders) }),
     };
     const tagMap = new Map(tag ? [[tag.id, tag] as const] : []);
     if (a.repeat) {
@@ -157,11 +159,13 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
     description:
       'Edita campos de um evento. Se só `startsAt` mudar, o fim acompanha mantendo a duração. ' +
       '`location: null` limpa o local. `tag` troca a etiqueta pelo nome (list_event_tags); `tag: null` tira a etiqueta. ' +
-      'Em eventos de série, edita só essa ocorrência.',
+      '`reminders` troca os lembretes (minutos de antecedência: 1440, 60, 30, 15). ' +
+      'Em eventos de série, edita só essa ocorrência (só os lembretes não a tiram da série).',
     inputSchema: {
       id: z.string().uuid(), title: title.optional(), startsAt: when.optional(), endsAt: when.optional(),
       allDay: z.boolean().optional(), location: z.string().trim().max(200).nullable().optional(),
       spaceId: z.string().uuid().nullable().optional(), tag: tagName.nullable().optional(),
+      reminders: remindersSchema.optional(),
     },
     annotations: { ...DESTRUCTIVE, idempotentHint: true },
   }, safe(async (a) => {
@@ -188,8 +192,10 @@ export function registerAgenda(server: McpServer, ctx: ToolContext): void {
       tag = a.tag === null ? null : await resolveTag(ctx, a.tag);
       patch.tag_id = tag?.id ?? null;
     }
-    // A ocorrência editada sai da série (como no app): as demais seguem agrupadas.
-    if (cur.series_id) { patch.series_id = null; patch.recurrence = null; }
+    if (a.reminders !== undefined) patch.reminders = uniqReminders(a.reminders);
+    // A ocorrência editada sai da série (como no app): as demais seguem agrupadas. Só lembretes não conta como edição.
+    const onlyReminders = Object.keys(a).every((k) => k === 'id' || k === 'reminders');
+    if (cur.series_id && !onlyReminders) { patch.series_id = null; patch.recurrence = null; }
     const rows = check(await ctx.db.from('events').update(patch).eq('id', a.id).eq('user_id', ctx.userId).select('*')) as Row[];
     if (rows.length === 0) throw new UserError('Evento não encontrado.');
     const tags = new Map((await loadTags(ctx)).map((t) => [t.id, t] as const));

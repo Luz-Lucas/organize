@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findApplianceId, mapRoutines, mapSmartEntities } from '../src/alexa-remote-gateway.js';
-import { toDeviceActions, toOverride, toPlan, toPresenceSource } from '../src/supabase-store.js';
+import { toDeviceActions, toOverride, toPlan, toPresenceSource, toReminderEvent, toReminderSettings, toReminderTask } from '../src/supabase-store.js';
 
 describe('toPlan', () => {
   const row = {
@@ -154,5 +154,26 @@ describe('toOverride', () => {
   it('campos ausentes viram "não pular" e sem horário', () => {
     expect(toOverride({ plan_id: 'p1', run_date: '2026-10-14' }))
       .toEqual({ planId: 'p1', runDate: '2026-10-14', skip: false, time: null });
+  });
+});
+
+describe('mapeadores de lembretes', () => {
+  it('toReminderSettings aceita time com segundos e usa os padrões quando faltam colunas', () => {
+    expect(toReminderSettings({
+      reminders_alexa: false, reminder_echo: 'ECHO', dnd_enabled: true, dnd_start: '22:00:00', dnd_end: '07:30:00',
+    })).toEqual({ remindersAlexa: false, reminderEcho: 'ECHO', dndEnabled: true, dndStart: '22:00', dndEnd: '07:30' });
+    expect(toReminderSettings(null)).toEqual({
+      remindersAlexa: true, reminderEcho: null, dndEnabled: true, dndStart: '23:00', dndEnd: '10:00',
+    });
+    expect(toReminderSettings({ reminder_echo: '' }).reminderEcho).toBeNull();
+  });
+
+  it('toReminderTask e toReminderEvent leem reminders, com o padrão se faltar', () => {
+    expect(toReminderTask({ id: 't', title: 'x', due_at: '2026-10-22T21:00:00Z', status: 'todo', priority: 'alta', reminders: [60, 1440] }))
+      .toEqual({ id: 't', title: 'x', dueAt: new Date('2026-10-22T21:00:00Z'), status: 'todo', priority: 'alta', reminders: [60, 1440] });
+    expect(toReminderTask({ id: 't', title: 'x', due_at: null, status: 'todo', priority: 'media' }))
+      .toMatchObject({ dueAt: null, reminders: [60] });
+    expect(toReminderEvent({ id: 'e', title: 'y', starts_at: '2026-10-22T18:00:00Z', all_day: false }))
+      .toEqual({ id: 'e', title: 'y', startsAt: new Date('2026-10-22T18:00:00Z'), allDay: false, reminders: [30] });
   });
 });

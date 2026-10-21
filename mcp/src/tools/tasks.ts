@@ -13,13 +13,19 @@ const title = z.string().trim().min(1).max(200);
 const status = z.enum(['todo', 'doing', 'done']);
 const priority = z.enum(['baixa', 'media', 'alta']);
 const when = z.string().min(8).max(40);
+/** Minutos de antecedência dos lembretes: 1 dia, 1 hora, 30 ou 15 minutos; vários ao mesmo tempo. */
+export const remindersSchema = z.array(z.union([z.literal(1440), z.literal(60), z.literal(30), z.literal(15)])).max(4)
+  .describe('Lembretes: quantos minutos antes avisar, entre 1440 (1 dia), 60, 30 e 15; vários ao mesmo tempo, [] = sem lembrete. ' +
+    'Padrão: tarefa [60], evento [30]');
+/** Tira os repetidos (o banco recusa), mantendo a ordem. */
+export const uniqReminders = (r: number[]) => [...new Set(r)];
 const scopeSchema = z.enum(['one', 'following', 'all']).optional();
 
 export function taskOut(r: Row, tz: string) {
   return {
     id: r.id, title: r.title, description: r.description, status: r.status, priority: r.priority,
     dueAt: toIso(r.due_at, tz), completedAt: toIso(r.completed_at, tz), spaceId: r.space_id, noteId: r.note_id,
-    seriesId: r.series_id ?? null, recurrence: r.recurrence ?? null,
+    seriesId: r.series_id ?? null, recurrence: r.recurrence ?? null, reminders: r.reminders ?? [],
   };
 }
 
@@ -104,17 +110,19 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
       'Cria uma tarefa. `dueAt` aceita só data (vale até 23:59 desse dia). `priority`: baixa, media (padrão) ou alta. ' +
       'Com `repeat` (exige `dueAt`, de onde a repetição parte), cria uma série: uma tarefa por ocorrência, todas com o mesmo ' +
       '`seriesId`; `status` vale só para a primeira (as demais começam "todo") e não pode ser "done". ' +
-      'Nas listas aparece só a próxima pendente de cada série.',
+      'Nas listas aparece só a próxima pendente de cada série. ' +
+      '`reminders` (padrão [60]) diz quantos minutos antes avisar; tarefa só com data avisa às 10h do dia se a prioridade for alta.',
     inputSchema: {
       title, description: z.string().max(10_000).optional(), status: status.optional(), priority: priority.optional(),
       dueAt: when.optional(), spaceId: z.string().uuid().optional(), noteId: z.string().uuid().optional(),
-      repeat: repeatSchema.optional(),
+      repeat: repeatSchema.optional(), reminders: remindersSchema.optional(),
     },
     annotations: { ...WRITE, idempotentHint: false },
   }, safe(async (a) => {
     if (a.spaceId) await assertOwned(ctx, 'spaces', a.spaceId, 'Espaço');
     if (a.noteId) await assertOwned(ctx, 'notes', a.noteId, 'Nota');
     const st = a.status ?? 'todo';
+    const reminders = a.reminders === undefined ? {} : { reminders: uniqReminders(a.reminders) };
     if (a.repeat) {
       if (!a.dueAt) throw new UserError('Para repetir, informe o prazo (`dueAt`): a repetição parte dele.');
       if (st === 'done') throw new UserError('Uma tarefa recorrente não pode ser criada já concluída.');
@@ -125,6 +133,7 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
         user_id: ctx.userId, title: a.title, description: a.description ?? '', status: i === 0 ? st : 'todo',
         priority: a.priority ?? 'media', due_at: d.toISOString(), completed_at: null,
         space_id: a.spaceId ?? null, note_id: a.noteId ?? null, source: 'manual', series_id: seriesId, recurrence: rule,
+        ...reminders,
       }));
       if (rows.length === 0) throw new UserError('A repetição não gera nenhuma ocorrência no período.');
       const created = check(await ctx.db.from('tasks').insert(rows).select('*').order('due_at', { ascending: true })) as Row[];
@@ -137,7 +146,7 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
       user_id: ctx.userId, title: a.title, description: a.description ?? '', status: st, priority: a.priority ?? 'media',
       due_at: a.dueAt ? parseDue(a.dueAt).toISOString() : null,
       completed_at: st === 'done' ? ctx.now().toISOString() : null,
-      space_id: a.spaceId ?? null, note_id: a.noteId ?? null, source: 'manual',
+      space_id: a.spaceId ?? null, note_id: a.noteId ?? null, source: 'manual', ...reminders,
     }).select('*').single());
     return ok({ task: taskOut(row as Row, tz) });
   }));
@@ -155,7 +164,7 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
       id: z.string().uuid(), title: title.optional(), description: z.string().max(10_000).optional(),
       status: status.optional(), priority: priority.optional(), dueAt: when.nullable().optional(),
       spaceId: z.string().uuid().nullable().optional(), noteId: z.string().uuid().nullable().optional(),
-      scope: scopeSchema,
+      scope: scopeSchema, reminders: remindersSchema.optional(),
     },
     annotations: { ...WRITE, idempotentHint: true },
   }, safe(async (a) => {
@@ -167,6 +176,7 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
     // Campos que valem para o alcance escolhido (`shared`) e os que valem só para esta tarefa (`own`).
     const shared: Row = {};
     const own: Row = {};
+    const rem: Row = a.reminders === undefined ? {} : { reminders: uniqReminders(a.reminders) }; // não tira da série
     if (a.title !== undefined) shared.title = a.title;
     if (a.description !== undefined) shared.description = a.description;
     if (a.priority !== undefined) shared.priority = a.priority;
@@ -185,12 +195,12 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
       own.completed_at = a.status === 'done' ? (cur.status === 'done' ? cur.completed_at : ctx.now().toISOString()) : null;
     }
     const newDue = wide && typeof a.dueAt === 'string' ? parseDue(a.dueAt) : null;
-    if (Object.keys(shared).length + Object.keys(own).length === 0 && !newDue) {
+    if (Object.keys(shared).length + Object.keys(own).length + Object.keys(rem).length === 0 && !newDue) {
       throw new UserError('Nada para alterar: informe ao menos um campo.');
     }
 
     if (!wide) {
-      const patch = { ...shared, ...own };
+      const patch = { ...shared, ...own, ...rem };
       // A ocorrência editada sai da série (como no app); só status e nota mantêm.
       if (cur.series_id && Object.keys(shared).length > 0) { patch.series_id = null; patch.recurrence = null; }
       const rows = check(await ctx.db.from('tasks').update(patch).eq('id', a.id).eq('user_id', ctx.userId).select('*')) as Row[];
@@ -217,7 +227,7 @@ export function registerTasks(server: McpServer, ctx: ToolContext): void {
       time = now.time;
     }
     const out = affected.map((r) => {
-      const row: Row = { ...r, ...shared, series_id: seriesId };
+      const row: Row = { ...r, ...shared, ...rem, series_id: seriesId };
       if (time !== null) {
         const p = localParts(new Date(r.due_at), tz);
         row.due_at = parseWhen(`${addDays(p.date, dayShift)}T${time}:00`, tz).toISOString();

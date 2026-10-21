@@ -219,4 +219,37 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
     expect(semPrazo).toMatchObject({ title: 'sem prazo', due_at: null });
     expect((await db.from('tasks').select('id').eq('user_id', other)).data).toEqual([]);
   });
+
+  it('lembretes: carrega só o que importa e registra cada envio uma única vez', async () => {
+    const u = await db.auth.admin.createUser({ email: `lembrete-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true });
+    if (u.error) throw u.error;
+    const uid = u.data.user.id;
+    const s = new SupabaseStore(db, uid, () => {});
+    const now = new Date('2026-10-22T12:00:00Z');
+    const h = (n: number) => new Date(now.getTime() + n * 3_600_000).toISOString();
+    const task = (title: string, due: string | null, extra: Record<string, unknown> = {}) =>
+      ({ user_id: uid, title, description: '', status: 'todo', priority: 'media', due_at: due, source: 'manual', reminders: [60], ...extra });
+    expect((await db.from('tasks').insert([
+      task('dentro', h(10), { reminders: [60, 15] }), task('longe', h(60)), task('feita', h(5), { status: 'done' }), task('sem prazo', null),
+    ])).error).toBeNull();
+    const ev = (title: string, start: number, extra: Record<string, unknown> = {}) =>
+      ({ user_id: uid, title, starts_at: h(start), ends_at: h(start + 1), reminders: [30], ...extra });
+    expect((await db.from('events').insert([ev('cedo', 3), ev('longe', 40), ev('passado', -2)])).error).toBeNull();
+    await db.from('user_settings').upsert({ user_id: uid, reminder_echo: 'ECHO', dnd_start: '22:00' });
+
+    const data = await s.loadReminderData(now);
+    expect(data.tasks.map((t) => t.title)).toEqual(['dentro']);
+    expect(data.tasks[0].reminders).toEqual([60, 15]);
+    expect(data.events.map((e) => e.title)).toEqual(['cedo']);
+    expect(data.events[0].reminders).toEqual([30]);
+    expect(data.settings).toMatchObject({ remindersAlexa: true, reminderEcho: 'ECHO', dndStart: '22:00', dndEnd: '10:00' });
+
+    const fire = { kind: 'event' as const, itemId: (await db.from('events').select('id').eq('user_id', uid).eq('title', 'cedo').single()).data!.id,
+      title: 'cedo', fireAt: new Date('2026-10-22T14:30:00Z'), itemAt: new Date('2026-10-22T15:00:00Z'), dateOnly: false };
+    expect(await s.claimReminder(fire)).toBe(true);
+    expect(await s.claimReminder(fire)).toBe(false);
+    const rows = (await db.from('reminder_deliveries').select('*').eq('user_id', uid)).data!;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: 'event', channel: 'alexa' });
+  });
 });

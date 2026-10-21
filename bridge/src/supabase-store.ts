@@ -4,6 +4,7 @@ import type { Command, CommandKind } from './commands.js';
 import type { EchoDevice, Routine, SmartDevice } from './gateway.js';
 import type { DeviceAction } from './gateway.js';
 import type { PresenceInput } from './presence.js';
+import type { ReminderData, ReminderEvent, ReminderFire, ReminderSettings, ReminderTask } from './reminders.js';
 import type { AfterMusic, PhoneAlarm, RunStatus, WakeDeviceAction, WakeOverride, WakePlan, WakeRun } from './scheduler.js';
 import { zonedDayRange } from './time.js';
 import type { WakeStore } from './wake.js';
@@ -88,6 +89,34 @@ export function toPresenceSource(settings: Row | null, loc: Row | null): Omit<Pr
   };
 }
 
+const hhmm = (v: unknown, fallback: string): string => (typeof v === 'string' && /^\d{2}:\d{2}/.test(v) ? v.slice(0, 5) : fallback);
+const toMinutesList = (v: unknown, fallback: number[]): number[] =>
+  Array.isArray(v) ? (v as unknown[]).filter((x): x is number => isNum(x)) : fallback;
+
+/** Ajustes de lembretes de `user_settings` (linha ausente ou colunas nulas caem nos padrões do banco). */
+export const toReminderSettings = (r: Row | null): ReminderData['settings'] => ({
+  remindersAlexa: r?.reminders_alexa !== false,
+  reminderEcho: typeof r?.reminder_echo === 'string' && r.reminder_echo ? r.reminder_echo : null,
+  dndEnabled: r?.dnd_enabled !== false,
+  dndStart: hhmm(r?.dnd_start, '23:00'),
+  dndEnd: hhmm(r?.dnd_end, '10:00'),
+});
+
+export const toReminderTask = (r: Row): ReminderTask => ({
+  id: r.id, title: r.title, dueAt: r.due_at ? new Date(r.due_at) : null,
+  status: r.status, priority: r.priority, reminders: toMinutesList(r.reminders, [60]),
+});
+
+export const toReminderEvent = (r: Row): ReminderEvent => ({
+  id: r.id, title: r.title, startsAt: new Date(r.starts_at), allDay: r.all_day === true,
+  reminders: toMinutesList(r.reminders, [30]),
+});
+
+/** Janelas de carga dos lembretes: o aviso nunca vem depois do item, e o mais antigo é de 1 dia antes. */
+const REMINDER_TASK_HORIZON_MS = 48 * 3_600_000;
+const REMINDER_EVENT_HORIZON_MS = 26 * 3_600_000;
+const REMINDER_BACK_MS = 10 * 60_000;
+
 const toRun = (r: Row): WakeRun => ({
   id: r.id,
   planId: r.plan_id,
@@ -167,6 +196,34 @@ export class SupabaseStore implements WakeStore {
       user_id: this.userId, title: task.title, description: '', status: 'todo', priority: task.priority,
       due_at: task.dueAt?.toISOString() ?? null, completed_at: null, space_id: null, note_id: null, source: 'manual',
     }));
+  }
+
+  /** Tarefas abertas com prazo nas próximas 48 h, eventos das próximas 26 h e os ajustes de lembretes. */
+  async loadReminderData(now: Date): Promise<ReminderData> {
+    const from = new Date(now.getTime() - REMINDER_BACK_MS).toISOString();
+    const tasks = this.check(await this.db.from('tasks')
+      .select('id, title, due_at, status, priority, reminders')
+      .eq('user_id', this.userId).neq('status', 'done').not('due_at', 'is', null)
+      .gte('due_at', from).lte('due_at', new Date(now.getTime() + REMINDER_TASK_HORIZON_MS).toISOString())
+      .order('due_at')) as Row[];
+    const events = this.check(await this.db.from('events')
+      .select('id, title, starts_at, all_day, reminders')
+      .eq('user_id', this.userId).eq('all_day', false)
+      .gte('starts_at', from).lte('starts_at', new Date(now.getTime() + REMINDER_EVENT_HORIZON_MS).toISOString())
+      .order('starts_at')) as Row[];
+    const settings = this.check(await this.db.from('user_settings')
+      .select('reminders_alexa, reminder_echo, dnd_enabled, dnd_start, dnd_end')
+      .eq('user_id', this.userId).maybeSingle()) as Row | null;
+    return { tasks: tasks.map(toReminderTask), events: events.map(toReminderEvent), settings: toReminderSettings(settings) };
+  }
+
+  /** Registra o aviso falado; false se já estava registrado (único por item, horário e canal). */
+  async claimReminder(f: ReminderFire): Promise<boolean> {
+    const rows = this.check(await this.db.from('reminder_deliveries')
+      .upsert({ user_id: this.userId, kind: f.kind, item_id: f.itemId, fire_at: f.fireAt.toISOString(), channel: 'alexa' },
+        { onConflict: 'user_id,kind,item_id,fire_at,channel', ignoreDuplicates: true })
+      .select('id')) as Row[];
+    return rows.length > 0;
   }
 
   async listWakePlans(): Promise<WakePlan[]> {

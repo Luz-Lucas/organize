@@ -7,6 +7,8 @@ import { CommandError, executeCommand, isExpired, type Command } from './command
 import { loadConfig } from './config.js';
 import { AlexaAuthError, type AlexaGateway } from './gateway.js';
 import { createOverridesLoader } from './overrides-loader.js';
+import { evaluatePresence } from './presence.js';
+import { runReminders } from './reminders.js';
 import { planWakeActions } from './scheduler.js';
 import { fetchWeather, reverseCity, weatherText } from './weather.js';
 import { buildSkill } from './skill.js';
@@ -175,6 +177,28 @@ async function wakeTick(): Promise<void> {
   }
 }
 
+let remindersRunning = false;
+
+/** Fala no Echo os lembretes de tarefas e eventos que chegaram na hora (uma vez por aviso; presença `away` silencia). */
+async function reminderTick(): Promise<void> {
+  if (remindersRunning) return;
+  remindersRunning = true;
+  try {
+    const gw = await ensureGateway();
+    if (!gw) return; // sem login: nada é registrado, e o aviso ainda vale dentro da janela de 5 min
+    await runReminders({
+      gateway: gw, timeZone: cfg.timeZone, now: () => new Date(), log,
+      load: (now) => store.loadReminderData(now),
+      presence: async () => evaluatePresence({ ...(await store.loadPresenceInput()), now: new Date() }).state,
+      claim: (f) => store.claimReminder(f),
+    });
+  } catch (e) {
+    await handleError(e, 'lembretes');
+  } finally {
+    remindersRunning = false;
+  }
+}
+
 void store.sweepStuckCommands().then((n) => { if (n > 0) log(`${n} comando(s) preso(s) em execução marcados como falhos`); })
   .catch((e) => log(`varredura de comandos presos: ${e.message}`));
 store.onNewCommand((cmd) => void processCommand(cmd));
@@ -182,4 +206,5 @@ setInterval(() => void store.pendingCommands().then((cmds) => cmds.forEach((c) =
 setInterval(() => void store.heartbeat().catch((e) => log(`heartbeat: ${e.message}`)), 60_000);
 setInterval(() => void (async () => { if (await ensureGateway()) await sync().catch((e) => handleError(e, 'sincronização')); })(), 10 * 60_000);
 setInterval(() => void wakeTick(), 30_000);
-void ensureGateway().then(() => wakeTick());
+setInterval(() => void reminderTick(), 60_000);
+void ensureGateway().then(() => wakeTick()).then(() => reminderTick());
