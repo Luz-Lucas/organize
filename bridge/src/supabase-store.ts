@@ -161,22 +161,11 @@ export class SupabaseStore implements WakeStore {
     };
   }
 
-  /** Cria uma tarefa manual (a fazer, prioridade média), como o `create_task` do MCP. */
-  async addTask(task: { title: string; dueAt: Date | null }): Promise<void> {
+  /** Cria uma tarefa manual (a fazer) com a prioridade dada, como o `create_task` do MCP. */
+  async addTask(task: { title: string; dueAt: Date | null; priority: 'baixa' | 'media' | 'alta' }): Promise<void> {
     this.check(await this.db.from('tasks').insert({
-      user_id: this.userId, title: task.title, description: '', status: 'todo', priority: 'media',
+      user_id: this.userId, title: task.title, description: '', status: 'todo', priority: task.priority,
       due_at: task.dueAt?.toISOString() ?? null, completed_at: null, space_id: null, note_id: null, source: 'manual',
-    }));
-  }
-
-  /**
-   * Cria um evento manual, como o `create_event` do MCP. A etiqueta fica nula: o MCP também não classifica
-   * ao criar (o app etiqueta pelas regras da agenda quando abre).
-   */
-  async addEvent(event: { title: string; startsAt: Date; endsAt: Date; allDay: boolean }): Promise<void> {
-    this.check(await this.db.from('events').insert({
-      user_id: this.userId, title: event.title, all_day: event.allDay, location: null, space_id: null, source: 'manual',
-      tag_id: null, starts_at: event.startsAt.toISOString(), ends_at: event.endsAt.toISOString(),
     }));
   }
 

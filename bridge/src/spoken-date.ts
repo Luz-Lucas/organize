@@ -204,15 +204,3 @@ const hhmm = (t: SpokenTime) => `${String(t.h).padStart(2, '0')}:${String(t.min)
 export function taskDue(date: SpokenDate, time: SpokenTime | null, timeZone: string): Date {
   return zonedTime(toIso(date), time ? hhmm(time) : '23:59', timeZone);
 }
-
-/** Evento (igual ao create_event do MCP): com hora, 1 hora de duração; sem hora, o dia todo no fuso. */
-export function eventRange(
-  date: SpokenDate, time: SpokenTime | null, timeZone: string,
-): { startsAt: Date; endsAt: Date; allDay: boolean } {
-  if (time) {
-    const startsAt = zonedTime(toIso(date), hhmm(time), timeZone);
-    return { startsAt, endsAt: new Date(startsAt.getTime() + 3600_000), allDay: false };
-  }
-  const iso = toIso(date);
-  return { startsAt: zonedTime(iso, '00:00', timeZone), endsAt: zonedTime(addDays(iso, 1), '00:00', timeZone), allDay: true };
-}

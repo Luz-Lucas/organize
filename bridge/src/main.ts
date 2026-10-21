@@ -42,10 +42,9 @@ async function weatherAt(at: { lat: number; lon: number }): Promise<string | nul
 // Parte oficial: sobe mesmo se a parte não oficial estiver sem login.
 const app = express();
 const skill = buildSkill({
-  allowedUserId: cfg.allowedAlexaUserId, briefingInput, log,
+  allowedUserId: cfg.allowedAlexaUserId, log,
   timeZone: cfg.timeZone,
   addTask: (task) => store.addTask(task),
-  addEvent: (event) => store.addEvent(event),
 });
 app.post('/alexa', new ExpressAdapter(skill, true, true).getRequestHandlers());
 app.get('/health', (_req, res) => { res.json({ ok: true }); });

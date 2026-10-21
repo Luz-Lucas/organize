@@ -4,30 +4,23 @@
       "invocationName": "organize",
       "intents": [
         {
-          "name": "ResumoDoDiaIntent",
-          "slots": [],
-          "samples": ["qual é o meu dia", "o que eu tenho hoje", "meu resumo", "resumo do dia", "como está minha agenda", "minha agenda de hoje"]
-        },
-        {
-          "name": "NoticiasIntent",
-          "slots": [],
-          "samples": ["quais são as notícias", "notícias", "manchetes", "me conta as notícias", "o que está acontecendo"]
-        },
-        {
           "name": "AdicionarTarefaIntent",
-          "slots": [{ "name": "pedido", "type": "AMAZON.SearchQuery" }],
+          "slots": [
+            {
+              "name": "pedido",
+              "type": "AMAZON.SearchQuery",
+              "samples": ["{pedido}"]
+            }
+          ],
           "samples": [
-            "adicionar tarefa {pedido}", "adicionar a tarefa {pedido}", "adiciona a tarefa {pedido}", "adiciona tarefa {pedido}",
-            "nova tarefa {pedido}", "criar tarefa {pedido}", "criar a tarefa {pedido}", "anotar tarefa {pedido}",
-            "me lembra de {pedido}", "lembrar de {pedido}"
-          ]
-        },
-        {
-          "name": "CriarEventoIntent",
-          "slots": [{ "name": "pedido", "type": "AMAZON.SearchQuery" }],
-          "samples": [
-            "marcar {pedido}", "marca {pedido}", "agendar {pedido}", "agenda {pedido}",
-            "criar evento {pedido}", "criar um evento {pedido}", "novo evento {pedido}", "adicionar evento {pedido}"
+            "adicionar tarefa {pedido}", "adicionar a tarefa {pedido}", "adicionar {pedido}",
+            "adiciona tarefa {pedido}", "adiciona a tarefa {pedido}", "adiciona {pedido}",
+            "anotar tarefa {pedido}", "anotar {pedido}", "anota {pedido}",
+            "nova tarefa {pedido}", "criar tarefa {pedido}", "criar a tarefa {pedido}",
+            "tarefa {pedido}",
+            "me lembra de {pedido}", "lembrar de {pedido}", "lembrete {pedido}",
+            "preciso {pedido}", "eu preciso {pedido}", "tenho que {pedido}",
+            "colocar {pedido}"
           ]
         },
         { "name": "AMAZON.HelpIntent", "samples": [] },
@@ -37,6 +30,31 @@
         { "name": "AMAZON.FallbackIntent", "samples": [] }
       ],
       "types": []
-    }
+    },
+    "dialog": {
+      "delegationStrategy": "SKILL_RESPONSE",
+      "intents": [
+        {
+          "name": "AdicionarTarefaIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "pedido",
+              "type": "AMAZON.SearchQuery",
+              "elicitationRequired": true,
+              "confirmationRequired": false,
+              "prompts": { "elicitation": "Elicit.Slot.pedido" }
+            }
+          ]
+        }
+      ]
+    },
+    "prompts": [
+      {
+        "id": "Elicit.Slot.pedido",
+        "variations": [{ "type": "PlainText", "value": "Qual é a tarefa?" }]
+      }
+    ]
   }
 }

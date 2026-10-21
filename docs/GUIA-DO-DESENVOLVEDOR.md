@@ -289,7 +289,7 @@ Processo Node na VPS (Docker + Caddy) que:
   `wake_test` em `src/commands.ts`);
 - dispara os despertares (`scheduler.ts` + `wake.ts`), com clima (`weather.ts`), presença
   (`presence.ts`) e alarme reserva no Echo;
-- atende a skill oficial "Organize" (`skill.ts`, modelo em `bridge/skill/`).
+- atende a skill oficial "Organize", só para adicionar tarefas com prioridade alta (`skill.ts`, modelo em `bridge/skill/`).
 
 Detalhes de implantação estão no README, seção "Alexa".
 

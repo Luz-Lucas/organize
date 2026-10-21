@@ -1,17 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { BriefingInput } from '../src/briefing.js';
+import { readFileSync } from 'node:fs';
 import { buildSkill, type SkillDeps } from '../src/skill.js';
 
 const USER = 'amzn1.ask.account.EU';
-const input: BriefingInput = {
-  now: new Date('2026-09-28T10:00:00Z'),
-  timeZone: 'America/Sao_Paulo',
-  events: [{ title: 'P&D <Lab>', startsAt: new Date('2026-09-28T11:00:00Z'), endsAt: new Date('2026-09-28T12:00:00Z'), allDay: false, location: null }],
-  overdue: [],
-  dueToday: [],
-  news: [{ source: 'G1', title: 'Chuva forte' }],
-};
-
 function envelope(request: Record<string, unknown>, userId = USER) {
   return {
     version: '1.0',
@@ -34,19 +25,16 @@ const TZ = 'America/Sao_Paulo';
 const NOW = new Date('2026-10-20T15:00:00Z');
 
 type NewTask = Parameters<SkillDeps['addTask']>[0];
-type NewEvent = Parameters<SkillDeps['addEvent']>[0];
 
 /** Agenda em memória: guarda o que a skill pediu para gravar. */
 function fakeAgenda() {
   const tasks: NewTask[] = [];
-  const events: NewEvent[] = [];
-  const deps: Pick<SkillDeps, 'timeZone' | 'now' | 'addTask' | 'addEvent'> = {
+  const deps: Pick<SkillDeps, 'timeZone' | 'now' | 'addTask'> = {
     timeZone: TZ,
     now: () => NOW,
     async addTask(t) { tasks.push(t); },
-    async addEvent(e) { events.push(e); },
   };
-  return { deps, tasks, events };
+  return { deps, tasks };
 }
 
 async function ssml(skill: ReturnType<typeof buildSkill>, request: Record<string, unknown>, userId = USER) {
@@ -56,20 +44,43 @@ async function ssml(skill: ReturnType<typeof buildSkill>, request: Record<string
   return (res.response.outputSpeech as any)?.ssml as string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function raw(skill: ReturnType<typeof buildSkill>, request: Record<string, unknown>): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (await skill.invoke(envelope(request) as any)).response;
+}
+
+/** Resposta que pergunta a tarefa e mantém a sessão aberta, com a próxima fala indo para o campo `pedido`. */
+function expectAsksTask(res: any, question = 'Qual é a tarefa?') {
+  expect(res.outputSpeech.ssml).toContain(question);
+  expect(res.shouldEndSession).toBe(false);
+  expect(res.reprompt.outputSpeech.ssml).toContain('Qual é a tarefa?');
+  expect(res.directives).toEqual([{
+    type: 'Dialog.ElicitSlot',
+    slotToElicit: 'pedido',
+    updatedIntent: {
+      name: 'AdicionarTarefaIntent',
+      confirmationStatus: 'NONE',
+      slots: { pedido: { name: 'pedido', confirmationStatus: 'NONE' } },
+    },
+  }]);
+}
+
 describe('skill', () => {
   const logs: string[] = [];
-  const skill = buildSkill({ allowedUserId: USER, briefingInput: async () => input, log: (m) => logs.push(m), ...fakeAgenda().deps });
+  const build = () => {
+    const f = fakeAgenda();
+    return { ...f, skill: buildSkill({ allowedUserId: USER, log: (m) => logs.push(m), ...f.deps }) };
+  };
+  const { skill } = build();
 
-  it('abrir a skill fala o resumo com SSML escapado', async () => {
-    const out = await ssml(skill, { type: 'LaunchRequest' });
-    expect(out).toContain('Bom dia! Hoje é segunda-feira, 28 de setembro.');
-    expect(out).toContain('P&amp;D &lt;Lab&gt;');
-    expect(out).not.toContain('<Lab>');
+  it('abrir a skill pergunta a tarefa e mantém a sessão para a próxima fala virar o pedido', async () => {
+    expectAsksTask(await raw(skill, { type: 'LaunchRequest' }));
   });
 
-  it('ResumoDoDiaIntent e NoticiasIntent', async () => {
-    expect(await ssml(skill, intent('ResumoDoDiaIntent'))).toContain('Você tem 1 compromisso');
-    expect(await ssml(skill, intent('NoticiasIntent'))).toContain('Manchetes: G1: Chuva forte.');
+  it('abrir a skill não fala resumo nem agenda', async () => {
+    const out = await ssml(skill, { type: 'LaunchRequest' });
+    expect(out).not.toMatch(/bom dia|compromisso|manchete|agenda/i);
   });
 
   it('outra conta Amazon recebe recusa', async () => {
@@ -78,24 +89,25 @@ describe('skill', () => {
 
   it('sem ALEXA_ALLOWED_USER_ID configurado, loga o id da conta', async () => {
     const seen: string[] = [];
-    const open = buildSkill({ allowedUserId: null, briefingInput: async () => input, log: (m) => seen.push(m), ...fakeAgenda().deps });
+    const open = buildSkill({ allowedUserId: null, log: (m) => seen.push(m), ...fakeAgenda().deps });
     expect(await ssml(open, { type: 'LaunchRequest' })).toContain('ainda não configurada');
     expect(seen.join('\n')).toContain(USER);
   });
 
-  it('erro ao ler a agenda vira mensagem amigável', async () => {
-    const broken = buildSkill({ allowedUserId: USER, briefingInput: async () => { throw new Error('db fora'); }, log: () => {}, ...fakeAgenda().deps });
-    expect(await ssml(broken, { type: 'LaunchRequest' })).toContain('Não consegui acessar sua agenda agora.');
-  });
-
-  it('parar se despede', async () => {
+  it('parar e cancelar se despedem', async () => {
     expect(await ssml(skill, intent('AMAZON.StopIntent'))).toContain('Até mais!');
+    expect(await ssml(skill, intent('AMAZON.CancelIntent'))).toContain('Até mais!');
   });
 
-  it('ajuda cita o dia, tarefas e eventos', async () => {
-    expect(await ssml(skill, intent('AMAZON.HelpIntent'))).toContain(
-      'Você pode dizer: qual é o meu dia; adicionar tarefa estudar para sexta; ou marcar reunião amanhã às 15h.',
-    );
+  it('ajuda dá um exemplo de tarefa e continua esperando a tarefa', async () => {
+    const res = await raw(skill, intent('AMAZON.HelpIntent'));
+    expect(res.outputSpeech.ssml).toContain('Diga a tarefa, por exemplo: adicionar estudar cálculo para sexta.');
+    expect(res.shouldEndSession).toBe(false);
+    expect(res.directives[0]).toMatchObject({ type: 'Dialog.ElicitSlot', slotToElicit: 'pedido' });
+  });
+
+  it('não entendeu (Fallback): pergunta qual é a tarefa e mantém a sessão', async () => {
+    expectAsksTask(await raw(skill, intent('AMAZON.FallbackIntent')));
   });
 
   it('as compras saíram da skill', async () => {
@@ -104,60 +116,59 @@ describe('skill', () => {
   });
 
   describe('AdicionarTarefaIntent', () => {
-    const build = () => {
-      const f = fakeAgenda();
-      return { ...f, skill: buildSkill({ allowedUserId: USER, briefingInput: async () => input, log: () => {}, ...f.deps }) };
-    };
     const pedido = (v?: string) => intent('AdicionarTarefaIntent', v === undefined ? undefined : { pedido: v });
 
-    it('título e sexta: grava com prazo até 23:59 e confirma', async () => {
-      const { skill: s, tasks, events } = build();
-      expect(await ssml(s, pedido('estudar cálculo para sexta'))).toContain('Anotei a tarefa estudar cálculo para sexta, 23 de outubro.');
-      expect(tasks).toEqual([{ title: 'estudar cálculo', dueAt: new Date('2026-10-24T02:59:00Z') }]);
-      expect(events).toEqual([]);
-    });
-
-    it('sem prazo', async () => {
+    it('título e sexta: grava com prazo até 23:59, prioridade alta, e confirma sem citar prioridade', async () => {
       const { skill: s, tasks } = build();
-      expect(await ssml(s, pedido('estudar cálculo'))).toContain('Anotei a tarefa estudar cálculo.');
-      expect(tasks).toEqual([{ title: 'estudar cálculo', dueAt: null }]);
+      const out = await ssml(s, pedido('estudar cálculo para sexta'));
+      expect(out).toContain('Anotei a tarefa estudar cálculo para sexta, 23 de outubro.');
+      expect(out).not.toMatch(/prioridade|alta/i);
+      expect(tasks).toEqual([{ title: 'estudar cálculo', dueAt: new Date('2026-10-24T02:59:00Z'), priority: 'alta' }]);
     });
 
-    it('hoje, amanhã e com hora', async () => {
+    it('mandar mensagem para a Joana amanhã', async () => {
+      const { skill: s, tasks } = build();
+      expect(await ssml(s, pedido('mandar mensagem para a Joana amanhã'))).toContain(
+        'Anotei a tarefa mandar mensagem para a Joana para amanhã, quarta, 21 de outubro.',
+      );
+      expect(tasks).toEqual([{ title: 'mandar mensagem para a Joana', dueAt: new Date('2026-10-22T02:59:00Z'), priority: 'alta' }]);
+    });
+
+    it('sem prazo, também com prioridade alta', async () => {
+      const { skill: s, tasks } = build();
+      expect(await ssml(s, pedido('mandar mensagem para a Joana'))).toContain('Anotei a tarefa mandar mensagem para a Joana.');
+      expect(tasks).toEqual([{ title: 'mandar mensagem para a Joana', dueAt: null, priority: 'alta' }]);
+    });
+
+    it('hoje, depois de amanhã e com hora', async () => {
       const { skill: s, tasks } = build();
       expect(await ssml(s, pedido('pagar a luz hoje'))).toContain('Anotei a tarefa pagar a luz para hoje.');
-      expect(await ssml(s, pedido('ligar pro João amanhã'))).toContain('Anotei a tarefa ligar pro João para amanhã, quarta.');
       expect(await ssml(s, pedido('enviar relatório dia 25 às 3 da tarde'))).toContain('Anotei a tarefa enviar relatório para domingo, 25 de outubro, às 15h.');
-      expect(tasks.map((t) => t.dueAt?.toISOString())).toEqual([
-        '2026-10-21T02:59:00.000Z', '2026-10-22T02:59:00.000Z', '2026-10-25T18:00:00.000Z',
+      expect(tasks.map((t) => [t.dueAt?.toISOString(), t.priority])).toEqual([
+        ['2026-10-21T02:59:00.000Z', 'alta'], ['2026-10-25T18:00:00.000Z', 'alta'],
       ]);
+    });
+
+    it('depois de amanhã também leva o dia e a data', async () => {
+      const { skill: s } = build();
+      expect(await ssml(s, pedido('ligar pro João depois de amanhã'))).toContain('Anotei a tarefa ligar pro João para depois de amanhã, quinta, 22 de outubro.');
     });
 
     it('hora sem data vale para hoje', async () => {
       const { skill: s, tasks } = build();
       expect(await ssml(s, pedido('ligar para o João às 17h'))).toContain('Anotei a tarefa ligar para o João para hoje, às 17h.');
-      expect(tasks).toEqual([{ title: 'ligar para o João', dueAt: new Date('2026-10-20T20:00:00Z') }]);
+      expect(tasks).toEqual([{ title: 'ligar para o João', dueAt: new Date('2026-10-20T20:00:00Z'), priority: 'alta' }]);
     });
 
-    it('sem pedido pergunta qual é a tarefa e mantém a sessão', async () => {
+    it('sem pedido ("adicionar tarefa" sozinho) pergunta qual é a tarefa e mantém a sessão', async () => {
       const { skill: s, tasks } = build();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res: any = await s.invoke(envelope(pedido()) as any);
-      expect(res.response.outputSpeech.ssml).toContain('Qual é a tarefa?');
-      expect(res.response.shouldEndSession).toBe(false);
-      expect(res.response.reprompt.outputSpeech.ssml).toContain('Qual é a tarefa?');
-      expect(res.response.directives).toEqual([
-        expect.objectContaining({ type: 'Dialog.ElicitSlot', slotToElicit: 'pedido', updatedIntent: expect.objectContaining({ name: 'AdicionarTarefaIntent' }) }),
-      ]);
+      expectAsksTask(await raw(s, pedido()));
       expect(tasks).toEqual([]);
     });
 
     it('só data, sem título, também pergunta de novo', async () => {
       const { skill: s, tasks } = build();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res: any = await s.invoke(envelope(pedido('para sexta')) as any);
-      expect(res.response.outputSpeech.ssml).toContain('Qual é a tarefa?');
-      expect(res.response.shouldEndSession).toBe(false);
+      expectAsksTask(await raw(s, pedido('para sexta')));
       expect(tasks).toEqual([]);
     });
 
@@ -169,69 +180,57 @@ describe('skill', () => {
     it('falha no banco vira mensagem amigável', async () => {
       const f = fakeAgenda();
       const broken = buildSkill({
-        allowedUserId: USER, briefingInput: async () => input, log: () => {}, ...f.deps,
+        allowedUserId: USER, log: () => {}, ...f.deps,
         addTask: async () => { throw new Error('db fora'); },
       });
       expect(await ssml(broken, pedido('estudar'))).toContain('Não consegui anotar a tarefa agora.');
     });
   });
 
-  describe('CriarEventoIntent', () => {
-    const build = () => {
-      const f = fakeAgenda();
-      return { ...f, skill: buildSkill({ allowedUserId: USER, briefingInput: async () => input, log: () => {}, ...f.deps }) };
-    };
-    const pedido = (v?: string) => intent('CriarEventoIntent', v === undefined ? undefined : { pedido: v });
+  it('erro inesperado vira mensagem amigável', async () => {
+    const f = fakeAgenda();
+    const broken = buildSkill({ allowedUserId: USER, log: () => {}, ...f.deps, now: () => { throw new Error('relógio'); } });
+    expect(await ssml(broken, intent('AdicionarTarefaIntent', { pedido: 'estudar' }))).toContain('Tente de novo em instantes.');
+  });
+});
 
-    it('com hora: evento de 1 hora', async () => {
-      const { skill: s, events, tasks } = build();
-      expect(await ssml(s, pedido('reunião com o Pedro amanhã às 15h'))).toContain('Marquei reunião com o Pedro amanhã, quarta, das 15h às 16h.');
-      expect(events).toEqual([{
-        title: 'reunião com o Pedro', startsAt: new Date('2026-10-21T18:00:00Z'), endsAt: new Date('2026-10-21T19:00:00Z'), allDay: false,
-      }]);
-      expect(tasks).toEqual([]);
-    });
+describe('modelo de interação pt-BR', () => {
+  const model = JSON.parse(readFileSync(new URL('../skill/interaction-model.pt-BR.json', import.meta.url), 'utf8')).interactionModel;
+  const intents: Array<{ name: string; samples: string[]; slots?: Array<{ name: string; type: string; samples?: string[] }> }> = model.languageModel.intents;
+  const byName = (n: string) => intents.find((i) => i.name === n)!;
 
-    it('sem hora: dia inteiro', async () => {
-      const { skill: s, events } = build();
-      expect(await ssml(s, pedido('feriado na sexta'))).toContain('Marquei feriado na sexta, 23 de outubro, o dia todo.');
-      expect(events).toEqual([{
-        title: 'feriado', startsAt: new Date('2026-10-23T03:00:00Z'), endsAt: new Date('2026-10-24T03:00:00Z'), allDay: true,
-      }]);
-    });
+  it('invocationName continua organize', () => {
+    expect(model.languageModel.invocationName).toBe('organize');
+  });
 
-    it('sem data, o padrão é hoje', async () => {
-      const { skill: s, events } = build();
-      expect(await ssml(s, pedido('dentista às 17h30'))).toContain('Marquei dentista hoje, das 17h30 às 18h30.');
-      expect(events[0].startsAt).toEqual(new Date('2026-10-20T20:30:00Z'));
-      expect(await ssml(s, pedido('almoço ao meio-dia'))).toContain('Marquei almoço hoje, do meio-dia às 13h.');
-      expect(await ssml(s, pedido('feriado'))).toContain('Marquei feriado hoje, o dia todo.');
-    });
+  it('só tarefas: sem resumo, notícias nem evento', () => {
+    expect(intents.map((i) => i.name).sort()).toEqual([
+      'AMAZON.CancelIntent', 'AMAZON.FallbackIntent', 'AMAZON.HelpIntent', 'AMAZON.NavigateHomeIntent', 'AMAZON.StopIntent', 'AdicionarTarefaIntent',
+    ]);
+  });
 
-    it('evento que atravessa a meia-noite', async () => {
-      const { skill: s } = build();
-      expect(await ssml(s, pedido('festa sábado às 23h'))).toContain('Marquei festa no sábado, 24 de outubro, das 23h à meia-noite.');
-    });
+  it('muitas frases de entrada, todas com {pedido}', () => {
+    const { samples } = byName('AdicionarTarefaIntent');
+    for (const s of ['adicionar tarefa', 'adicionar a tarefa', 'adicionar', 'adiciona', 'anotar', 'anota', 'nova tarefa', 'criar tarefa',
+      'tarefa', 'me lembra de', 'lembrar de', 'lembrete', 'preciso', 'eu preciso', 'tenho que', 'colocar']) {
+      expect(samples, s).toContain(`${s} {pedido}`);
+    }
+    for (const s of samples) expect(s).toContain('{pedido}');
+    expect(new Set(samples).size).toBe(samples.length);
+  });
 
-    it('sem pedido ou sem título, pergunta e mantém a sessão', async () => {
-      const { skill: s, events } = build();
-      for (const v of [undefined, 'amanhã às 15h']) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res: any = await s.invoke(envelope(pedido(v)) as any);
-        expect(res.response.outputSpeech.ssml).toContain('O que você quer marcar?');
-        expect(res.response.shouldEndSession).toBe(false);
-        expect(res.response.directives[0]).toMatchObject({ type: 'Dialog.ElicitSlot', slotToElicit: 'pedido' });
-      }
-      expect(events).toEqual([]);
-    });
+  it('o slot pedido é SearchQuery e tem frase de elicitação só com {pedido}', () => {
+    const slot = byName('AdicionarTarefaIntent').slots!.find((x) => x.name === 'pedido')!;
+    expect(slot.type).toBe('AMAZON.SearchQuery');
+    expect(slot.samples).toEqual(['{pedido}']);
+  });
 
-    it('falha no banco vira mensagem amigável', async () => {
-      const f = fakeAgenda();
-      const broken = buildSkill({
-        allowedUserId: USER, briefingInput: async () => input, log: () => {}, ...f.deps,
-        addEvent: async () => { throw new Error('db fora'); },
-      });
-      expect(await ssml(broken, pedido('dentista amanhã'))).toContain('Não consegui marcar o evento agora.');
-    });
+  it('dialog model exige a elicitação de pedido, com a skill controlando a conversa', () => {
+    expect(model.dialog.delegationStrategy).toBe('SKILL_RESPONSE');
+    const d = model.dialog.intents.find((i: { name: string }) => i.name === 'AdicionarTarefaIntent');
+    const slot = d.slots.find((x: { name: string }) => x.name === 'pedido');
+    expect(slot).toMatchObject({ type: 'AMAZON.SearchQuery', elicitationRequired: true, confirmationRequired: false });
+    const prompt = model.prompts.find((p: { id: string }) => p.id === slot.prompts.elicitation);
+    expect(prompt.variations).toEqual([{ type: 'PlainText', value: 'Qual é a tarefa?' }]);
   });
 });

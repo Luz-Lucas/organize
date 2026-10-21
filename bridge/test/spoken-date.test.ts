@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventRange, parseSpokenRequest, taskDue } from '../src/spoken-date.js';
+import { parseSpokenRequest, taskDue } from '../src/spoken-date.js';
 
 const TZ = 'America/Sao_Paulo';
 // terça-feira, 20/10/2026, 12:00 em São Paulo
@@ -217,31 +217,5 @@ describe('taskDue', () => {
   it('respeita horário de verão do fuso', () => {
     expect(taskDue(ymd(2026, 7, 1), { h: 9, min: 0 }, 'America/New_York').toISOString()).toBe('2026-07-01T13:00:00.000Z');
     expect(taskDue(ymd(2026, 1, 15), { h: 9, min: 0 }, 'America/New_York').toISOString()).toBe('2026-01-15T14:00:00.000Z');
-  });
-});
-
-describe('eventRange', () => {
-  it('com hora: 1 hora de duração', () => {
-    const r = eventRange(ymd(2026, 10, 21), { h: 15, min: 0 }, TZ);
-    expect(r.startsAt.toISOString()).toBe('2026-10-21T18:00:00.000Z');
-    expect(r.endsAt.toISOString()).toBe('2026-10-21T19:00:00.000Z');
-    expect(r.allDay).toBe(false);
-  });
-  it('23h atravessa a meia-noite', () => {
-    const r = eventRange(ymd(2026, 10, 21), { h: 23, min: 30 }, TZ);
-    expect(r.endsAt.toISOString()).toBe('2026-10-22T03:30:00.000Z');
-  });
-  it('sem hora: dia inteiro, da meia-noite local à meia-noite seguinte', () => {
-    const r = eventRange(ymd(2026, 10, 23), null, TZ);
-    expect(r.startsAt.toISOString()).toBe('2026-10-23T03:00:00.000Z');
-    expect(r.endsAt.toISOString()).toBe('2026-10-24T03:00:00.000Z');
-    expect(r.allDay).toBe(true);
-  });
-  it('dia inteiro num dia de mudança de horário tem 23 h ou 25 h', () => {
-    // EUA: 8/3/2026 pula a hora (23 h); 1/11/2026 repete (25 h)
-    const spring = eventRange(ymd(2026, 3, 8), null, 'America/New_York');
-    expect((spring.endsAt.getTime() - spring.startsAt.getTime()) / 3600_000).toBe(23);
-    const fall = eventRange(ymd(2026, 11, 1), null, 'America/New_York');
-    expect((fall.endsAt.getTime() - fall.startsAt.getTime()) / 3600_000).toBe(25);
   });
 });

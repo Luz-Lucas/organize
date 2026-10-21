@@ -137,7 +137,7 @@ Em https://developer.amazon.com/alexa/console/ask:
 3. **Endpoint**: HTTPS → `https://<DOMAIN>/alexa`, certificado **"My development endpoint has a certificate from a trusted certificate authority"** → **Save**.
 4. **Test**: ative **Development** e digite "abrir organizacional".
 
-Esperado: a skill responde "Skill ainda não configurada..." e `docker compose logs bridge | grep "skill chamada"` mostra `amzn1.ask.account...`. Copie esse valor para `ALEXA_ALLOWED_USER_ID` no `.env`, rode `docker compose up -d` e teste de novo: o resumo do dia é falado. No Echo: "Alexa, abre organize".
+Esperado: a skill responde "Skill ainda não configurada..." e `docker compose logs bridge | grep "skill chamada"` mostra `amzn1.ask.account...`. Copie esse valor para `ALEXA_ALLOWED_USER_ID` no `.env`, rode `docker compose up -d` e teste de novo: a skill pergunta "Qual é a tarefa?". No Echo: "Alexa, abre organize".
 
 ### Operação
 - Subir/atualizar: `cd bridge && docker compose up -d --build`. Saúde: `https://$DOMAIN/health`.
@@ -147,7 +147,7 @@ Esperado: a skill responde "Skill ainda não configurada..." e `docker compose l
   3. `docker compose restart bridge`
 - Diagnóstico: `docker compose run --rm bridge node dist/scripts/smoke.js`.
 - Despertares: se a ponte cair, o **alarme reserva** (criado até 24 h antes no próprio Echo) toca 10 min depois do horário.
-- Skill: "Alexa, abre organize" (resumo do dia) / "Alexa, pergunte ao organize quais são as notícias" / "Alexa, peça ao organize para adicionar tarefa estudar cálculo para sexta" / "Alexa, peça ao organize para marcar reunião com o Pedro amanhã às 15h". Tarefa: título + prazo opcional (só data vale até 23:59; com hora usa a hora). Evento: data (padrão hoje) e hora; com hora dura 1 h, sem hora é o dia todo.
+- Skill (só tarefas, sempre com prioridade alta): "Alexa, abre organize" → "Qual é a tarefa?" → diga só a tarefa (ex.: "mandar mensagem para a Joana amanhã"); ou direto: "Alexa, peça ao organize para adicionar estudar cálculo para sexta" (também "anota", "nova tarefa", "me lembra de", "preciso", "tenho que"...). Prazo opcional: só data vale até 23:59; com hora usa a hora; sem data nem hora fica sem prazo. A abertura usa `Dialog.ElicitSlot` e o *dialog model* do slot `pedido` (`bridge/skill/interaction-model.pt-BR.json`: refaça **Save** e **Build skill** no console após mudar o modelo). Ajuda: "Diga a tarefa, por exemplo: adicionar estudar cálculo para sexta." Resumo, notícias e agenda continuam só nos despertares.
 
 ### Teste manual da Fase 3 (com a ponte no ar)
 Rode o app: `cd app && flutter run -d linux --dart-define-from-file=env.json`.

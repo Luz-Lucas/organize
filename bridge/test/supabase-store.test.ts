@@ -196,7 +196,7 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
       .toEqual(['a:2026-10-13', 'a:2026-10-14', 'a:2026-10-20', 'b:2026-10-13']);
   });
 
-  it('addTask grava tarefa manual a fazer, prioridade média, com e sem prazo, só para o dono', async () => {
+  it('addTask grava tarefa manual a fazer, com a prioridade dada (alta), com e sem prazo, só para o dono', async () => {
     const mk = async (tag: string) => {
       const u = await db.auth.admin.createUser({ email: `tarefa-${tag}-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true });
       if (u.error) throw u.error;
@@ -205,39 +205,18 @@ describe.skipIf(!url || !key)('SupabaseStore (integração)', () => {
     const uid = await mk('a');
     const other = await mk('b');
     const s = new SupabaseStore(db, uid, () => {});
-    await s.addTask({ title: 'estudar cálculo', dueAt: new Date('2026-10-24T02:59:00Z') });
-    await s.addTask({ title: 'sem prazo', dueAt: null });
+    await s.addTask({ title: 'estudar cálculo', dueAt: new Date('2026-10-24T02:59:00Z'), priority: 'alta' });
+    await s.addTask({ title: 'sem prazo', dueAt: null, priority: 'alta' });
     const rows = await db.from('tasks').select('*').eq('user_id', uid).order('title');
     expect(rows.error).toBeNull();
     expect(rows.data).toHaveLength(2);
     const [calc, semPrazo] = rows.data!;
     expect(calc).toMatchObject({
-      title: 'estudar cálculo', status: 'todo', priority: 'media', source: 'manual', description: '',
+      title: 'estudar cálculo', status: 'todo', priority: 'alta', source: 'manual', description: '',
       completed_at: null, space_id: null, note_id: null, series_id: null,
     });
     expect(new Date(calc.due_at).toISOString()).toBe('2026-10-24T02:59:00.000Z');
     expect(semPrazo).toMatchObject({ title: 'sem prazo', due_at: null });
     expect((await db.from('tasks').select('id').eq('user_id', other)).data).toEqual([]);
-  });
-
-  it('addEvent grava evento manual (com hora e dia inteiro), sem etiqueta, só para o dono', async () => {
-    const u = await db.auth.admin.createUser({ email: `evento-${Date.now()}@local.test`, password: 'senha-de-teste-123', email_confirm: true });
-    if (u.error) throw u.error;
-    const uid = u.data.user.id;
-    const s = new SupabaseStore(db, uid, () => {});
-    await s.addEvent({
-      title: 'reunião com o Pedro', startsAt: new Date('2026-10-21T18:00:00Z'), endsAt: new Date('2026-10-21T19:00:00Z'), allDay: false,
-    });
-    await s.addEvent({
-      title: 'feriado', startsAt: new Date('2026-10-23T03:00:00Z'), endsAt: new Date('2026-10-24T03:00:00Z'), allDay: true,
-    });
-    const rows = await db.from('events').select('*').eq('user_id', uid).order('starts_at');
-    expect(rows.error).toBeNull();
-    expect(rows.data!.map((r) => [r.title, new Date(r.starts_at).toISOString(), new Date(r.ends_at).toISOString(), r.all_day]))
-      .toEqual([
-        ['reunião com o Pedro', '2026-10-21T18:00:00.000Z', '2026-10-21T19:00:00.000Z', false],
-        ['feriado', '2026-10-23T03:00:00.000Z', '2026-10-24T03:00:00.000Z', true],
-      ]);
-    expect(rows.data![0]).toMatchObject({ source: 'manual', location: null, space_id: null, series_id: null, tag_id: null });
   });
 });
