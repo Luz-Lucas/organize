@@ -1,5 +1,6 @@
 import 'json.dart';
 import 'recurrence.dart';
+import 'reminders.dart';
 
 class CalendarEvent {
   const CalendarEvent({
@@ -15,6 +16,7 @@ class CalendarEvent {
     this.seriesId,
     this.recurrence,
     this.tagId,
+    this.reminders = defaultEventReminders,
   });
 
   final String id;
@@ -36,6 +38,9 @@ class CalendarEvent {
   /// Etiqueta colorida (`event_tags.id`); `null` = sem etiqueta.
   final String? tagId;
 
+  /// Antecedências do lembrete, em minutos (`reminderOptions`); vazio = sem lembrete.
+  final List<int> reminders;
+
   CalendarEvent copyWith({
     String? id,
     String? title,
@@ -47,6 +52,7 @@ class CalendarEvent {
     String? seriesId,
     Recurrence? recurrence,
     String? tagId,
+    List<int>? reminders,
     bool clearLocation = false,
     bool clearSpace = false,
     bool clearSeries = false,
@@ -65,6 +71,7 @@ class CalendarEvent {
         seriesId: clearSeries ? null : (seriesId ?? this.seriesId),
         recurrence: clearSeries ? null : (recurrence ?? this.recurrence),
         tagId: clearTag ? null : (tagId ?? this.tagId),
+        reminders: reminders ?? this.reminders,
       );
 
   CalendarEvent withoutSpace() => CalendarEvent(
@@ -79,6 +86,7 @@ class CalendarEvent {
         seriesId: seriesId,
         recurrence: recurrence,
         tagId: tagId,
+        reminders: reminders,
       );
 
   factory CalendarEvent.fromMap(Map<String, dynamic> m) => CalendarEvent(
@@ -96,6 +104,7 @@ class CalendarEvent {
             ? Recurrence.fromMap(Map<String, dynamic>.from(m['recurrence'] as Map))
             : null,
         tagId: m['tag_id'] as String?,
+        reminders: parseReminders(m['reminders'], defaultEventReminders),
       );
 
   Map<String, dynamic> toMap() => {
@@ -111,6 +120,7 @@ class CalendarEvent {
         'series_id': seriesId,
         'recurrence': recurrence?.toMap(),
         'tag_id': tagId,
+        'reminders': reminders,
       };
 
   @override
@@ -127,9 +137,10 @@ class CalendarEvent {
       other.externalId == externalId &&
       other.seriesId == seriesId &&
       other.recurrence == recurrence &&
-      other.tagId == tagId;
+      other.tagId == tagId &&
+      sameReminders(other.reminders, reminders);
 
   @override
   int get hashCode => Object.hash(id, title, startsAt, endsAt, allDay,
-      location, spaceId, source, externalId, seriesId, recurrence, tagId);
+      location, spaceId, source, externalId, seriesId, recurrence, tagId, Object.hashAll(reminders));
 }

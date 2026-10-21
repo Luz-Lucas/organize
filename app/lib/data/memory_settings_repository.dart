@@ -61,4 +61,18 @@ class MemorySettingsRepository implements SettingsRepository {
   @override
   Future<void> setNotebookPrefs(Map<String, dynamic> prefs) =>
       saveSettings(_current.copyWith(notebookPrefs: prefs));
+
+  @override
+  Future<void> setRemindersPhone(bool value) => saveSettings(_current.copyWith(remindersPhone: value));
+
+  @override
+  Future<void> setRemindersAlexa(bool value) => saveSettings(_current.copyWith(remindersAlexa: value));
+
+  @override
+  Future<void> setReminderEcho(String? deviceId) => saveSettings(
+      deviceId == null ? _current.copyWith(clearReminderEcho: true) : _current.copyWith(reminderEcho: deviceId));
+
+  @override
+  Future<void> setDnd({bool? enabled, int? start, int? end}) =>
+      saveSettings(_current.copyWith(dndEnabled: enabled, dndStart: start, dndEnd: end));
 }

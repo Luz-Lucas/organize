@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O plugin de notificações busca o ícone pelo nome (reminder_plugin_sink.dart): impede o encolhimento de recursos de removê-lo. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_launcher_mono" />

@@ -8,6 +8,7 @@ import '../domain/shopping.dart';
 import '../domain/task_item.dart';
 import '../domain/user_settings.dart';
 import '../location/location_background.dart';
+import '../reminders/reminder_background.dart';
 import 'widget_sink.dart';
 import 'widget_snapshot.dart';
 
@@ -152,7 +153,7 @@ Future<SupabaseClient?> backgroundSupabaseClient() async {
 }
 
 /// Único despachante do workmanager: roteia pelo nome da tarefa
-/// (`widgetsRefresh` ou `locationReport`).
+/// (`widgetsRefresh`, que também reagenda os lembretes, ou `locationReport`).
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
@@ -169,6 +170,12 @@ void callbackDispatcher() {
         sink: const HomeWidgetSink(),
         now: DateTime.now(),
       );
+      // Reagenda os lembretes do celular (a janela de 3 dias anda e o app pode estar fechado há dias).
+      try {
+        await rescheduleRemindersInBackground(client: () => client, now: DateTime.now());
+      } catch (_) {
+        // Lembretes são secundários: a atualização dos widgets já valeu.
+      }
       return true;
     } catch (_) {
       return false;

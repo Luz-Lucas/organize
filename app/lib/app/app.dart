@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../app_icon/app_icon.dart';
 import '../location/location_report_sync.dart';
 import '../notebook/state/notebook_providers.dart';
+import '../reminders/reminder_sync.dart';
 import '../ui/org_theme.dart';
 import '../widgets/widget_sync.dart';
 import 'providers.dart';
@@ -20,6 +21,7 @@ class OrganizacionalApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(widgetSyncProvider);
+    ref.watch(reminderSyncProvider);
     ref.watch(appIconSyncProvider);
     ref.watch(locationReportSyncProvider);
     ref.watch(notebookStartupSyncProvider);

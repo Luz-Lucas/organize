@@ -13,6 +13,7 @@ import 'drive_card.dart';
 import 'gmail_card.dart';
 import 'handwriting_card.dart';
 import 'home_location_card.dart';
+import 'reminders_card.dart';
 import 'widgets_card.dart';
 
 /// Ajustes: escolha do tema (10 sistemas de design) e conta.
@@ -76,6 +77,11 @@ class SettingsScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: HomeLocationCard(),
+            ),
+            const SectionHeader('Lembretes'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: RemindersCard(),
             ),
             const SectionHeader('E-mail'),
             const Padding(

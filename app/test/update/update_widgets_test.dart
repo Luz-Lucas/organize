@@ -195,6 +195,9 @@ void main() {
       expect(find.descendant(of: card, matching: find.text('Atualização 1.1.0 disponível')), findsOneWidget);
       expect(find.descendant(of: card, matching: find.text('Caderno novo')), findsOneWidget);
       await reveal(t, find.byKey(const Key('about-update')));
+      // Rola mais um pouco: o botão fica rente à borda e o toque cairia fora.
+      await t.drag(find.byType(ListView).first, const Offset(0, -150));
+      await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('about-update')));
       await t.pumpAndSettle();
       expect(installer.installs, hasLength(1));

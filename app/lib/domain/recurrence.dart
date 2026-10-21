@@ -231,6 +231,7 @@ class SeriesOps {
             clearSpace: edited.spaceId == null,
             tagId: edited.tagId,
             clearTag: edited.tagId == null,
+            reminders: edited.reminders,
           );
         }(),
     ];

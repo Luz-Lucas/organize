@@ -65,4 +65,21 @@ void main() {
     repo.failWrites = true;
     await expectLater(repo.setNotebookPrefs({'v': 1}), throwsA(isA<RepositoryException>()));
   });
+
+  test('lembretes: chaves, Echo e não perturbe gravam só as suas colunas', () async {
+    final repo = MemorySettingsRepository(initial: const UserSettings(theme: 'coral'));
+    await repo.setRemindersPhone(false);
+    await repo.setRemindersAlexa(false);
+    await repo.setReminderEcho('ABC');
+    await repo.setDnd(enabled: false, start: 22 * 60, end: 7 * 60);
+    var s = await repo.watchSettings().first;
+    expect([s.remindersPhone, s.remindersAlexa, s.reminderEcho, s.dndEnabled, s.dndStart, s.dndEnd, s.theme],
+        [false, false, 'ABC', false, 22 * 60, 7 * 60, 'coral']);
+    await repo.setDnd(start: 23 * 60);
+    await repo.setReminderEcho(null);
+    s = await repo.watchSettings().first;
+    expect([s.dndEnabled, s.dndStart, s.dndEnd, s.reminderEcho], [false, 23 * 60, 7 * 60, null]);
+    repo.failWrites = true;
+    await expectLater(repo.setRemindersPhone(true), throwsA(isA<RepositoryException>()));
+  });
 }

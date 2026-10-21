@@ -113,6 +113,7 @@ class TaskSeriesOps {
             dueAt: shifted,
             spaceId: edited.spaceId,
             clearSpace: edited.spaceId == null,
+            reminders: edited.reminders,
             seriesId: seriesId,
             status: isTarget ? edited.status : null,
             completedAt: isTarget ? edited.completedAt : null,

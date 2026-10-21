@@ -18,6 +18,12 @@ void main() {
       'home_radius_m': 50,
       'require_home': true,
       'notebook_prefs': <String, dynamic>{},
+      'reminders_phone': true,
+      'reminders_alexa': true,
+      'reminder_echo': null,
+      'dnd_enabled': true,
+      'dnd_start': '23:00',
+      'dnd_end': '10:00',
     });
     expect(themeIds, hasLength(10));
   });

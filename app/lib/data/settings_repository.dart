@@ -20,4 +20,16 @@ abstract interface class SettingsRepository {
 
   /// Grava só os favoritos do Caderno (`notebook_prefs`), sem tocar nos demais ajustes.
   Future<void> setNotebookPrefs(Map<String, dynamic> prefs);
+
+  /// Liga/desliga os lembretes por notificação no celular.
+  Future<void> setRemindersPhone(bool value);
+
+  /// Liga/desliga os lembretes falados na Alexa.
+  Future<void> setRemindersAlexa(bool value);
+
+  /// Escolhe o Echo que fala os lembretes (`null` = nenhum).
+  Future<void> setReminderEcho(String? deviceId);
+
+  /// Não perturbe: grava só o que for informado (início/fim em minutos do dia).
+  Future<void> setDnd({bool? enabled, int? start, int? end});
 }

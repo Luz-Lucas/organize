@@ -6,8 +6,10 @@ import '../../domain/calendar_event.dart';
 import '../../domain/event_tag.dart';
 import '../../domain/ids.dart';
 import '../../domain/recurrence.dart';
+import '../../domain/reminders.dart';
 import '../../domain/space.dart';
 import '../../ui/org_theme.dart';
+import '../common/reminder_chips.dart';
 import '../notes/notebooks/notebooks_logic.dart' show parseFolderColor;
 import 'repeat_section.dart';
 import 'series_scope_dialog.dart';
@@ -85,6 +87,7 @@ class _EventDialogState extends State<EventDialog> {
 
   /// Etiqueta escolhida; uma que não existe mais (apagada em outro aparelho) conta como nenhuma.
   late String? _tagId = _tags.any((t) => t.id == widget.existing?.tagId) ? widget.existing?.tagId : null;
+  late List<int> _reminders = widget.existing?.reminders ?? defaultEventReminders;
   bool _busy = false;
   String? _error;
 
@@ -183,6 +186,7 @@ class _EventDialogState extends State<EventDialog> {
       seriesId: old?.seriesId,
       recurrence: old?.recurrence,
       tagId: _tagId,
+      reminders: _reminders,
     );
 
     Future<String?> Function()? save;
@@ -379,6 +383,14 @@ class _EventDialogState extends State<EventDialog> {
                 controller: _location,
                 decoration: const InputDecoration(labelText: 'Local (opcional)'),
               ),
+              if (!(widget.existing?.allDay ?? false)) ...[
+                const SizedBox(height: 12),
+                ReminderChips(
+                  selected: _reminders,
+                  onChanged: (v) => setState(() => _reminders = v),
+                  enabled: !_busy,
+                ),
+              ],
               if (_tags.isNotEmpty || widget.onCreateTag != null) ..._tagSection(context),
               if (widget.spaces.isNotEmpty) ...[
                 const SizedBox(height: 12),

@@ -1,5 +1,6 @@
 import 'json.dart';
 import 'recurrence.dart';
+import 'reminders.dart';
 
 enum TaskStatus { todo, doing, done }
 
@@ -35,6 +36,7 @@ class TaskItem {
     this.externalId,
     this.seriesId,
     this.recurrence,
+    this.reminders = defaultTaskReminders,
   });
 
   final String id;
@@ -55,6 +57,9 @@ class TaskItem {
   /// Regra que gerou a série (informativa).
   final Recurrence? recurrence;
 
+  /// Antecedências do lembrete, em minutos (`reminderOptions`); vazio = sem lembrete.
+  final List<int> reminders;
+
   bool get isDone => status == TaskStatus.done;
 
   TaskItem copyWith({
@@ -68,6 +73,7 @@ class TaskItem {
     String? spaceId,
     String? seriesId,
     Recurrence? recurrence,
+    List<int>? reminders,
     bool clearDue = false,
     bool clearCompleted = false,
     bool clearSpace = false,
@@ -87,6 +93,7 @@ class TaskItem {
         externalId: externalId,
         seriesId: clearSeries ? null : (seriesId ?? this.seriesId),
         recurrence: clearSeries ? null : (recurrence ?? this.recurrence),
+        reminders: reminders ?? this.reminders,
       );
 
   TaskItem toggled(DateTime now) => isDone
@@ -114,6 +121,7 @@ class TaskItem {
         recurrence: m['recurrence'] is Map
             ? Recurrence.fromMap(Map<String, dynamic>.from(m['recurrence'] as Map))
             : null,
+        reminders: parseReminders(m['reminders'], defaultTaskReminders),
       );
 
   Map<String, dynamic> toMap() => {
@@ -130,6 +138,7 @@ class TaskItem {
         'external_id': externalId,
         'series_id': seriesId,
         'recurrence': recurrence?.toMap(),
+        'reminders': reminders,
       };
 
   @override
@@ -147,9 +156,10 @@ class TaskItem {
       other.source == source &&
       other.externalId == externalId &&
       other.seriesId == seriesId &&
-      other.recurrence == recurrence;
+      other.recurrence == recurrence &&
+      sameReminders(other.reminders, reminders);
 
   @override
   int get hashCode => Object.hash(id, title, description, status, priority, dueAt,
-      completedAt, spaceId, noteId, source, externalId, seriesId, recurrence);
+      completedAt, spaceId, noteId, source, externalId, seriesId, recurrence, Object.hashAll(reminders));
 }

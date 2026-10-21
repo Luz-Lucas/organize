@@ -50,6 +50,9 @@ import 'notebook/pdf/pdfrx_rasterizer.dart';
 import 'notebook/state/handwriting_providers.dart';
 import 'notebook/state/notebook_pending_store.dart';
 import 'notebook/state/notebook_providers.dart';
+import 'reminders/reminder_background.dart';
+import 'reminders/reminder_plugin_sink.dart';
+import 'reminders/reminder_sync.dart';
 import 'location/location_service.dart';
 import 'update/android_update_installer.dart';
 import 'update/linux_update_installer.dart';
@@ -87,6 +90,15 @@ Future<void> main() async {
     refresh: StreamListenable(client.auth.onAuthStateChange),
   );
   final isAndroid = !kIsWeb && Platform.isAndroid;
+  // Lembretes do celular (notificações locais): tocar abre /tarefas ou /agenda; "Concluir" grava em segundo plano.
+  final reminderSink = isAndroid
+      ? PluginReminderSink(onOpen: router.go, onBackgroundResponse: reminderBackgroundResponse)
+      : null;
+  if (reminderSink != null) {
+    reminderSink.launchRoute().then((route) {
+      if (route != null) router.go(route);
+    }).catchError((_) {});
+  }
   if (isAndroid) {
     void handle(Uri? uri) {
       final route = uri == null ? null : routeForWidgetUri(uri);
@@ -143,6 +155,7 @@ Future<void> main() async {
                   : (!kIsWeb && Platform.isWindows ? WindowsFilesPlatform() : const NoopFilesPlatform()))),
       signOutProvider.overrideWithValue(() => client.auth.signOut()),
       if (isAndroid) widgetSinkProvider.overrideWithValue(const HomeWidgetSink()),
+      if (reminderSink != null) reminderSinkProvider.overrideWithValue(reminderSink),
       if (isAndroid) locationServiceProvider.overrideWithValue(const GeolocatorLocationService()),
       locationSignedInProvider.overrideWithValue(() => client.auth.currentSession != null),
       if (isAndroid) appIconServiceProvider.overrideWithValue(const MethodChannelAppIconService()),

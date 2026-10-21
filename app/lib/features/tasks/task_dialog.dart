@@ -5,6 +5,7 @@ import '../../app/providers.dart';
 import '../../data/repository.dart';
 import '../../domain/agenda.dart' show startOfDay;
 import '../../domain/ids.dart';
+import '../../domain/reminders.dart';
 import '../../domain/space.dart';
 import '../../domain/task_item.dart';
 import '../../domain/task_series.dart';
@@ -13,6 +14,7 @@ import '../../ui/date_labels.dart';
 import '../../ui/org_theme.dart';
 import '../agenda/repeat_section.dart';
 import '../agenda/series_scope_dialog.dart';
+import '../common/reminder_chips.dart';
 import '../github/issue_form.dart';
 
 /// Abre o editor de tarefa: folha de baixo no celular (< 720 dp), diálogo no
@@ -76,6 +78,7 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
   late DateTime? _due = widget.task.dueAt;
   late String? _spaceId = widget.task.spaceId;
   late TaskStatus _status = widget.task.status;
+  late List<int> _reminders = widget.task.reminders;
   final _repeat = RepeatController();
   String? _error;
 
@@ -86,6 +89,9 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
     _repeat.dispose();
     super.dispose();
   }
+
+  /// Prazo sem horário (o app grava "só data" como 23:59).
+  bool get _dateOnly => _due != null && _due!.hour == 23 && _due!.minute == 59;
 
   Repository get _repo => ref.read(repositoryProvider);
 
@@ -124,6 +130,7 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
       clearCompleted: moved.completedAt == null,
       spaceId: _spaceId,
       clearSpace: _spaceId == null,
+      reminders: _reminders,
     );
     try {
       final due = _due;
@@ -156,7 +163,8 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
       a.description != b.description ||
       a.priority != b.priority ||
       a.dueAt != b.dueAt ||
-      a.spaceId != b.spaceId;
+      a.spaceId != b.spaceId ||
+      !sameReminders(a.reminders, b.reminders);
 
   /// Cria uma issue no GitHub a partir desta tarefa; ao criar, anexa o link ao
   /// fim da descrição e salva a tarefa.
@@ -327,6 +335,12 @@ class _TaskDialogState extends ConsumerState<TaskDialog> {
           ],
         ),
         ..._repeatSection(context),
+        const SizedBox(height: 12),
+        ReminderChips(
+          selected: _reminders,
+          onChanged: (v) => setState(() => _reminders = v),
+          hint: _dateOnly ? 'Tarefas sem horário avisam às 10h se forem de prioridade alta' : null,
+        ),
         if (widget.spaces.isNotEmpty) ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String?>(

@@ -55,6 +55,24 @@ void main() {
     });
   });
 
+  test('lembretes gravam só as suas colunas, com o user_id', () async {
+    final sent = <_Sent>[];
+    final repo = SupabaseSettingsRepository(_client(sent), userId: () => 'u1');
+    await repo.setRemindersPhone(false);
+    await repo.setRemindersAlexa(false);
+    await repo.setReminderEcho('ABC');
+    await repo.setReminderEcho(null);
+    await repo.setDnd(enabled: true);
+    await repo.setDnd(start: 22 * 60 + 30, end: 7 * 60);
+    expect(sent.map((s) => s.path).toSet(), {'/rest/v1/user_settings'});
+    expect(sent[0].body, {'user_id': 'u1', 'reminders_phone': false});
+    expect(sent[1].body, {'user_id': 'u1', 'reminders_alexa': false});
+    expect(sent[2].body, {'user_id': 'u1', 'reminder_echo': 'ABC'});
+    expect(sent[3].body, {'user_id': 'u1', 'reminder_echo': null});
+    expect(sent[4].body, {'user_id': 'u1', 'dnd_enabled': true});
+    expect(sent[5].body, {'user_id': 'u1', 'dnd_start': '22:30', 'dnd_end': '07:00'});
+  });
+
   test('erro do servidor vira RepositoryException', () async {
     final sent = <_Sent>[];
     final repo = SupabaseSettingsRepository(

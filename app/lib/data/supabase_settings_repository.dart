@@ -67,4 +67,29 @@ class SupabaseSettingsRepository implements SettingsRepository {
   Future<void> setNotebookPrefs(Map<String, dynamic> prefs) => _guard(() async {
         await _db.from('user_settings').upsert({'user_id': _userId, 'notebook_prefs': prefs});
       });
+
+  @override
+  Future<void> setRemindersPhone(bool value) => _guard(() async {
+        await _db.from('user_settings').upsert({'user_id': _userId, 'reminders_phone': value});
+      });
+
+  @override
+  Future<void> setRemindersAlexa(bool value) => _guard(() async {
+        await _db.from('user_settings').upsert({'user_id': _userId, 'reminders_alexa': value});
+      });
+
+  @override
+  Future<void> setReminderEcho(String? deviceId) => _guard(() async {
+        await _db.from('user_settings').upsert({'user_id': _userId, 'reminder_echo': deviceId});
+      });
+
+  @override
+  Future<void> setDnd({bool? enabled, int? start, int? end}) => _guard(() async {
+        await _db.from('user_settings').upsert({
+          'user_id': _userId,
+          'dnd_enabled': ?enabled,
+          if (start != null) 'dnd_start': formatMinutesOfDay(start),
+          if (end != null) 'dnd_end': formatMinutesOfDay(end),
+        });
+      });
 }

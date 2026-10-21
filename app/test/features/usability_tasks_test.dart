@@ -162,6 +162,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('task-status-done')));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('task-save')));
       await tester.tap(find.byKey(const Key('task-save')));
       await tester.pumpAndSettle();
       final t = await _task(repo, 'a');
@@ -177,6 +178,7 @@ void main() {
       expect(find.byType(BottomSheet), findsOneWidget);
       expect(find.text('Nova tarefa'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('task-title')), 'Projeto');
+      await tester.ensureVisible(find.byKey(const Key('task-save')));
       await tester.tap(find.byKey(const Key('task-save')));
       await tester.pumpAndSettle();
       expect((await repo.watchTasks().first).single.title, 'Projeto');
