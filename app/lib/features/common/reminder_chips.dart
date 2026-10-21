@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../../domain/reminders.dart';
 import '../../ui/org_theme.dart';
 
-/// "Lembrar": quatro chips (1 dia, 1 hora, 30 min, 15 min antes), vários ao mesmo
+/// "Lembrar": "Não lembrar" + quatro chips (1 dia, 1 hora, 30 min, 15 min antes), vários ao mesmo
 /// tempo. [onChanged] recebe a lista nova, ordenada da maior antecedência para a
 /// menor; pode ficar vazia (sem lembrete). Reutilizado nos editores de tarefa e de
-/// evento. Chaves dos chips: `reminder-chip-<minutos>`.
+/// evento. Chaves dos chips: `reminder-chip-none` e `reminder-chip-<minutos>`.
 class ReminderChips extends StatelessWidget {
   const ReminderChips({
     super.key,
@@ -41,6 +41,13 @@ class ReminderChips extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
+            // Atalho explícito para "sem lembrete" (a lista vazia), já que nem todo evento é rígido.
+            FilterChip(
+              key: const Key('reminder-chip-none'),
+              label: const Text('Não lembrar'),
+              selected: selected.isEmpty,
+              onSelected: enabled ? (_) => onChanged(const []) : null,
+            ),
             for (final m in reminderOptions)
               FilterChip(
                 key: Key('reminder-chip-$m'),

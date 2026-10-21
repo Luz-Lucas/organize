@@ -55,6 +55,28 @@ void main() {
       expect(value, isEmpty); // pode ficar sem nenhum lembrete
     });
 
+    testWidgets('"Não lembrar" fica marcado sem lembretes e, ao tocar, limpa os outros', (tester) async {
+      var value = <int>[1440, 30];
+      late StateSetter set;
+      await tester.pumpWidget(_host(StatefulBuilder(builder: (context, setState) {
+        set = setState;
+        return ReminderChips(selected: value, onChanged: (v) => set(() => value = v));
+      })));
+      bool none() => tester.widget<FilterChip>(find.byKey(const Key('reminder-chip-none'))).selected;
+      expect(find.text('Não lembrar'), findsOneWidget);
+      expect(none(), isFalse);
+      await tester.tap(find.byKey(const Key('reminder-chip-none')));
+      await tester.pump();
+      expect(value, isEmpty);
+      expect(none(), isTrue);
+      expect([for (final m in [1440, 60, 30, 15]) _selected(tester, m)], everyElement(isFalse));
+      // Escolher um tempo desmarca "Não lembrar".
+      await tester.tap(find.byKey(const Key('reminder-chip-15')));
+      await tester.pump();
+      expect(value, [15]);
+      expect(none(), isFalse);
+    });
+
     testWidgets('desativado não reage; hint aparece quando informado', (tester) async {
       var calls = 0;
       await tester.pumpWidget(_host(ReminderChips(

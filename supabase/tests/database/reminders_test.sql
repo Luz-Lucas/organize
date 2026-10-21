@@ -68,7 +68,7 @@ select is((select count(*) from reminder_deliveries)::int, 0, 'B não vê os dis
 select lives_ok($$ delete from reminder_deliveries $$, 'B apaga zero linhas (sem erro)');
 
 reset role;
-select is((select count(*) from reminder_deliveries)::int, 1, 'o disparo de A continua intacto');
+select is((select count(*) from reminder_deliveries where user_id = '11111111-1111-1111-1111-111111111111')::int, 1, 'o disparo de A continua intacto');
 
 select * from finish();
 rollback;
